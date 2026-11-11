@@ -38,6 +38,7 @@ it("serves the same mock over HTTP: JSON calls, a multipart upload and siteverif
   const verified = await verifyTurnstile({
     secret: TURNSTILE_DUMMY_SECRET_PASS,
     response: "token",
+    expectedHostname: "example.com",
     url: `${server.url}/turnstile/v0/siteverify`,
   });
   expect(verified.success).toBe(true);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { REPORT_QUERY } from "./analytics";
 import { classifyMx, verifyTurnstile } from "./index";
 import { TURNSTILE_DUMMY_SECRET_FAIL, TURNSTILE_DUMMY_SECRET_PASS } from "./mock";
 import { setup, ZONE } from "./testing";
@@ -21,16 +22,31 @@ describe("token", () => {
   });
 
   it("names the permissions the token lacks, in the owner's words", async () => {
-    const { mock, client } = setup({ workersSubdomain: null });
+    const { mock, client } = setup();
     mock.denyPermission("d1");
-    mock.denyPermission("rulesets");
+    mock.denyPermission("routes");
 
-    expect(await client.tokens.probePermissions()).toMatchObject({ missing: ["D1"] });
+    expect(await client.tokens.probePermissions()).toMatchObject({ missing: ["D1"], unknown: [] });
     const before = client.requestCount;
     const report = await client.tokens.probePermissions({ zoneId: ZONE.id });
-    expect(report.missing).toEqual(["D1", "Transform Rules", "Dynamic Redirect"]);
+    expect(report.missing).toEqual(["D1", "Workers Routes"]);
     expect(report.checked).toHaveLength(11);
     expect(client.requestCount - before).toBe(11);
+  });
+
+  it("reports a 404 as unknown, not as a permission the token has", async () => {
+    const { client } = setup();
+    const report = await client.tokens.probePermissions({ zoneId: ZONE.id });
+    expect(report.unknown).toEqual(["Transform Rules", "Dynamic Redirect"]);
+    expect(report.missing).toEqual([]);
+  });
+
+  it("never retries a probe, so 11 probes stay 11 subrequests", async () => {
+    const { mock, client } = setup();
+    mock.failNext({ route: "d1.list", status: 429, times: 3 });
+
+    await expect(client.tokens.probePermissions()).rejects.toThrow("check D1 permission failed: 429");
+    expect(client.requestCount).toBe(2);
   });
 });
 
@@ -172,6 +188,16 @@ describe("D1", () => {
     expect(result?.results[0]?.ownership_nonce).toBe("nonce-123");
   });
 
+  it("binds numbers and null as well as strings", async () => {
+    const { client } = setup();
+    const { uuid } = await client.d1.create("deparked");
+    await client.d1.query(uuid, "CREATE TABLE offers (amount_minor INTEGER, message TEXT)");
+    await client.d1.query(uuid, "INSERT INTO offers VALUES (?, ?)", [125000, null]);
+
+    const [result] = await client.d1.query(uuid, "SELECT * FROM offers WHERE amount_minor > ?", [1000]);
+    expect(result?.results).toEqual([{ amount_minor: 125000, message: null }]);
+  });
+
   it("reports a SQL error by the call's name", async () => {
     const { client } = setup();
     const { uuid } = await client.d1.create("deparked");
@@ -222,6 +248,7 @@ describe("Turnstile", () => {
     const passed = await verifyTurnstile({
       secret: TURNSTILE_DUMMY_SECRET_PASS,
       response: "token",
+      expectedHostname: "Example.org",
       fetch: mock.fetch,
       url,
     });
@@ -234,6 +261,7 @@ describe("Turnstile", () => {
     const failed = await verifyTurnstile({
       secret: TURNSTILE_DUMMY_SECRET_FAIL,
       response: "token",
+      expectedHostname: "example.org",
       remoteIp: "203.0.113.5",
       fetch: mock.fetch,
       url,
@@ -243,8 +271,36 @@ describe("Turnstile", () => {
 
   it("siteverify throws when the service gives no usable answer", async () => {
     await expect(
-      verifyTurnstile({ secret: "s", response: "t", fetch: async () => new Response("oops", { status: 500 }) }),
+      verifyTurnstile({
+        secret: "s",
+        response: "t",
+        expectedHostname: "example.com",
+        fetch: async () => new Response("oops", { status: 500 }),
+      }),
     ).rejects.toThrow("verify Turnstile token failed: 500 unexpected response");
+  });
+
+  it("siteverify fails closed when the token was solved on another hostname", async () => {
+    const { mock } = setup();
+    mock.state.siteverify.hostname = "attacker.example";
+    const result = await verifyTurnstile({
+      secret: TURNSTILE_DUMMY_SECRET_PASS,
+      response: "token",
+      expectedHostname: "example.com",
+      fetch: mock.fetch,
+      url: "https://mock.test/turnstile/v0/siteverify",
+    });
+    expect(result).toMatchObject({ success: false, hostname: "attacker.example", errorCodes: ["hostname-mismatch"] });
+  });
+
+  it("siteverify gives up after its timeout", async () => {
+    const hang = (_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      });
+    await expect(
+      verifyTurnstile({ secret: "s", response: "t", expectedHostname: "example.com", fetch: hang, timeoutMs: 5 }),
+    ).rejects.toThrow("verify Turnstile token failed: no response (network error or timeout)");
   });
 });
 
@@ -286,6 +342,12 @@ describe("Web Analytics", () => {
     expect(client.requestCount).toBe(1);
   });
 
+  it("declares GraphQL variables only with type names the API knows", () => {
+    const declared = [...REPORT_QUERY.matchAll(/\$\w+:\s*([\w![\]]+)/g)].map((match) => match[1]);
+    expect(declared).toEqual(["String!", "AccountRumPageloadEventsAdaptiveGroupsFilter_InputObject!"]);
+    expect(REPORT_QUERY).not.toMatch(/:\s*(string|int|boolean|float)\b/);
+  });
+
   it("turns a GraphQL error into a named error", async () => {
     const { client } = setup(
       {},
@@ -311,29 +373,49 @@ describe("Email Routing", () => {
     expect(await client.email.listAddresses()).toEqual([]);
   });
 
-  it("reads a zone's Email Routing state and enables it", async () => {
+  it("reads a zone's Email Routing state and enables it when the domain has no mail", async () => {
     const { client } = setup();
     expect(await client.email.getRouting(ZONE.id)).toEqual({
       name: "example.com",
       enabled: false,
       status: "unconfigured",
     });
-    expect(await client.email.enableRouting(ZONE.id)).toMatchObject({ enabled: true });
+    expect(await client.email.enableRouting(ZONE, { replaceExistingMx: false })).toMatchObject({ enabled: true });
+    expect(client.requestCount).toBe(3);
 
     const mx = await client.zones.listDnsRecords(ZONE.id, { type: "MX", name: "example.com" });
-    expect(classifyMx(mx)).toBe("cloudflare");
+    expect(classifyMx(mx, "example.com")).toBe("cloudflare");
+  });
+
+  it("refuses to replace existing mail unless the owner agreed", async () => {
+    const external = { id: "mx", type: "MX", name: "example.com", content: "aspmx.l.google.com", priority: 1 };
+    const { mock, client } = setup({ dnsRecords: { [ZONE.id]: [external] } });
+
+    await expect(client.email.enableRouting(ZONE, { replaceExistingMx: false })).rejects.toThrow(
+      "enable Email Routing failed: the domain already receives mail elsewhere",
+    );
+    expect(mock.callsTo("email.enableRouting")).toEqual([]);
+    expect(mock.state.dnsRecords.get(ZONE.id)).toEqual([external]);
+
+    await client.email.enableRouting(ZONE, { replaceExistingMx: true });
+    expect(mock.state.emailRouting.get(ZONE.id)).toBe(true);
   });
 
   it("classifies apex MX records: none, Cloudflare's, or someone else's mail", () => {
-    expect(classifyMx([])).toBe("none");
-    expect(classifyMx([{ type: "A", content: "192.0.2.1" }])).toBe("none");
-    expect(classifyMx([{ type: "MX", content: "route1.mx.cloudflare.net." }])).toBe("cloudflare");
-    expect(
-      classifyMx([
-        { type: "MX", content: "route1.mx.cloudflare.net" },
-        { type: "MX", content: "aspmx.l.google.com" },
-      ]),
-    ).toBe("external");
-    expect(classifyMx([{ type: "MX", content: "evilmx.cloudflare.net.example.com" }])).toBe("external");
+    const mx = (content: string, name = "example.com") => ({ type: "MX", name, content });
+    expect(classifyMx([], "example.com")).toBe("none");
+    expect(classifyMx([{ type: "A", name: "example.com", content: "192.0.2.1" }], "example.com")).toBe("none");
+    expect(classifyMx([mx("route1.mx.cloudflare.net.", "Example.com.")], "example.com")).toBe("cloudflare");
+    expect(classifyMx([mx("route1.mx.cloudflare.net"), mx("aspmx.l.google.com")], "example.com")).toBe("external");
+    expect(classifyMx([mx("evilmx.cloudflare.net.example.com")], "example.com")).toBe("external");
+  });
+
+  it("ignores MX records of subdomains", () => {
+    const records = [
+      { type: "MX", name: "mail.example.com", content: "aspmx.l.google.com" },
+      { type: "MX", name: "example.com", content: "route1.mx.cloudflare.net" },
+    ];
+    expect(classifyMx(records, "example.com")).toBe("cloudflare");
+    expect(classifyMx(records.slice(0, 1), "example.com")).toBe("none");
   });
 });

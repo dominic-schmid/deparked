@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CloudflareApiError, type Http } from "./http";
+import { CloudflareApiError, type Http, segment } from "./http";
 
 const verifySchema = z.object({
   id: z.string(),
@@ -24,7 +24,10 @@ export interface PermissionProbe {
 }
 
 export interface PermissionReport {
+  /** Answered 403: the token lacks it. */
   missing: string[];
+  /** Answered 404: the probe couldn't tell (for example a zone that has no rules yet). Not proof of access. */
+  unknown: string[];
   checked: string[];
 }
 
@@ -35,7 +38,7 @@ export function tokensApi(http: Http) {
 
   function probes(zoneId: string | undefined): PermissionProbe[] {
     const list: PermissionProbe[] = [
-      { permission: "Workers Scripts", call: "check Workers permission", path: `${account}/workers/subdomain` },
+      { permission: "Workers Scripts", call: "check Workers permission", path: `${account}/workers/scripts` },
       { permission: "D1", call: "check D1 permission", path: `${account}/d1/database` },
       { permission: "Turnstile", call: "check Turnstile permission", path: `${account}/challenges/widgets` },
       {
@@ -51,7 +54,7 @@ export function tokensApi(http: Http) {
       { permission: "Zone", call: "check Zone permission", path: "/zones" },
     ];
     if (zoneId === undefined) return list;
-    const zone = `/zones/${zoneId}`;
+    const zone = `/zones/${segment(zoneId)}`;
     return [
       ...list,
       { permission: "Workers Routes", call: "check Workers Routes permission", path: `${zone}/workers/routes` },
@@ -93,20 +96,21 @@ export function tokensApi(http: Http) {
 
     /**
      * Cloudflare has no call that lists a token's own permissions without the "API Tokens Read" permission,
-     * so this sends one cheap read per permission and reports the ones answered with 403.
+     * so this sends one cheap read per permission: 403 means missing, 404 means unknown, any other failure throws.
      * A read can't prove write access: a read-only token passes here and fails on the first write.
-     * 6 requests, 11 with a `zoneId` (before retries).
+     * Exactly 6 requests, 11 with a `zoneId`: probes are never retried.
      */
     async probePermissions(input: { zoneId?: string } = {}): Promise<PermissionReport> {
-      const report: PermissionReport = { missing: [], checked: [] };
+      const report: PermissionReport = { missing: [], unknown: [], checked: [] };
       for (const probe of probes(input.zoneId)) {
         report.checked.push(probe.permission);
         try {
-          await http.request({ call: probe.call, method: "GET", path: probe.path }, anything);
+          await http.request({ call: probe.call, method: "GET", path: probe.path, maxAttempts: 1 }, anything);
         } catch (error) {
           if (!(error instanceof CloudflareApiError)) throw error;
           if (error.status === 403) report.missing.push(probe.permission);
-          else if (error.status !== 404) throw error;
+          else if (error.status === 404) report.unknown.push(probe.permission);
+          else throw error;
         }
       }
       return report;

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Http } from "./http";
-import type { DnsRecord } from "./zones";
+import { CloudflareApiError, type Http, segment } from "./http";
+import { type DnsRecord, type Zone, zonesApi } from "./zones";
 
 const addressSchema = z
   .object({
@@ -21,14 +21,17 @@ export type EmailRoutingSettings = z.infer<typeof routingSchema>;
 
 export type MxState = "none" | "cloudflare" | "external";
 
+const hostname = (name: string) => name.toLowerCase().replace(/\.$/, "");
+
 /**
- * What the apex MX records mean for Email Routing: targets under `mx.cloudflare.net` mean it is already on;
- * anything else is existing mail that enabling Email Routing would replace.
+ * What the MX records of the zone apex mean for Email Routing: targets under `mx.cloudflare.net` mean it is
+ * already on; anything else is existing mail that enabling Email Routing would replace. Records of other
+ * names (subdomains) are ignored.
  */
-export function classifyMx(records: readonly Pick<DnsRecord, "type" | "content">[]): MxState {
+export function classifyMx(records: readonly Pick<DnsRecord, "type" | "name" | "content">[], apex: string): MxState {
   const targets = records
-    .filter((record) => record.type === "MX")
-    .map((record) => (record.content ?? "").toLowerCase().replace(/\.$/, ""));
+    .filter((record) => record.type === "MX" && hostname(record.name) === hostname(apex))
+    .map((record) => hostname(record.content ?? ""));
   if (targets.length === 0) return "none";
   return targets.every((target) => target.endsWith(".mx.cloudflare.net")) ? "cloudflare" : "external";
 }
@@ -49,20 +52,36 @@ export function emailApi(http: Http) {
     },
     async deleteAddress(addressId: string): Promise<void> {
       await http.request(
-        { call: "delete notify address", method: "DELETE", path: `${addresses}/${addressId}` },
+        { call: "delete notify address", method: "DELETE", path: `${addresses}/${segment(addressId)}` },
         z.unknown(),
       );
     },
     getRouting(zoneId: string): Promise<EmailRoutingSettings> {
       return http.request(
-        { call: "read Email Routing settings", method: "GET", path: `/zones/${zoneId}/email/routing` },
+        { call: "read Email Routing settings", method: "GET", path: `/zones/${segment(zoneId)}/email/routing` },
         routingSchema,
       );
     },
-    /** Replaces the zone's MX records. Check `classifyMx` and ask the owner first. */
-    enableRouting(zoneId: string): Promise<EmailRoutingSettings> {
+    /**
+     * Enabling Email Routing replaces the apex MX records. This reads them first and refuses when they point at
+     * someone else's mail, unless the owner agreed (`replaceExistingMx: true`). 2 requests (before retries).
+     */
+    async enableRouting(
+      zone: Pick<Zone, "id" | "name">,
+      consent: { replaceExistingMx: boolean },
+    ): Promise<EmailRoutingSettings> {
+      const call = "enable Email Routing";
+      const mx = await zonesApi(http).listDnsRecords(zone.id, { type: "MX", name: zone.name });
+      if (classifyMx(mx, zone.name) === "external" && !consent.replaceExistingMx) {
+        throw new CloudflareApiError({
+          call,
+          status: 0,
+          detail:
+            "the domain already receives mail elsewhere (existing MX records) and replacing them was not confirmed",
+        });
+      }
       return http.request(
-        { call: "enable Email Routing", method: "POST", path: `/zones/${zoneId}/email/routing/enable`, json: {} },
+        { call, method: "POST", path: `/zones/${segment(zone.id)}/email/routing/enable`, json: {} },
         routingSchema,
       );
     },

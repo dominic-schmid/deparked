@@ -14,7 +14,7 @@ export interface CloudflareErrorDetail {
 export class CloudflareApiError extends Error {
   override readonly name = "CloudflareApiError";
   readonly call: string;
-  /** HTTP status; 0 when no response arrived. */
+  /** HTTP status; 0 when no response arrived or the call was refused before sending. */
   readonly status: number;
   readonly errors: readonly CloudflareErrorDetail[];
   readonly attempts: number;
@@ -28,8 +28,8 @@ export class CloudflareApiError extends Error {
   }) {
     const errors = input.errors ?? [];
     const detail = input.detail ?? errors.map((error) => `${error.message} (code ${error.code})`).join("; ");
-    const status = input.status === 0 ? "no response" : String(input.status);
-    super(`${input.call} failed: ${status}${detail === "" ? "" : ` ${detail}`}`);
+    const parts = [input.status === 0 ? "" : String(input.status), detail].filter((part) => part !== "");
+    super(`${input.call} failed: ${parts.length === 0 ? "no response" : parts.join(" ")}`);
     this.call = input.call;
     this.status = input.status;
     this.errors = errors;
@@ -51,6 +51,8 @@ export interface ClientOptions {
   maxAttempts?: number;
   /** Upper bound for one backoff wait, also applied to `Retry-After`. Default 10 s. */
   maxDelayMs?: number;
+  /** Each attempt is aborted after this long. Default 10 s. */
+  timeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
 }
@@ -65,6 +67,30 @@ export interface RequestSpec {
   form?: FormData;
   /** Bearer token for this request instead of the API token (the assets upload uses the session token). */
   bearer?: string;
+  /**
+   * Safe to send twice. Default: true for GET, PUT and DELETE, false for POST. A request that isn't is retried
+   * only on 429 (Cloudflare did not process it), never on 5xx or a lost response, where it may have been applied.
+   */
+  idempotent?: boolean;
+  /** Attempts for this request instead of the client's `maxAttempts`. */
+  maxAttempts?: number;
+}
+
+const SEGMENT = /^[A-Za-z0-9._-]+$/;
+
+/**
+ * Every id or name that goes into an API path passes through here. Anything that could change the path
+ * (`/`, `?`, `..`, an empty value) is refused before a request is sent.
+ */
+export function segment(value: string): string {
+  if (!SEGMENT.test(value) || value === "." || value === "..") {
+    throw new CloudflareApiError({
+      call: "build API path",
+      status: 0,
+      detail: "an id or name has characters not allowed in a path",
+    });
+  }
+  return value;
 }
 
 export interface PageOptions {
@@ -77,6 +103,7 @@ export interface Envelope<T> {
   result: T;
   status: number;
   totalPages: number | undefined;
+  totalCount: number | undefined;
 }
 
 export interface Http {
@@ -87,16 +114,21 @@ export interface Http {
   envelope<T>(spec: RequestSpec, schema: z.ZodType<T>): Promise<Envelope<T>>;
   /** Like `request`, but a 404 answers `null`. */
   requestOrNull<T>(spec: RequestSpec, schema: z.ZodType<T>): Promise<T | null>;
-  /** Follows `page`/`per_page` until a short page. One request per page. */
+  /** Follows `page`/`per_page` until `result_info` says it is the last page (a short page when it says nothing). One request per page. */
   paginate<T>(spec: RequestSpec, item: z.ZodType<T>, options?: PageOptions): Promise<T[]>;
   /** Raw POST to the GraphQL Analytics API (`{ data, errors }`, no v4 envelope). */
   graphql<T>(call: string, query: string, variables: Record<string, unknown>, schema: z.ZodType<T>): Promise<T>;
-  /** Register a value that must never appear in an error message. */
+  /**
+   * Register a value that must never appear in an error message. Values under 8 characters are ignored (they
+   * would garble messages), and only the newest 64 are kept besides the API token.
+   */
   hide(value: string): void;
 }
 
 const DEFAULT_BASE_URL = "https://api.cloudflare.com/client/v4";
 const BASE_DELAY_MS = 250;
+const MIN_HIDDEN_LENGTH = 8;
+const MAX_HIDDEN = 64;
 
 const errorList = z
   .array(z.object({ code: z.number().catch(0), message: z.string().catch("") }))
@@ -107,7 +139,7 @@ const envelopeSchema = z.object({
   success: z.boolean().optional(),
   errors: errorList,
   result: z.unknown(),
-  result_info: z.object({ total_pages: z.number().optional() }).nullish(),
+  result_info: z.object({ total_pages: z.number().optional(), total_count: z.number().optional() }).nullish(),
 });
 
 const graphqlSchema = z.object({
@@ -117,10 +149,6 @@ const graphqlSchema = z.object({
     .nullish()
     .transform((errors) => errors ?? []),
 });
-
-function isRetryable(status: number): boolean {
-  return status === 429 || status >= 500;
-}
 
 function retryAfterMs(response: Response, now: number): number | undefined {
   const header = response.headers.get("retry-after");
@@ -143,12 +171,15 @@ export function createHttp(options: ClientOptions): Http {
   const maxDelayMs = options.maxDelayMs ?? 10_000;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const random = options.random ?? Math.random;
-  const hidden = new Set<string>([options.token]);
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const accountId = segment(options.accountId);
+  const hidden = new Set<string>();
   let requestCount = 0;
 
   function redact(text: string): string {
     let clean = text;
-    for (const value of hidden) {
+    const values = [options.token, ...hidden].sort((a, b) => b.length - a.length);
+    for (const value of values) {
       if (value !== "") clean = clean.split(value).join("[redacted]");
     }
     return clean;
@@ -181,7 +212,10 @@ export function createHttp(options: ClientOptions): Http {
     return ceiling / 2 + random() * (ceiling / 2);
   }
 
-  /** Sends with retries on 429 and 5xx. A request that got no response is retried only when it is safe to repeat. */
+  /**
+   * Sends with retries: 429 always; 5xx and a lost response only when the request is safe to send twice.
+   * Each attempt has its own timeout.
+   */
   async function send(spec: RequestSpec): Promise<{ response: Response; attempts: number }> {
     const headers: Record<string, string> = { authorization: `Bearer ${spec.bearer ?? options.token}` };
     if (spec.json !== undefined) headers["content-type"] = "application/json";
@@ -189,19 +223,27 @@ export function createHttp(options: ClientOptions): Http {
     if (spec.json !== undefined) init.body = JSON.stringify(spec.json);
     if (spec.form !== undefined) init.body = spec.form;
     const target = url(spec);
+    const idempotent = spec.idempotent ?? spec.method !== "POST";
+    const limit = Math.max(1, spec.maxAttempts ?? maxAttempts);
 
     for (let attempt = 1; ; attempt += 1) {
       requestCount += 1;
       let response: Response | undefined;
       try {
-        response = await fetchImpl(target, init);
+        response = await fetchImpl(target, { ...init, signal: AbortSignal.timeout(timeoutMs) });
       } catch {
-        if (attempt >= maxAttempts || spec.method === "POST") {
-          throw fail({ call: spec.call, status: 0, detail: "network error", attempts: attempt });
+        if (attempt >= limit || !idempotent) {
+          throw fail({
+            call: spec.call,
+            status: 0,
+            detail: "no response (network error or timeout)",
+            attempts: attempt,
+          });
         }
       }
-      if (response !== undefined && (!isRetryable(response.status) || attempt >= maxAttempts)) {
-        return { response, attempts: attempt };
+      if (response !== undefined) {
+        const retry = response.status === 429 || (response.status >= 500 && idempotent);
+        if (!retry || attempt >= limit) return { response, attempts: attempt };
       }
       await response?.body?.cancel();
       await sleep(backoffMs(attempt, response));
@@ -229,7 +271,12 @@ export function createHttp(options: ClientOptions): Http {
     if (!result.success) {
       throw fail({ call: spec.call, status: response.status, detail: describeIssues(result.error), attempts });
     }
-    return { result: result.data, status: response.status, totalPages: parsed.data.result_info?.total_pages };
+    return {
+      result: result.data,
+      status: response.status,
+      totalPages: parsed.data.result_info?.total_pages,
+      totalCount: parsed.data.result_info?.total_count,
+    };
   }
 
   async function request<T>(spec: RequestSpec, schema: z.ZodType<T>): Promise<T> {
@@ -237,14 +284,17 @@ export function createHttp(options: ClientOptions): Http {
   }
 
   return {
-    accountId: options.accountId,
+    accountId,
     get requestCount() {
       return requestCount;
     },
     request,
     envelope,
     hide(value) {
+      if (value.length < MIN_HIDDEN_LENGTH) return;
+      hidden.delete(value);
       hidden.add(value);
+      if (hidden.size > MAX_HIDDEN) hidden.delete(hidden.values().next().value ?? "");
     },
     async requestOrNull(spec, schema) {
       try {
@@ -259,12 +309,17 @@ export function createHttp(options: ClientOptions): Http {
       const maxPages = pageOptions.maxPages ?? 20;
       const items: T[] = [];
       for (let page = 1; page <= maxPages; page += 1) {
-        const { result, totalPages } = await envelope(
+        const { result, totalPages, totalCount } = await envelope(
           { ...spec, query: { ...spec.query, page, per_page: perPage } },
           z.array(item),
         );
         items.push(...result);
-        if (result.length < perPage || (totalPages !== undefined && page >= totalPages)) return items;
+        if (result.length === 0) return items;
+        if (totalPages !== undefined) {
+          if (page >= totalPages) return items;
+        } else if (totalCount !== undefined) {
+          if (items.length >= totalCount) return items;
+        } else if (result.length < perPage) return items;
       }
       throw fail({ call: spec.call, status: 200, detail: `more than ${maxPages} pages of results` });
     },
@@ -274,6 +329,7 @@ export function createHttp(options: ClientOptions): Http {
         method: "POST",
         path: "/graphql",
         json: { query, variables },
+        idempotent: true,
       });
       const parsed = graphqlSchema.safeParse(await readJson(response));
       if (!parsed.success) {

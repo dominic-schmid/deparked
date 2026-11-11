@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CloudflareApiError, type Http } from "./http";
+import { CloudflareApiError, type Http, segment } from "./http";
 
 export type RulesetPhase = "http_request_transform" | "http_request_dynamic_redirect";
 
@@ -57,7 +57,7 @@ export function rulesetsApi(http: Http) {
         {
           call: `read ${phase} rules`,
           method: "GET",
-          path: `/zones/${zoneId}/rulesets/phases/${phase}/entrypoint`,
+          path: `/zones/${segment(zoneId)}/rulesets/phases/${segment(phase)}/entrypoint`,
         },
         rulesetSchema,
       );
@@ -78,13 +78,18 @@ export function rulesetsApi(http: Http) {
               {
                 call,
                 method: "POST",
-                path: `/zones/${zoneId}/rulesets`,
+                path: `/zones/${segment(zoneId)}/rulesets`,
                 json: { name: "default", kind: "zone", phase, rules: [rule] },
               },
               rulesetSchema,
             )
           : await http.request(
-              { call, method: "POST", path: `/zones/${zoneId}/rulesets/${existing.id}/rules`, json: rule },
+              {
+                call,
+                method: "POST",
+                path: `/zones/${segment(zoneId)}/rulesets/${segment(existing.id)}/rules`,
+                json: rule,
+              },
               rulesetSchema,
             );
       const added = updated.rules.filter((entry) => !known.has(entry.id));
@@ -98,7 +103,11 @@ export function rulesetsApi(http: Http) {
     /** Deletes one rule by id; every other rule in the list stays. */
     async deleteRule(zoneId: string, rulesetId: string, ruleId: string): Promise<void> {
       await http.request(
-        { call: "delete rule", method: "DELETE", path: `/zones/${zoneId}/rulesets/${rulesetId}/rules/${ruleId}` },
+        {
+          call: "delete rule",
+          method: "DELETE",
+          path: `/zones/${segment(zoneId)}/rulesets/${segment(rulesetId)}/rules/${segment(ruleId)}`,
+        },
         z.unknown(),
       );
     },

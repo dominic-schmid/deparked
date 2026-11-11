@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FetchLike, Http } from "./http";
-import { CloudflareApiError } from "./http";
+import { CloudflareApiError, segment } from "./http";
 
 export type TurnstileMode = "managed" | "non-interactive" | "invisible";
 
@@ -48,7 +48,7 @@ export function turnstileApi(http: Http) {
     ): Promise<TurnstileWidget> {
       const json = { name: widget.name, mode: widget.mode, domains };
       const result = await http.request(
-        { call: "update Turnstile hostnames", method: "PUT", path: `${base}/${widget.sitekey}`, json },
+        { call: "update Turnstile hostnames", method: "PUT", path: `${base}/${segment(widget.sitekey)}`, json },
         widgetSchema.extend({ secret: z.string().optional() }),
       );
       if (result.secret !== undefined) http.hide(result.secret);
@@ -56,14 +56,14 @@ export function turnstileApi(http: Http) {
     },
     async getSecret(sitekey: string): Promise<string> {
       const widget = await http.request(
-        { call: "read Turnstile secret", method: "GET", path: `${base}/${sitekey}` },
+        { call: "read Turnstile secret", method: "GET", path: `${base}/${segment(sitekey)}` },
         widgetWithSecretSchema,
       );
       return remember(widget).secret;
     },
     async delete(sitekey: string): Promise<void> {
       await http.request(
-        { call: "delete Turnstile widget", method: "DELETE", path: `${base}/${sitekey}` },
+        { call: "delete Turnstile widget", method: "DELETE", path: `${base}/${segment(sitekey)}` },
         z.unknown(),
       );
     },
@@ -83,7 +83,7 @@ const siteverifySchema = z.object({
 
 export interface SiteverifyResult {
   success: boolean;
-  /** The hostname the challenge was solved on. The caller must compare it with the domain it serves. */
+  /** The hostname the challenge was solved on. */
   hostname: string | undefined;
   action: string | undefined;
   challengeTs: string | undefined;
@@ -94,12 +94,17 @@ export const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turns
 
 /**
  * Checks a visitor's Turnstile token. Uses the widget secret, not the API token, so it is not on the client.
- * One request, no retries. A rejected token resolves with `success: false`; only a broken call throws.
+ * One request, no retries, aborted after `timeoutMs` (default 5 s). A rejected token resolves with
+ * `success: false`, and so does a token solved on another hostname than `expectedHostname`
+ * (error code `hostname-mismatch`). Only a broken call throws.
  */
 export async function verifyTurnstile(input: {
   secret: string;
   response: string;
+  /** The domain the form was served on. */
+  expectedHostname: string;
   remoteIp?: string;
+  timeoutMs?: number;
   fetch?: FetchLike;
   url?: string;
 }): Promise<SiteverifyResult> {
@@ -113,17 +118,22 @@ export async function verifyTurnstile(input: {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(input.timeoutMs ?? 5000),
     });
   } catch {
-    throw new CloudflareApiError({ call, status: 0, detail: "network error" });
+    throw new CloudflareApiError({ call, status: 0, detail: "no response (network error or timeout)" });
   }
   const parsed = siteverifySchema.safeParse(await response.json().catch(() => undefined));
   if (!parsed.success) throw new CloudflareApiError({ call, status: response.status, detail: "unexpected response" });
+  const sameHost = parsed.data.hostname?.toLowerCase() === input.expectedHostname.toLowerCase();
   return {
-    success: parsed.data.success,
+    success: parsed.data.success && sameHost,
     hostname: parsed.data.hostname,
     action: parsed.data.action,
     challengeTs: parsed.data.challenge_ts,
-    errorCodes: parsed.data["error-codes"],
+    errorCodes:
+      parsed.data.success && !sameHost
+        ? [...parsed.data["error-codes"], "hostname-mismatch"]
+        : parsed.data["error-codes"],
   };
 }

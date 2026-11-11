@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CloudflareApiError, type Http } from "./http";
+import { CloudflareApiError, type Http, segment } from "./http";
 
 export type WorkerBinding =
   | { type: "d1"; name: string; databaseId: string }
@@ -136,9 +136,10 @@ function bindingJson(binding: WorkerBinding): Record<string, unknown> {
 
 export function workersApi(http: Http) {
   const account = `/accounts/${http.accountId}/workers`;
-  const script = (name: string) => `${account}/scripts/${name}`;
+  const script = (name: string) => `${account}/scripts/${segment(name)}`;
 
   function uploadForm(upload: WorkerUpload, allowAssets: boolean): FormData {
+    if (upload.assets !== undefined) http.hide(upload.assets.jwt);
     for (const binding of upload.bindings ?? []) {
       if (binding.type === "secret_text") http.hide(binding.text);
     }
@@ -172,6 +173,7 @@ export function workersApi(http: Http) {
           method: "POST",
           path: `${script(scriptName)}/assets-upload-session`,
           json: { manifest },
+          idempotent: true,
         },
         sessionSchema,
       );
@@ -199,6 +201,7 @@ export function workersApi(http: Http) {
           query: { base64: true },
           form,
           bearer: sessionJwt,
+          idempotent: true,
         },
         bucketUploadSchema,
       );
@@ -310,6 +313,7 @@ export function workersApi(http: Http) {
     },
 
     async putSecret(scriptName: string, name: string, text: string): Promise<void> {
+      segment(name);
       http.hide(text);
       await http.request(
         {
@@ -324,7 +328,11 @@ export function workersApi(http: Http) {
 
     async deleteSecret(scriptName: string, name: string): Promise<void> {
       await http.request(
-        { call: `delete Worker secret ${name}`, method: "DELETE", path: `${script(scriptName)}/secrets/${name}` },
+        {
+          call: `delete Worker secret ${name}`,
+          method: "DELETE",
+          path: `${script(scriptName)}/secrets/${segment(name)}`,
+        },
         z.unknown(),
       );
     },

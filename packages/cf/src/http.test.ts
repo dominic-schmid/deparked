@@ -72,12 +72,127 @@ describe("retries", () => {
     });
 
     const read = await failure(() => client.zones.get(ZONE.id));
-    expect(read.message).toBe("read zone failed: no response network error");
+    expect(read.message).toBe("read zone failed: no response (network error or timeout)");
+    expect(read.status).toBe(0);
     expect(sent).toBe(3);
 
     sent = 0;
     await failure(() => client.zones.createRoute(ZONE.id, { pattern: "example.com/*", script: "s" }));
     expect(sent).toBe(1);
+  });
+});
+
+describe("requests that are not safe to send twice", () => {
+  const route = { pattern: "example.com/*", script: "deparked-test-sites" };
+
+  it("does not re-send a create on 5xx: Cloudflare may have applied it", async () => {
+    const { mock, client, sleeps } = setup();
+    mock.failNext({ route: "routes.create", status: 502 });
+    mock.failNext({ route: "rulesets.create", status: 500 });
+    mock.failNext({ route: "d1.query", status: 503 });
+
+    await failure(() => client.zones.createRoute(ZONE.id, route));
+    await failure(() =>
+      client.rulesets.addRule(ZONE.id, "http_request_transform", {
+        action: "rewrite",
+        description: "deparked",
+        expression: "true",
+        action_parameters: { uri: { path: { value: "/" } } },
+      }),
+    );
+    await failure(() => client.d1.query("db", "INSERT INTO t VALUES (1)"));
+    expect(sleeps).toEqual([]);
+    expect(mock.callsTo("routes.create")).toHaveLength(1);
+    expect(mock.callsTo("rulesets.create")).toHaveLength(1);
+    expect(mock.callsTo("d1.query")).toHaveLength(1);
+  });
+
+  it("re-sends a create on 429, which Cloudflare did not process", async () => {
+    const { mock, client } = setup();
+    mock.failNext({ route: "routes.create", status: 429, retryAfterSeconds: 1 });
+
+    await client.zones.createRoute(ZONE.id, route);
+    expect(mock.callsTo("routes.create")).toHaveLength(2);
+    expect(mock.state.routes.get(ZONE.id)).toHaveLength(1);
+  });
+
+  it("still retries PUT and DELETE on 5xx, and the content-addressed assets upload", async () => {
+    const { mock, client } = setup();
+    const created = await client.zones.createRoute(ZONE.id, route);
+    mock.failNext({ route: "routes.delete", status: 500 });
+    mock.failNext({ route: "workers.uploadScript", status: 502 });
+    mock.failNext({ route: "workers.assetsUploadSession", status: 503 });
+
+    await client.zones.deleteRoute(ZONE.id, created.id);
+    const { completionJwt } = await client.workers.uploadAssets({
+      scriptName: "deparked-test-sites",
+      manifest: {},
+      read: async () => ({ content: new Uint8Array(), contentType: "text/html" }),
+    });
+    await client.workers.uploadScript("deparked-test-sites", {
+      compatibilityDate: "2026-11-01",
+      assets: { jwt: completionJwt },
+    });
+    expect(mock.callsTo("routes.delete")).toHaveLength(2);
+    expect(mock.callsTo("workers.uploadScript")).toHaveLength(2);
+    expect(mock.callsTo("workers.assetsUploadSession")).toHaveLength(2);
+  });
+});
+
+describe("timeouts", () => {
+  it("aborts an attempt that hangs and reports no response", async () => {
+    let sent = 0;
+    const client = createCloudflareClient({
+      token: TOKEN,
+      accountId: "a",
+      timeoutMs: 5,
+      sleep: async () => {},
+      fetch: (_url, init) => {
+        sent += 1;
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        });
+      },
+    });
+
+    const error = await failure(() => client.accounts.get());
+    expect(error.message).toBe("read account failed: no response (network error or timeout)");
+    expect(sent).toBe(3);
+  });
+});
+
+describe("path segments", () => {
+  it.each(["x/../../zones/y", "a?b", "..", "", "a b", "a%2Fb"])("refuses %j before sending anything", async (bad) => {
+    const { mock, client } = setup();
+    const calls = [
+      () => client.zones.get(bad),
+      () => client.zones.deleteRoute(ZONE.id, bad),
+      () => client.rulesets.deleteRule(ZONE.id, bad, "rule"),
+      () => client.rulesets.deleteRule(ZONE.id, "ruleset", bad),
+      () => client.workers.getSettings(bad),
+      () => client.workers.putSecret("deparked-test-admin", bad, "value-1234"),
+      () => client.workers.deleteSecret("deparked-test-admin", bad),
+      () => client.workers.deployVersion(bad, "version"),
+      () => client.d1.query(bad, "SELECT 1"),
+      () => client.turnstile.getSecret(bad),
+      () => client.turnstile.delete(bad),
+      () => client.analytics.deleteSite(bad),
+      () => client.email.deleteAddress(bad),
+      () => client.email.getRouting(bad),
+      () => client.email.enableRouting({ id: bad, name: "example.com" }, { replaceExistingMx: false }),
+      () => client.tokens.probePermissions({ zoneId: bad }),
+    ];
+    for (const call of calls) {
+      const error = await failure(async () => call());
+      expect(error.message).toBe("build API path failed: an id or name has characters not allowed in a path");
+    }
+    expect(mock.calls).toEqual([]);
+    expect(() => createCloudflareClient({ token: TOKEN, accountId: bad })).toThrow("build API path failed");
+  });
+
+  it("accepts the ids and names Cloudflare uses", async () => {
+    const { client } = setup();
+    await expect(client.workers.getSettings("deparked-test_admin.v2")).resolves.toBeNull();
   });
 });
 
@@ -109,6 +224,38 @@ describe("errors", () => {
     );
     expect(JSON.stringify(error.errors)).not.toContain(TOKEN);
     expect(JSON.stringify(error.errors)).not.toContain(secret);
+  });
+
+  it("hides an assets completion token passed to an upload", async () => {
+    const { mock, client } = setup();
+    const jwt = "completion-token-that-is-not-valid";
+    mock.failNext({ route: "workers.uploadScript", status: 400, message: `bad token ${jwt}` });
+
+    const error = await failure(() =>
+      client.workers.uploadScript("deparked-test-sites", { compatibilityDate: "2026-11-01", assets: { jwt } }),
+    );
+    expect(error.message).toBe("upload Worker deparked-test-sites failed: 400 bad token [redacted] (code 10000)");
+  });
+
+  it("does not redact values under 8 characters, which would garble messages", async () => {
+    const { mock, client } = setup();
+    await client.workers.uploadScript("deparked-test-admin", { compatibilityDate: "2026-11-01" });
+    mock.failNext({ route: "workers.putSecret", status: 400, message: "a bad request" });
+
+    const error = await failure(() => client.workers.putSecret("deparked-test-admin", "FLAG", "a"));
+    expect(error.message).toBe("set Worker secret FLAG failed: 400 a bad request (code 10000)");
+  });
+
+  it("keeps a bounded list of hidden values and always hides the API token", async () => {
+    const { mock, client } = setup();
+    await client.workers.uploadScript("deparked-test-admin", { compatibilityDate: "2026-11-01" });
+    for (let index = 0; index < 70; index += 1) {
+      await client.workers.putSecret("deparked-test-admin", "KEY", `secret-value-${index}`);
+    }
+    mock.failNext({ route: "zones.get", status: 400, message: `${TOKEN} secret-value-69 secret-value-0!` });
+
+    const error = await failure(() => client.zones.get(ZONE.id));
+    expect(error.message).toBe("read zone failed: 400 [redacted] [redacted] secret-value-0! (code 10000)");
   });
 
   it("reports a non-JSON answer without its body", async () => {
@@ -144,6 +291,26 @@ describe("pagination", () => {
     expect(listed).toHaveLength(120);
     expect(mock.callsTo("zones.list").map((call) => call.query.page)).toEqual(["1", "2", "3"]);
     expect(mock.callsTo("zones.list")[0]?.query["account.id"]).toBe(mock.state.accountId);
+  });
+
+  it("trusts result_info over page length: a server-capped page is not the last one", async () => {
+    const pages: number[] = [];
+    const client = createCloudflareClient({
+      token: TOKEN,
+      accountId: "a",
+      fetch: async (url) => {
+        const page = Number(new URL(url).searchParams.get("page"));
+        pages.push(page);
+        const result = [
+          { id: `z${page}a`, name: "a.example" },
+          { id: `z${page}b`, name: "b.example" },
+        ];
+        return Response.json({ success: true, errors: [], result, result_info: { total_count: 6 } });
+      },
+    });
+
+    expect(await client.zones.list({}, { perPage: 50 })).toHaveLength(6);
+    expect(pages).toEqual([1, 2, 3]);
   });
 
   it("stops with an error at maxPages instead of using up the subrequest budget", async () => {

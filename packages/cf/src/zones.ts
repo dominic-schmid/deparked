@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Http, PageOptions } from "./http";
+import { type Http, type PageOptions, segment } from "./http";
 
 const accountSchema = z.object({ id: z.string(), name: z.string() });
 export type Account = z.infer<typeof accountSchema>;
@@ -57,12 +57,12 @@ export function zonesApi(http: Http) {
       );
     },
     get(zoneId: string): Promise<Zone> {
-      return http.request({ call: "read zone", method: "GET", path: `/zones/${zoneId}` }, zoneSchema);
+      return http.request({ call: "read zone", method: "GET", path: `/zones/${segment(zoneId)}` }, zoneSchema);
     },
     /** Read only. `name` matches exactly. One request per page of 100. */
     listDnsRecords(zoneId: string, filter: { type?: string; name?: string } = {}): Promise<DnsRecord[]> {
       return http.paginate(
-        { call: "list DNS records", method: "GET", path: `/zones/${zoneId}/dns_records`, query: filter },
+        { call: "list DNS records", method: "GET", path: `/zones/${segment(zoneId)}/dns_records`, query: filter },
         dnsRecordSchema,
         { perPage: 100 },
       );
@@ -70,19 +70,23 @@ export function zonesApi(http: Http) {
     /** Cloudflare returns every route of the zone in one response. */
     listRoutes(zoneId: string): Promise<WorkerRoute[]> {
       return http.request(
-        { call: "list Worker routes", method: "GET", path: `/zones/${zoneId}/workers/routes` },
+        { call: "list Worker routes", method: "GET", path: `/zones/${segment(zoneId)}/workers/routes` },
         z.array(routeSchema),
       );
     },
     createRoute(zoneId: string, route: { pattern: string; script: string }): Promise<WorkerRoute> {
       return http.request(
-        { call: "create Worker route", method: "POST", path: `/zones/${zoneId}/workers/routes`, json: route },
+        { call: "create Worker route", method: "POST", path: `/zones/${segment(zoneId)}/workers/routes`, json: route },
         routeSchema,
       );
     },
     async deleteRoute(zoneId: string, routeId: string): Promise<void> {
       await http.request(
-        { call: "delete Worker route", method: "DELETE", path: `/zones/${zoneId}/workers/routes/${routeId}` },
+        {
+          call: "delete Worker route",
+          method: "DELETE",
+          path: `/zones/${segment(zoneId)}/workers/routes/${segment(routeId)}`,
+        },
         z.unknown(),
       );
     },

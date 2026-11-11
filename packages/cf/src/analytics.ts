@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Http } from "./http";
+import { type Http, segment } from "./http";
 
 const siteSchema = z
   .object({
@@ -30,7 +30,7 @@ const reportSchema = z.object({
   }),
 });
 
-const REPORT_QUERY = `query DeparkedVisits($accountTag: string!, $filter: AccountRumPageloadEventsAdaptiveGroupsFilter_InputObject!) {
+export const REPORT_QUERY = `query DeparkedVisits($accountTag: String!, $filter: AccountRumPageloadEventsAdaptiveGroupsFilter_InputObject!) {
   viewer {
     accounts(filter: { accountTag: $accountTag }) {
       visits: rumPageloadEventsAdaptiveGroups(filter: $filter, limit: 5000, orderBy: [date_ASC]) {
@@ -71,7 +71,7 @@ export function analyticsApi(http: Http) {
     },
     async deleteSite(siteTag: string): Promise<void> {
       await http.request(
-        { call: "delete Web Analytics site", method: "DELETE", path: `${sites}/${siteTag}` },
+        { call: "delete Web Analytics site", method: "DELETE", path: `${sites}/${segment(siteTag)}` },
         z.unknown(),
       );
     },

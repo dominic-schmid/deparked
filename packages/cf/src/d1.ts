@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Http } from "./http";
+import { type Http, segment } from "./http";
 
 const databaseSchema = z.object({ uuid: z.string(), name: z.string() });
 export type D1Database = z.infer<typeof databaseSchema>;
@@ -27,10 +27,10 @@ export function d1Api(http: Http) {
      * Runs SQL through the HTTP API (migrations, the ownership check). `sql` may hold several statements
      * separated by `;`; one result comes back per statement. `params` bind to a single statement.
      */
-    query(databaseId: string, sql: string, params: string[] = []): Promise<D1StatementResult[]> {
+    query(databaseId: string, sql: string, params: (string | number | null)[] = []): Promise<D1StatementResult[]> {
       const json = params.length === 0 ? { sql } : { sql, params };
       return http.request(
-        { call: "run D1 query", method: "POST", path: `${base}/${databaseId}/query`, json },
+        { call: "run D1 query", method: "POST", path: `${base}/${segment(databaseId)}/query`, json },
         z.array(statementResultSchema),
       );
     },

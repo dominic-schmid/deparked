@@ -479,6 +479,13 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        id: "workers.listScripts",
+        method: "GET",
+        pattern: `${account}/workers/scripts`,
+        permission: "workers",
+        handle: () => ({ result: [...state.scripts.keys()].map((id) => ({ id })) }),
+      },
+      {
         id: "zones.list",
         method: "GET",
         pattern: "/zones",
