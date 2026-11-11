@@ -15,7 +15,7 @@ Deparked: manage domain-for-sale pages from one admin panel. A static lander per
 
 ## Hard rules
 
-- The repository stays **private**. Never change its visibility, settings or secrets.
+- The repository is **public**. Never change its visibility, settings or secrets, and never commit anything that isn't fit to publish.
 - Never deploy from CI; CI only publishes GitHub Releases. Agents change Cloudflare only through the Cloudflare connector, on test resources.
 - Never print, log or commit a Cloudflare token or Worker secret. `.dev.vars` / `.env` stay local.
 - Testing against Cloudflare: the owner's account, throwaway subdomains of existing zones, resources named `deparked-test-*`, torn down after. Never touch wrappr.app's live Worker or routes.
