@@ -1,0 +1,26 @@
+# On a version tag, builds the release and publishes it as a GitHub Release. Never deploys to Cloudflare:
+# installs and updates pull the release from GitHub (decision doc section 13).
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - run: pnpm release "${GITHUB_REF_NAME}"
+      - run: gh release create "${GITHUB_REF_NAME}" dist/release/* --title "${GITHUB_REF_NAME}" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

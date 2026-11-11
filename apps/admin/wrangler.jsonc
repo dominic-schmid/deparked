@@ -1,0 +1,11 @@
+// deparked-admin: TanStack Start on Workers. Routed at <host>/admin* and <host>/api/* on every managed zone,
+// and at deparked-admin.<account>.workers.dev before any domain exists (decision doc sections 1, 3, 13).
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "deparked-admin",
+  "main": "@tanstack/react-start/server-entry",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "d1_databases": [{ "binding": "DB", "database_name": "deparked" }]
+}

@@ -1,3 +1,15 @@
+<!-- intent-skills:start -->
+## Skill Loading
+
+Use the repository’s installed Intent. If it is unavailable, report the missing dependency instead of downloading a replacement.
+Before editing files for a substantial task:
+- Run `pnpm exec intent list` from the workspace root to see available local skills.
+- If a listed skill matches the task, run `pnpm exec intent load <package>#<skill>` before changing files.
+- Use the loaded `SKILL.md` guidance while making the change.
+- Monorepos: when working across packages, run the skill check from the workspace root and prefer the local skill for the package being changed.
+- Multiple matches: prefer the most specific local skill for the package or concern you are changing; load additional skills only when the task spans multiple packages or concerns.
+<!-- intent-skills:end -->
+
 # Agent guide
 
 Deparked: manage domain-for-sale pages from one admin panel. A static lander per domain, one shared admin, installed with a Deploy to Cloudflare button and one pasted token. Cloudflare first; hosting adapters later.
@@ -39,14 +51,19 @@ The owner wants brief, objective answers, clarifying questions on complex tasks,
 
 ## Commands
 
-- `node --test scripts/hooks/guard.test.ts`: guard tests (no install needed).
-- The rest (`pnpm check` etc.) arrives with the monorepo scaffold (Foundations issue).
+- `pnpm check`: typecheck, Biome, Vitest, the guard tests, and the `apps/install/worker.js` staleness check. Run before every push.
+- `pnpm format`: Biome autofix.
+- `pnpm build`, then `pnpm dry-run`: bundle all three Workers with `wrangler deploy --dry-run` (what CI runs). Never a real deploy: CI only publishes GitHub Releases (`.github/workflows/release.yml`, on a `v*` tag).
+- `pnpm install:build`: regenerate `apps/install/worker.js` from `packages/bootstrap`; commit the result.
+- `pnpm e2e`: Playwright E2E against local Workers.
+- `pnpm exec intent list` / `pnpm exec intent load <pkg>#<skill>`: TanStack skills; load before editing `apps/admin`.
+- `node --test scripts/hooks/guard.test.ts`: guard tests alone (no install needed).
 
 ## Agent workflow
 
 <!-- Read by the core plugin's ship / self-review / steward skills (dominic-skills marketplace). -->
 
-- Check: `pnpm check` (until the monorepo exists: `node --test scripts/hooks/guard.test.ts`)
+- Check: `pnpm check`
 - Tracker: Linear team `DOM`, project "Deparked"; work is checklists inside the 7 surface issues
 - Plan docs: Linear document "Decision: Deparked v1 architecture"
 - Decisions go to: Linear document "Decision: Deparked v1 architecture"

@@ -1,0 +1,14 @@
+// deparked-sites: static assets only, no script (decision doc section 1).
+// A zone rewrite rule maps each request into /sites/<host>/; /catalog/* is shared by every domain.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "deparked-sites",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./public",
+    // No /index.html → / redirects that would leak the /sites/<host>/ prefix (spike result).
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "workers_dev": false
+}

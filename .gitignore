@@ -7,3 +7,9 @@ dist/
 !.env.example
 !.dev.vars.example
 *.log
+
+# Generated
+.tanstack/
+.output/
+test-results/
+playwright-report/
