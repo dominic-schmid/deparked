@@ -13,7 +13,7 @@
     "format": "biome check --write .",
     "test": "vitest run && node --test scripts/hooks/guard.test.ts",
     "build:install": "node scripts/build-install.ts",
-    "check:install-fresh": "pnpm build:install && git diff --exit-code -- apps/install/dist",
+    "check:install-fresh": "pnpm build:install && test -z \"$(git status --porcelain -- apps/install/dist)\"",
     "dry-run": "pnpm --filter @deparked/admin build && pnpm -r deploy:dry-run"
   },
   "devDependencies": {
