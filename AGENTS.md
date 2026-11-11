@@ -1,24 +1,25 @@
 # Agent guide
 
-Deparked: manage domain-for-sale pages from one admin panel. A static lander per domain, one shared admin, set up in one click through Claude. Cloudflare first; hosting adapters later.
+Deparked: manage domain-for-sale pages from one admin panel. A static lander per domain, one shared admin, installed with a Deploy to Cloudflare button and one pasted token. Cloudflare first; hosting adapters later.
 
 **Before any work, read the decision doc** ([Decision: Deparked v1 architecture](https://linear.app/dominic-schmid/document/decision-deparked-v1-architecture-7b535835e4d2)) and the Linear issue you're working on ([project](https://linear.app/dominic-schmid/project/deparked-815fa00b70c6)). Linear wins over anything in this repo. Decisions go into the decision doc, never into repo ADRs.
 
 ## Map
 
+- `apps/install`: bootstrap Worker `deparked-install`, the Deploy button target. Self-contained folder; its built file is generated and committed. Installs the release with the owner's token.
 - `apps/sites`: static-assets-only Worker serving every domain's lander from `/sites/<host>/`. No script.
 - `apps/admin`: TanStack Start app on Workers: `/admin` UI, `POST /api/offer`, publish.
-- `packages/config`: zod schema for a domain's config. `packages/templates`: `render(config, host)` → static files. `packages/db`: D1 schema, migrations, typed queries. `packages/cf`: minimal Cloudflare API client. `packages/provision`: idempotent setup steps run by the `deparked-setup` skill.
+- `packages/config`: zod schema for a domain's config. `packages/templates`: `render(config, host)` → static files, plus prebuilt island bundles. `packages/ui`: shadcn/Ruixen components shared by admin, install and landers. `packages/db`: D1 schema, migrations, typed queries. `packages/cf`: minimal Cloudflare API client. `packages/provision`: idempotent setup steps run by the installer and the admin, recorded in the ledger.
 - Hosting is behind an adapter boundary (publish, routing, bot check, email, analytics). Only `packages/cf` and `packages/provision` know Cloudflare; everything else talks to the adapter interface.
 - [docs/skills.md](docs/skills.md): which skills apply and where they come from. None are in this repo: generic skills come from the `dominic-skills` marketplace (dominic-schmid/ai) as plugins, TanStack's from its npm packages via Intent. Lifecycle: `ship` → `self-review` → `steward` (core plugin, configured by "Agent workflow" below); [scripts/hooks/guard.ts](scripts/hooks/guard.ts) is this repo's PreToolUse guard.
 
 ## Hard rules
 
 - The repository stays **private**. Never change its visibility, settings or secrets.
-- Never deploy from CI. Deploys and Cloudflare changes go through the Cloudflare connector.
+- Never deploy from CI; CI only publishes GitHub Releases. Agents change Cloudflare only through the Cloudflare connector, on test resources.
 - Never print, log or commit a Cloudflare token or Worker secret. `.dev.vars` / `.env` stay local.
 - Testing against Cloudflare: the owner's account, throwaway subdomains of existing zones, resources named `deparked-test-*`, torn down after. Never touch wrappr.app's live Worker or routes.
-- The lander is static: no Worker script or storage read per page view, no client JS beyond the offer form and Turnstile.
+- The lander is static: no Worker script or storage read per page view. Client JS is limited to the variant's prebuilt islands (hydrated components, built at release time), the offer form and Turnstile, and the page must read fine without it.
 - Buyer data (names, emails, amounts) never goes to logs or analytics.
 - Work is tracked as checklists in Linear issues: tick the boxes you finish. New issues only for genuine blockers, with the owner's OK.
 
