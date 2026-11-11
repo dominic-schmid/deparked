@@ -1,0 +1,33 @@
+{
+  "name": "deparked",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "typecheck": "pnpm -r typecheck && tsc --noEmit -p apps/install",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run && node --test scripts/hooks/guard.test.ts",
+    "build:install": "node scripts/build-install.ts",
+    "check:install-fresh": "pnpm build:install && git diff --exit-code -- apps/install/dist",
+    "dry-run": "pnpm --filter @deparked/admin build && pnpm -r deploy:dry-run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.7",
+    "@playwright/test": "1.63.0",
+    "@tanstack/intent": "0.5.6",
+    "@types/node": "^22.18.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  },
+  "intent": {
+    "skills": [
+      "@tanstack/*"
+    ]
+  }
+}
