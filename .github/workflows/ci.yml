@@ -1,0 +1,26 @@
+# Checks every PR. No Cloudflare secrets here, ever: CI never deploys (AGENTS.md hard rules).
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      # Bundles each Worker exactly as a deploy would, without credentials or network calls to Cloudflare.
+      - run: pnpm dry-run

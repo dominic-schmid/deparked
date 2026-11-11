@@ -1,0 +1,37 @@
+{
+  "name": "deparked",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm test:guard && pnpm install:check",
+    "typecheck": "tsc --noEmit -p . && pnpm -r --parallel typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "test:guard": "node --test scripts/hooks/guard.test.ts",
+    "build": "pnpm -r build",
+    "install:build": "node scripts/build-install.ts",
+    "install:check": "node scripts/build-install.ts --check",
+    "dry-run": "pnpm -r --workspace-concurrency=1 dry-run",
+    "e2e": "playwright test",
+    "release": "node scripts/release.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.7",
+    "@playwright/test": "1.63.0",
+    "@tanstack/intent": "0.5.6",
+    "@types/node": "22.20.5",
+    "esbuild": "0.28.2",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  },
+  "intent": {
+    "skills": [
+      "@tanstack/*"
+    ]
+  }
+}

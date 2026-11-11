@@ -1,0 +1,12 @@
+{
+  "name": "deparked-install",
+  "private": true,
+  "description": "Deparked installer. Deployed by the Deploy to Cloudflare button; worker.js is generated, do not edit.",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dry-run": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "4.160.1"
+  }
+}

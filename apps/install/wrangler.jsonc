@@ -1,0 +1,14 @@
+// deparked-install: the bootstrap Worker the Deploy to Cloudflare button deploys (decision doc section 13).
+// Self-contained on purpose: the button does not build a pnpm workspace. worker.js is generated from
+// packages/bootstrap by `pnpm install:build` and committed; CI fails if it is stale.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "deparked-install",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "d1_databases": [
+    // No database_id: the Deploy button creates the database and fills it in.
+    { "binding": "DB", "database_name": "deparked" }
+  ]
+}

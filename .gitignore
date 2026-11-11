@@ -7,3 +7,10 @@ dist/
 !.env.example
 !.dev.vars.example
 *.log
+
+# Generated
+routeTree.gen.ts
+.tanstack/
+.output/
+test-results/
+playwright-report/
