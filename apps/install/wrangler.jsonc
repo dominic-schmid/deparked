@@ -1,0 +1,10 @@
+// Spike 2 throwaway harness (DOM-370). Not product code.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "deparked-test-s2-install",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "d1_databases": [{ "binding": "DB", "database_name": "deparked-test-s2-install" }]
+}

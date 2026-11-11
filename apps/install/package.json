@@ -1,0 +1,7 @@
+{
+  "name": "deparked-test-s2-install",
+  "private": true,
+  "description": "Deparked spike 2 throwaway harness (DOM-370). Not product code.",
+  "scripts": { "deploy": "wrangler deploy", "dev": "wrangler dev" },
+  "devDependencies": { "wrangler": "4.155.0" }
+}
