@@ -5,6 +5,23 @@
     "includes": ["**", "!apps/install/dist", "!scripts/hooks", "!**/*.md", "!**/routeTree.gen.ts"]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
+  "css": { "parser": { "tailwindDirectives": true } },
   "linter": { "enabled": true },
+  "overrides": [
+    {
+      "includes": ["packages/ui/src/components/ui/**", "packages/ui/src/components/ruixen/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off",
+            "useKeyWithClickEvents": "off",
+            "noStaticElementInteractions": "off",
+            "noSvgWithoutTitle": "off"
+          },
+          "suspicious": { "noArrayIndexKey": "off", "noDoubleEquals": "off" }
+        }
+      }
+    }
+  ],
   "assist": { "actions": { "source": { "organizeImports": "on" } } }
 }
