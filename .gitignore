@@ -7,3 +7,19 @@ dist/
 !.env.example
 !.dev.vars.example
 *.log
+
+# build output: only the installer's bundled Worker is committed (pnpm build:install)
+!apps/install/dist/
+apps/install/dist/*
+!apps/install/dist/worker.js
+.tanstack/
+.vite/
+worker-configuration.d.ts
+*.tsbuildinfo
+
+# tests
+.screenshots/
+test-results/
+playwright-report/
+blob-report/
+coverage/

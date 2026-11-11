@@ -1,0 +1,18 @@
+// The admin Worker. Users never deploy it with wrangler: the installer uploads the release through the API
+// and binds the real database. This config is for local dev, the build and `wrangler deploy --dry-run`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "deparked-admin",
+  "main": "@tanstack/react-start/server-entry",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "deparked"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

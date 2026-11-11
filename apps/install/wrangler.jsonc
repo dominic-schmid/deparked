@@ -1,0 +1,25 @@
+// The bootstrap Worker behind the Deploy to Cloudflare button. This folder is copied on its own into the
+// owner's repository, so it must deploy with plain `npm install` and `wrangler deploy`: `main` is the
+// committed bundle (built from src/ by `pnpm build:install` in the Deparked workspace), never built here.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "deparked-install",
+  "main": "dist/worker.js",
+  "no_bundle": true,
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  // No database_id: the Deploy button and `wrangler deploy` create the database and fill it in.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "deparked"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

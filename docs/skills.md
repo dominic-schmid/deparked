@@ -13,7 +13,7 @@ No skill files live in this repo. Generic skills come from the owner's `dominic-
 
 ## TanStack (via TanStack Intent)
 
-Official skills ship in `@tanstack/react-start`, `@tanstack/react-router` and `@tanstack/router-core`, version-matched to what's installed. `package.json#intent.skills` allows `@tanstack/*`. List with `pnpm exec intent list`, then load the most specific with `pnpm exec intent load <skill>` before editing admin code. Set up in the Foundations issue.
+Official skills ship in `@tanstack/react-start`, `@tanstack/react-router` and `@tanstack/router-core`, version-matched to what's installed. `package.json#intent.skills` allows `@tanstack/*`. List with `pnpm exec intent list`, then load the most specific with `pnpm exec intent load <package>#<skill>` before editing admin code (see the Intent block in `AGENTS.md`).
 
 ## Getting the plugins
 

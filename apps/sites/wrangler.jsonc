@@ -1,0 +1,12 @@
+// Static assets only: no `main`, so no Worker code runs for a visitor. The zone's rewrite rule maps each
+// request into /sites/<host>/; html_handling "none" keeps /index.html from redirecting (spike, DOM-357).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "deparked-sites",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./public",
+    "html_handling": "none",
+    "not_found_handling": "none"
+  }
+}
