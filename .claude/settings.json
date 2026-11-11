@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$CLAUDE_CODE_REMOTE\" != true ] || [ ! -f \"$CLAUDE_PROJECT_DIR/package.json\" ] || (cd \"$CLAUDE_PROJECT_DIR\" && pnpm install --frozen-lockfile >/dev/null 2>&1) || echo 'pnpm install failed: run it before pnpm check.'"
+          },
+          {
+            "type": "command",
+            "command": "git -C \"$CLAUDE_PROJECT_DIR\" config --local user.name \"Dominic Schmid\" && git -C \"$CLAUDE_PROJECT_DIR\" config --local user.email \"45590457+dominic-schmid@users.noreply.github.com\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|mcp__github__merge_pull_request|mcp__github__enable_pr_auto_merge|mcp__github__push_files|mcp__github__create_or_update_file|mcp__github__delete_file|mcp__github__create_pull_request|mcp__github__update_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/pre-tool-use.ts\" \"$CLAUDE_PROJECT_DIR\" || exit 2"
+          }
+        ]
+      }
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "dominic-skills": {
+      "source": {
+        "source": "github",
+        "repo": "dominic-schmid/ai"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "core@dominic-skills": true,
+    "landing-page@dominic-skills": true,
+    "cloudflare-stack@dominic-skills": true,
+    "security@dominic-skills": true
+  }
+}
