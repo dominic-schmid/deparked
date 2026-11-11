@@ -1,0 +1,134 @@
+/*
+ * Design tokens and base styles for every Deparked surface.
+ * Import after Tailwind: `@import "tailwindcss"; @import "@deparked/ui/styles.css";`
+ *
+ * Colour scheme: follows the system by default. A `.dark` or `.light` class on an ancestor
+ * (normally <html>) overrides it. The dark values are listed twice because one rule cannot
+ * be both a media query and a class.
+ */
+@import "tw-animate-css";
+
+@source "../components";
+
+@custom-variant dark {
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:not(.light, .light *)) {
+      @slot;
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+  --radius: 0.75rem;
+  --background: oklch(0.99 0.003 120);
+  --foreground: oklch(0.22 0.035 128);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.035 128);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.035 128);
+  --primary: oklch(0.26 0.045 128);
+  --primary-foreground: oklch(0.985 0.005 120);
+  --secondary: oklch(0.955 0.008 120);
+  --secondary-foreground: oklch(0.26 0.045 128);
+  --muted: oklch(0.955 0.008 120);
+  --muted-foreground: oklch(0.48 0.02 128);
+  --accent: oklch(0.945 0.012 120);
+  --accent-foreground: oklch(0.26 0.045 128);
+  --destructive: oklch(0.5 0.17 33);
+  --border: oklch(0.91 0.008 120);
+  --input: oklch(0.87 0.01 120);
+  --ring: oklch(0.6 0.03 128);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+    --background: oklch(0.17 0.012 128);
+    --foreground: oklch(0.97 0.005 120);
+    --card: oklch(0.21 0.014 128);
+    --card-foreground: oklch(0.97 0.005 120);
+    --popover: oklch(0.21 0.014 128);
+    --popover-foreground: oklch(0.97 0.005 120);
+    --primary: oklch(0.97 0.005 120);
+    --primary-foreground: oklch(0.22 0.035 128);
+    --secondary: oklch(0.27 0.015 128);
+    --secondary-foreground: oklch(0.97 0.005 120);
+    --muted: oklch(0.27 0.015 128);
+    --muted-foreground: oklch(0.72 0.015 125);
+    --accent: oklch(0.3 0.018 128);
+    --accent-foreground: oklch(0.97 0.005 120);
+    --destructive: oklch(0.68 0.17 30);
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 16%);
+    --ring: oklch(0.6 0.02 128);
+  }
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.17 0.012 128);
+  --foreground: oklch(0.97 0.005 120);
+  --card: oklch(0.21 0.014 128);
+  --card-foreground: oklch(0.97 0.005 120);
+  --popover: oklch(0.21 0.014 128);
+  --popover-foreground: oklch(0.97 0.005 120);
+  --primary: oklch(0.97 0.005 120);
+  --primary-foreground: oklch(0.22 0.035 128);
+  --secondary: oklch(0.27 0.015 128);
+  --secondary-foreground: oklch(0.97 0.005 120);
+  --muted: oklch(0.27 0.015 128);
+  --muted-foreground: oklch(0.72 0.015 125);
+  --accent: oklch(0.3 0.018 128);
+  --accent-foreground: oklch(0.97 0.005 120);
+  --destructive: oklch(0.68 0.17 30);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.6 0.02 128);
+}
+
+@theme inline {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Newsreader", ui-serif, Georgia, serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+/* Used by the Ruixen spark chart's draw-in animation. */
+@keyframes spark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

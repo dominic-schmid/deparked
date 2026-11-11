@@ -20,7 +20,7 @@ function RootDocument() {
       <head>
         <HeadContent />
       </head>
-      <body className="min-h-dvh bg-white text-neutral-950 antialiased">
+      <body className="min-h-dvh antialiased">
         <Outlet />
         <Scripts />
       </body>
