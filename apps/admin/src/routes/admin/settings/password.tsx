@@ -1,3 +1,4 @@
+import { Button } from "@deparked/ui/button";
 import { createFileRoute } from "@tanstack/react-router";
 import { AuthForm, AuthPage, PasswordField } from "../../../components/auth-form";
 import {
@@ -81,6 +82,14 @@ function ChangePasswordPage() {
           Back to the admin
         </a>
       </AuthForm>
+      <form method="post" action="/admin/settings/logout-everywhere" className="mt-8 flex flex-col gap-3 border-t pt-6">
+        <p className="text-sm text-muted-foreground">
+          Log out here and in every other browser, without changing the password.
+        </p>
+        <Button type="submit" variant="outline" className="w-full">
+          Log out everywhere
+        </Button>
+      </form>
     </AuthPage>
   );
 }

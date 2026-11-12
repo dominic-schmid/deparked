@@ -16,7 +16,13 @@
   "secrets": {
     "required": ["SESSION_KEY"]
   },
+  // Invocation logs record every request URL. The setup link carries its one-time secret in the query, so they
+  // stay off; our own console logs are still collected.
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false
+    }
   }
 }

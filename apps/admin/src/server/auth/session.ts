@@ -47,39 +47,83 @@ export async function verifySessionToken(
 }
 
 /**
- * Plain http is accepted on the developer's own machine only. Everywhere else the cookie is `Secure` and
- * carries the `__Host-` prefix, which browsers refuse without `Secure`, with a `Domain`, or off `Path=/`.
+ * Plain http is accepted on the developer's own machine only. Everywhere else cookies are `Secure` and carry the
+ * `__Host-` prefix, which browsers refuse without `Secure`, with a `Domain`, or off `Path=/`.
  */
 function isLocalHttp(url: URL): boolean {
   return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
 }
 
-export function sessionCookieName(url: URL): string {
-  return isLocalHttp(url) ? "deparked_session" : "__Host-deparked_session";
+/** Where a plain-http request must go instead, or null when it may be served (https, or local dev). */
+export function httpsRedirect(url: URL): string | null {
+  if (url.protocol !== "http:" || isLocalHttp(url)) return null;
+  const target = new URL(url);
+  target.protocol = "https:";
+  return target.href;
+}
+
+function cookieName(url: URL, name: string): string {
+  return isLocalHttp(url) ? name : `__Host-${name}`;
 }
 
 /**
  * Host-only (no `Domain`): the admin runs on `workers.dev` and on every managed domain, and each keeps its own
  * login. `SameSite=Strict`: the cookie is never sent on a request that another site started.
  */
-function cookie(url: URL, value: string, maxAgeSeconds: number): string {
+function cookie(url: URL, name: string, value: string, maxAgeSeconds: number): string {
   const secure = isLocalHttp(url) ? "" : "; Secure";
-  return `${sessionCookieName(url)}=${value}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly${secure}; SameSite=Strict`;
+  return `${cookieName(url, name)}=${value}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly${secure}; SameSite=Strict`;
+}
+
+function readCookie(request: Request, name: string): string | null {
+  const fullName = cookieName(new URL(request.url), name);
+  for (const part of (request.headers.get("Cookie") ?? "").split(";")) {
+    const separator = part.indexOf("=");
+    if (separator !== -1 && part.slice(0, separator).trim() === fullName) return part.slice(separator + 1).trim();
+  }
+  return null;
+}
+
+const SESSION = "deparked_session";
+
+export function sessionCookieName(url: URL): string {
+  return cookieName(url, SESSION);
 }
 
 export function sessionCookie(url: URL, token: string): string {
-  return cookie(url, token, Math.floor(SESSION_TTL_MS / 1000));
+  return cookie(url, SESSION, token, Math.floor(SESSION_TTL_MS / 1000));
 }
 
 export function clearedSessionCookie(url: URL): string {
-  return cookie(url, "", 0);
+  return cookie(url, SESSION, "", 0);
 }
 
 export function readSessionToken(request: Request): string | null {
-  const name = sessionCookieName(new URL(request.url));
-  for (const part of (request.headers.get("Cookie") ?? "").split(";")) {
-    const separator = part.indexOf("=");
-    if (separator !== -1 && part.slice(0, separator).trim() === name) return part.slice(separator + 1).trim();
+  return readCookie(request, SESSION);
+}
+
+// The one-time setup secret arrives in the installer's link. It is moved out of the URL into this cookie at once,
+// so it does not stay in the address bar, the history or a later redirect. The setup form's POST reads it back.
+const SETUP = "deparked_setup";
+const SETUP_COOKIE_SECONDS = 60 * 60;
+const SETUP_SECRET_MAX_LENGTH = 512;
+
+/** Null when the secret is empty or too long to be one. */
+export function setupSecretCookie(url: URL, secret: string): string | null {
+  if (secret === "" || secret.length > SETUP_SECRET_MAX_LENGTH) return null;
+  return cookie(url, SETUP, encodeURIComponent(secret), SETUP_COOKIE_SECONDS);
+}
+
+export function clearedSetupSecretCookie(url: URL): string {
+  return cookie(url, SETUP, "", 0);
+}
+
+export function readSetupSecret(request: Request): string | null {
+  const value = readCookie(request, SETUP);
+  if (value === null || value === "") return null;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
   }
-  return null;
 }

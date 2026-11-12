@@ -1,4 +1,4 @@
-import { type Db, getWorkspace, initWorkspace, setSetupSecret } from "@deparked/db";
+import { bumpSessionVersion, type Db, getWorkspace, hitRateLimit, initWorkspace, setSetupSecret } from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -9,17 +9,23 @@ import {
   LOGIN_WINDOW_MS,
   login,
   loginRateLimitKey,
+  RATE_LIMIT_RETENTION_MS,
+  rateLimitSubject,
 } from "./account";
-import { gate } from "./gate";
+import { gate, isSetupPath } from "./gate";
 import { securityHeaders } from "./headers";
 import { isAllowedOrigin } from "./origin";
 import { checkNewPassword, hashPassword, PBKDF2_ITERATIONS, verifyPassword } from "./password";
 import {
   clearedSessionCookie,
+  clearedSetupSecretCookie,
+  httpsRedirect,
   issueSessionToken,
   readSessionToken,
+  readSetupSecret,
   SESSION_TTL_MS,
   sessionCookie,
+  setupSecretCookie,
   verifySessionToken,
 } from "./session";
 
@@ -170,6 +176,87 @@ describe("session cookie", () => {
   });
 });
 
+describe("setup secret cookie", () => {
+  const managed = new URL("https://example.com/admin/setup");
+  const withCookie = (url: URL, cookie: string) =>
+    new Request(url, { headers: { Cookie: cookie.split(";")[0] ?? "" } });
+
+  it("is short-lived, HttpOnly, Secure, SameSite=Strict and host-only", () => {
+    expect(setupSecretCookie(managed, "abc-DEF_123")).toBe(
+      "__Host-deparked_setup=abc-DEF_123; Max-Age=3600; Path=/; HttpOnly; Secure; SameSite=Strict",
+    );
+    expect(clearedSetupSecretCookie(managed)).toMatch(/^__Host-deparked_setup=; Max-Age=0; /);
+  });
+
+  it("round-trips any secret without letting it break out of the cookie", () => {
+    const secret = 'a b;c=d, e"é/+%';
+    const cookie = setupSecretCookie(managed, secret) ?? "";
+    expect(cookie.split("; ")[0]).not.toMatch(/[ ;,"]|=.*=/);
+    expect(readSetupSecret(withCookie(managed, cookie))).toBe(secret);
+  });
+
+  it("refuses an empty or oversized secret and reads nothing when there is no cookie", () => {
+    expect(setupSecretCookie(managed, "")).toBeNull();
+    expect(setupSecretCookie(managed, "x".repeat(513))).toBeNull();
+    expect(readSetupSecret(new Request(managed))).toBeNull();
+    expect(readSetupSecret(withCookie(managed, "__Host-deparked_setup=%E0%A4%A"))).toBeNull();
+  });
+});
+
+describe("https redirect", () => {
+  it("sends plain http to the same URL on https", () => {
+    expect(httpsRedirect(new URL("http://example.com/admin/login?error=invalid"))).toBe(
+      "https://example.com/admin/login?error=invalid",
+    );
+    expect(httpsRedirect(new URL("http://deparked-admin.example.workers.dev/admin"))).toBe(
+      "https://deparked-admin.example.workers.dev/admin",
+    );
+    expect(httpsRedirect(new URL("http://localhost.example.com/admin"))).toBe("https://localhost.example.com/admin");
+  });
+
+  it("leaves https and local dev alone", () => {
+    expect(httpsRedirect(new URL("https://example.com/admin"))).toBeNull();
+    for (const host of ["localhost:5173", "127.0.0.1:8787", "[::1]:8787"]) {
+      expect(httpsRedirect(new URL(`http://${host}/admin`))).toBeNull();
+    }
+  });
+});
+
+describe("rate limit subject", () => {
+  it("keeps IPv4 as it is, also when IPv4-mapped", () => {
+    expect(rateLimitSubject("203.0.113.7")).toBe("203.0.113.7");
+    expect(rateLimitSubject("::ffff:203.0.113.7")).toBe("203.0.113.7");
+    expect(rateLimitSubject("::FFFF:203.0.113.7")).toBe("203.0.113.7");
+  });
+
+  it("counts IPv6 by its /64, however the address is written", () => {
+    const prefix = "2001:db8:1:2::/64";
+    for (const ip of [
+      "2001:db8:1:2::1",
+      "2001:db8:1:2:ffff:ffff:ffff:ffff",
+      "2001:0db8:0001:0002:0000:0000:0000:0001",
+      "2001:DB8:1:2:a:b:c:d",
+    ]) {
+      expect(rateLimitSubject(ip)).toBe(prefix);
+    }
+    expect(rateLimitSubject("2001:db8:1:3::1")).toBe("2001:db8:1:3::/64");
+    expect(rateLimitSubject("::1")).toBe("0:0:0:0::/64");
+    expect(rateLimitSubject("2001:db8::")).toBe("2001:db8:0:0::/64");
+  });
+
+  it("leaves what it cannot parse alone", () => {
+    for (const ip of ["local", "", "1::2::3", "2001:db8:zz::1", "1:2:3:4:5:6:7:8:9"]) {
+      expect(rateLimitSubject(ip)).toBe(ip);
+    }
+  });
+
+  it("gives one login counter to a whole /64 and separate ones to neighbours", async () => {
+    const key = await loginRateLimitKey(KEY, "2001:db8:1:2::1");
+    expect(await loginRateLimitKey(KEY, "2001:db8:1:2:aaaa:bbbb:cccc:dddd")).toBe(key);
+    expect(await loginRateLimitKey(KEY, "2001:db8:1:3::1")).not.toBe(key);
+  });
+});
+
 describe("with a database", () => {
   let db: Db;
 
@@ -294,6 +381,33 @@ describe("with a database", () => {
       }
     });
 
+    it("locks out a caller rotating through one IPv6 /64", async () => {
+      await setUp();
+      for (let i = 0; i < LOGIN_MAX_ATTEMPTS; i++) {
+        const result = await login(db, {
+          password: "wrong password",
+          ip: `2001:db8:1:2::${i + 1}`,
+          sessionKey: KEY,
+          now: NOW,
+        });
+        expect(result).toEqual({ ok: false, reason: "invalid" });
+      }
+      const next = await login(db, { password: PASSWORD, ip: "2001:db8:1:2:ffff::9", sessionKey: KEY, now: NOW });
+      expect(next).toMatchObject({ reason: "locked" });
+    });
+
+    it("deletes stale counters on a failed login and keeps recent ones", async () => {
+      const { db: database, sqlite } = await createTestDb();
+      await hitRateLimit(database, { key: "offer:stale", windowMs: 1000, now: NOW - RATE_LIMIT_RETENTION_MS - 1 });
+      await hitRateLimit(database, { key: "offer:recent", windowMs: 1000, now: NOW - RATE_LIMIT_RETENTION_MS + 1 });
+      await login(database, { password: "wrong password", ip: IP, sessionKey: KEY, now: NOW });
+      const keys = sqlite
+        .prepare("SELECT key FROM rate_limits ORDER BY key")
+        .all()
+        .map((row) => row.key);
+      expect(keys).toEqual([await loginRateLimitKey(KEY, IP), "offer:recent"].sort());
+    });
+
     it("stores only a keyed hash of the IP", async () => {
       const { db: database, sqlite } = await createTestDb();
       await login(database, { password: "wrong password", ip: IP, sessionKey: KEY, now: NOW });
@@ -302,6 +416,17 @@ describe("with a database", () => {
       expect(String(rows[0]?.key)).toMatch(/^login:[0-9a-f]{64}$/);
       expect(await loginRateLimitKey(KEY, IP)).not.toBe(await loginRateLimitKey(OTHER_KEY, IP));
       expect(await loginRateLimitKey(KEY, IP)).not.toBe(await loginRateLimitKey(KEY, "203.0.113.8"));
+    });
+  });
+
+  describe("log out everywhere", () => {
+    it("ends every session without touching the password", async () => {
+      const token = await setUp();
+      await bumpSessionVersion(db, NOW + 1);
+      expect(await sessionOf(token, NOW + 1)).toBeNull();
+      const again = await login(db, { password: PASSWORD, ip: IP, sessionKey: KEY, now: NOW + 1 });
+      if (!again.ok) throw new Error("login failed");
+      expect(await sessionOf(again.token, NOW + 1)).not.toBeNull();
     });
   });
 
@@ -450,6 +575,14 @@ describe("gate", () => {
     expect(gate({ ...fresh, pathname: "/admin/login" })).toEqual(to("/admin/setup"));
     expect(gate({ ...fresh, pathname: "/admin/setup" })).toEqual(next);
     expect(gate({ ...base, hasPassword: false, pathname: "/admin" })).toEqual(to("/admin/login"));
+  });
+
+  it("recognises the setup path in any spelling", () => {
+    for (const pathname of ["/admin/setup", "/admin/setup/", "/Admin/Setup", "/admin/%73etup"]) {
+      expect(isSetupPath(pathname)).toBe(true);
+    }
+    expect(isSetupPath("/admin/setup/done")).toBe(false);
+    expect(isSetupPath("/admin/login")).toBe(false);
   });
 
   it("opens login and setup without a session", () => {

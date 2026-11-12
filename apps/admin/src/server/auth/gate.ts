@@ -33,6 +33,10 @@ function normalise(pathname: string): string {
   return path === "" ? "/" : path;
 }
 
+export function isSetupPath(pathname: string): boolean {
+  return normalise(pathname) === SETUP_PATH;
+}
+
 /** `/api/*` is public and has its own checks (offers); the gate, Origin check and admin headers skip it. */
 export function isPublicApi(pathname: string): boolean {
   return /^\/api\//.test(pathname);

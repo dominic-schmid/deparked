@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminLogoutRouteImport } from './routes/admin/logout'
+import { Route as AdminSettingsLogoutEverywhereRouteImport } from './routes/admin/settings/logout-everywhere'
 import { Route as AdminSettingsPasswordRouteImport } from './routes/admin/settings/password'
 import { Route as AdminSetupIndexRouteImport } from './routes/admin/setup/index'
 import { Route as AdminSetupDoneRouteImport } from './routes/admin/setup/done'
@@ -37,6 +38,12 @@ const AdminLogoutRoute = AdminLogoutRouteImport.update({
   path: '/admin/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminSettingsLogoutEverywhereRoute =
+  AdminSettingsLogoutEverywhereRouteImport.update({
+    id: '/admin/settings/logout-everywhere',
+    path: '/admin/settings/logout-everywhere',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdminSettingsPasswordRoute = AdminSettingsPasswordRouteImport.update({
   id: '/admin/settings/password',
   path: '/admin/settings/password',
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/': typeof AdminIndexRoute
+  '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/settings/password': typeof AdminSettingsPasswordRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
   '/admin/setup/': typeof AdminSetupIndexRoute
@@ -67,6 +75,7 @@ export interface FileRoutesByTo {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin': typeof AdminIndexRoute
+  '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/settings/password': typeof AdminSettingsPasswordRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
   '/admin/setup': typeof AdminSetupIndexRoute
@@ -77,6 +86,7 @@ export interface FileRoutesById {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/': typeof AdminIndexRoute
+  '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/settings/password': typeof AdminSettingsPasswordRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
   '/admin/setup/': typeof AdminSetupIndexRoute
@@ -88,6 +98,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/'
+    | '/admin/settings/logout-everywhere'
     | '/admin/settings/password'
     | '/admin/setup/done'
     | '/admin/setup/'
@@ -97,6 +108,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin'
+    | '/admin/settings/logout-everywhere'
     | '/admin/settings/password'
     | '/admin/setup/done'
     | '/admin/setup'
@@ -106,6 +118,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/'
+    | '/admin/settings/logout-everywhere'
     | '/admin/settings/password'
     | '/admin/setup/done'
     | '/admin/setup/'
@@ -116,6 +129,7 @@ export interface RootRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   AdminLogoutRoute: typeof AdminLogoutRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminSettingsLogoutEverywhereRoute: typeof AdminSettingsLogoutEverywhereRoute
   AdminSettingsPasswordRoute: typeof AdminSettingsPasswordRoute
   AdminSetupDoneRoute: typeof AdminSetupDoneRoute
   AdminSetupIndexRoute: typeof AdminSetupIndexRoute
@@ -151,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/settings/logout-everywhere': {
+      id: '/admin/settings/logout-everywhere'
+      path: '/admin/settings/logout-everywhere'
+      fullPath: '/admin/settings/logout-everywhere'
+      preLoaderRoute: typeof AdminSettingsLogoutEverywhereRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/settings/password': {
       id: '/admin/settings/password'
       path: '/admin/settings/password'
@@ -180,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   AdminLogoutRoute: AdminLogoutRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminSettingsLogoutEverywhereRoute: AdminSettingsLogoutEverywhereRoute,
   AdminSettingsPasswordRoute: AdminSettingsPasswordRoute,
   AdminSetupDoneRoute: AdminSetupDoneRoute,
   AdminSetupIndexRoute: AdminSetupIndexRoute,

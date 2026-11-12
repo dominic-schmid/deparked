@@ -28,9 +28,9 @@ export async function readSession(
   return { workspace, session };
 }
 
-export function seeOther(location: string, setCookie?: string): Response {
+export function seeOther(location: string, ...setCookies: string[]): Response {
   const headers = new Headers({ Location: location });
-  if (setCookie !== undefined) headers.append("Set-Cookie", setCookie);
+  for (const setCookie of setCookies) headers.append("Set-Cookie", setCookie);
   return new Response(null, { status: 303, headers });
 }
 

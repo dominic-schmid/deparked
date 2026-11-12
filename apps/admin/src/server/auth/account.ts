@@ -4,6 +4,7 @@ import {
   type Db,
   getWorkspace,
   hitRateLimit,
+  pruneRateLimits,
   setPassword,
   type Workspace,
 } from "@deparked/db";
@@ -13,6 +14,8 @@ import { issueSessionToken } from "./session";
 
 export const LOGIN_MAX_ATTEMPTS = 5;
 export const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+/** Counters older than this are deleted. Longer than any limiter's window, `offer:` keys included. */
+export const RATE_LIMIT_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 /** What the installer stores in `workspace.setup_secret_hash`: lowercase hex SHA-256 of the secret. */
 export function hashSetupSecret(secret: string): Promise<string> {
@@ -33,10 +36,35 @@ function storedPassword(workspace: Workspace | undefined): PasswordHash | null {
   return { hash: workspace.passwordHash, salt: workspace.passwordSalt, iterations: workspace.passwordIterations };
 }
 
-/** `login:<HMAC-SHA256(SESSION_KEY, ip)>`: the database never sees an IP address, and the hash cannot be reversed
- * by trying all addresses without the Worker secret. */
+/**
+ * What one client counts as. An IPv6 customer usually holds a whole /64 and can rotate through it freely, so
+ * IPv6 addresses are counted by their first 64 bits. IPv4 (also when written as `::ffff:a.b.c.d`) and anything
+ * that does not parse are counted as they are.
+ */
+export function rateLimitSubject(ip: string): string {
+  const address = ip.trim().toLowerCase();
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(address);
+  if (mapped?.[1] !== undefined) return mapped[1];
+  if (!address.includes(":") || address.includes(".")) return address;
+  const halves = address.split("::");
+  if (halves.length > 2) return address;
+  const head = (halves[0] ?? "").split(":").filter((group) => group !== "");
+  const tail = (halves[1] ?? "").split(":").filter((group) => group !== "");
+  const missing = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  const groups = [...head, ...Array<string>(Math.max(missing, 0)).fill("0"), ...tail];
+  if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return address;
+  return `${groups
+    .slice(0, 4)
+    .map((group) => group.replace(/^0+(?=.)/, ""))
+    .join(":")}::/64`;
+}
+
+/**
+ * `login:<HMAC-SHA256(SESSION_KEY, subject)>`: the database never sees an IP address, and the hash cannot be
+ * reversed by trying all addresses without the Worker secret.
+ */
 export async function loginRateLimitKey(sessionKey: string, ip: string): Promise<string> {
-  const mac = await crypto.subtle.sign("HMAC", await hmacKey(sessionKey), utf8(`ip\n${ip}`));
+  const mac = await crypto.subtle.sign("HMAC", await hmacKey(sessionKey), utf8(`ip\n${rateLimitSubject(ip)}`));
   return `login:${toHex(new Uint8Array(mac))}`;
 }
 
@@ -88,6 +116,8 @@ async function checkPassword(
   const workspace = await getWorkspace(db);
   const stored = storedPassword(workspace);
   if (workspace === undefined || stored === null || !(await verifyPassword(input.password, stored))) {
+    // Failed attempts are what fills the table, so they also empty it: one cheap delete of expired counters.
+    await pruneRateLimits(db, input.now - RATE_LIMIT_RETENTION_MS);
     return { ok: false, reason: "invalid" };
   }
   await clearRateLimit(db, key);
