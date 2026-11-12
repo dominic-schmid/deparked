@@ -362,7 +362,6 @@
    brings it into focus and place instead of fading it in from invisible */
 @keyframes enter {
   from {
-    filter: blur(4px);
     translate: 0 12px;
   }
 }
