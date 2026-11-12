@@ -31,7 +31,17 @@ export type CatalogFont = {
   files: { subset: string; unicodeRange: string; path: string; hash: string; bytes: number }[];
 };
 
-export type CatalogGradient = { id: string; name: string; color: string; css: string };
+export type CatalogGradient = {
+  /** What a config's `background` names, for a gradient-led variant. */
+  id: string;
+  name: string;
+  /** The flat fallback and the theme colour. */
+  color: string;
+  /** A CSS `background-image`. */
+  css: string;
+  /** How deep the field is everywhere type can sit: `dark` carries white type, `light` carries ink. */
+  tone: "dark" | "light";
+};
 
 export type CatalogIsland = { path: string; hash: string; bytes: number };
 

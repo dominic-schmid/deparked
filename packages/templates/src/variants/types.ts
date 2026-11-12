@@ -1,12 +1,14 @@
 import type { Config } from "@deparked/config";
 import type { ReactElement } from "react";
-import type { CatalogBackground } from "../catalog";
+import type { CatalogBackground, CatalogGradient } from "../catalog";
 
 export type PageProps = {
   config: Config;
   host: string;
   /** The catalog entry for `config.background`, when it names an image. */
   background: CatalogBackground | undefined;
+  /** The catalog gradient for `config.background`, or the variant's own default; only for a variant that names one. */
+  gradient: CatalogGradient | undefined;
   sitekey: string;
   offerEndpoint: string;
 };
@@ -28,6 +30,11 @@ export type VariantDefinition = {
    * the document then preloads the right AVIF candidate. Must match the `sizes` the page puts on its `<img>`.
    */
   backgroundSizes?: (background: CatalogBackground) => string;
-  /** `<meta name="color-scheme">` when the variant commits to one. */
-  colorScheme?: "light" | "dark";
+  /** A gradient-led variant names the catalog gradient it shows when `config.background` is not one. The gradient's
+   * colour then stands in for `color`. */
+  gradient?: string;
+  /** `theme-color` under a dark colour scheme, for a variant that follows the visitor's. */
+  darkColor?: string;
+  /** `<meta name="color-scheme">` when the variant commits to one, or `light dark` when it follows the visitor's. */
+  colorScheme?: "light" | "dark" | "light dark";
 };
