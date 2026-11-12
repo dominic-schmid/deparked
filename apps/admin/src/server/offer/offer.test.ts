@@ -153,6 +153,19 @@ describe("POST /api/offer", () => {
     expect(hosting.sent[0]?.text).toContain("Is the price negotiable?\nThanks");
   });
 
+  it("keeps hostile buyer input as plain text: stored as typed, in a text-only email, never in the subject", async () => {
+    const name = `"><script>alert(1)</script>`;
+    const message = `<img src=x onerror=alert(1)>\n=cmd|' /C calc'!A0`;
+    expect((await postJson(offer({ name, message }))).status).toBe(200);
+    expect(await stored()).toMatchObject([{ name, message }]);
+    const sent = hosting.sent[0];
+    expect(Object.keys(sent ?? {}).sort()).toEqual(["fromName", "replyTo", "senderHost", "subject", "text", "to"]);
+    expect(sent?.text).toContain(`Name: ${name}`);
+    expect(sent?.text).toContain(message);
+    expect(sent?.replyTo).toEqual({ email: "jane@buyer.example", name });
+    expect(sent?.subject).toBe("Offer for example.com: 1,500 EUR");
+  });
+
   it("stores the offer before it sends the email", async () => {
     const sendNotification = vi.spyOn(hosting, "sendNotification").mockImplementation(async () => {
       expect(await stored()).toMatchObject([{ emailStatus: "pending", notifiedTo: null }]);
