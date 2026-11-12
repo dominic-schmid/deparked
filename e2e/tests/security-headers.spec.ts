@@ -62,7 +62,9 @@ test("a logged-in page carries the CSP, and the editor's preview is a sandboxed 
   // An empty sandbox: no scripts, no same-origin access to the admin, no forms, no popups, no top navigation.
   expect(await preview.getAttribute("sandbox")).toBe("");
   // A unique origin: the admin's page cannot reach into the preview, so the preview cannot reach the admin either.
-  expect(await preview.evaluate((element) => (element as HTMLIFrameElement).contentDocument)).toBeNull();
+  expect(
+    await preview.evaluate((element) => (element as unknown as { contentDocument: unknown }).contentDocument),
+  ).toBeNull();
 });
 
 test("another site cannot frame the admin", async ({ page, urls, writeSiteFile }) => {
