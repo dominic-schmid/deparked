@@ -8,6 +8,7 @@ import {
   listDomains,
   listNotifyAddresses,
   type NotifyAddress,
+  refundRateLimit,
   updateDomain,
   updateNotifyAddress,
 } from "@deparked/db";
@@ -43,19 +44,39 @@ const RESEND_WAIT_MS = 60_000;
 // stranger's, and the account must not be usable to flood it. Below the 24 hours after which counters are pruned.
 const MAILS_PER_WINDOW = 5;
 const MAIL_WINDOW_MS = 6 * 3_600_000;
+// And across all addresses, so one session cannot make Cloudflare mail many strangers.
+const ALL_MAILS_PER_WINDOW = 20;
+const ALL_MAIL_WINDOW_MS = 3_600_000;
 
 const TOO_MANY: NotifyResult = {
   ok: false,
   message: "Too many verification emails went to this address. Try again in a few hours.",
 };
+const TOO_MANY_ALL: NotifyResult = {
+  ok: false,
+  message: "Too many verification emails went out in the last hour. Try again in an hour.",
+};
 const REMOVED: NotifyResult = { ok: false, message: "That address is not on the list any more." };
 
-/** Counts one verification mail for the address. False when it has had its share for now. */
-async function mayMail(db: Db, email: string, now: number): Promise<boolean> {
+type Reservation = { allowed: true; giveBack: () => Promise<void> } | { allowed: false; result: NotifyResult };
+
+/**
+ * Reserves one verification mail before the host call, so parallel requests cannot all pass. The reservation is
+ * given back when the call fails or is refused: only a mail that went out counts.
+ */
+async function reserveMail(db: Db, email: string, now: number): Promise<Reservation> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email.toLowerCase()));
   const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  const hit = await hitRateLimit(db, { key: `notify:${hash}`, windowMs: MAIL_WINDOW_MS, now });
-  return hit.count <= MAILS_PER_WINDOW;
+  const each = { key: `notify:${hash}`, windowMs: MAIL_WINDOW_MS, now };
+  const all = { key: "notify:all", windowMs: ALL_MAIL_WINDOW_MS, now };
+  const [eachHit, allHit] = [await hitRateLimit(db, each), await hitRateLimit(db, all)];
+  const giveBack = async () => {
+    await refundRateLimit(db, { key: each.key, windowStart: eachHit.windowStart });
+    await refundRateLimit(db, { key: all.key, windowStart: allHit.windowStart });
+  };
+  if (allHit.count <= ALL_MAILS_PER_WINDOW && eachHit.count <= MAILS_PER_WINDOW) return { allowed: true, giveBack };
+  await giveBack();
+  return { allowed: false, result: allHit.count > ALL_MAILS_PER_WINDOW ? TOO_MANY_ALL : TOO_MANY };
 }
 
 export function failed(error: unknown): NotifyResult {
@@ -88,7 +109,8 @@ export async function addNotifyAddress(
   if ((await getNotifyAddress(db, input.email)) !== undefined) {
     return { ok: true, message: `${input.email} is already on the list.` };
   }
-  if (!(await mayMail(db, input.email, input.now))) return TOO_MANY;
+  const mail = await reserveMail(db, input.email, input.now);
+  if (!mail.allowed) return mail.result;
   try {
     const address = await hosting.notifyAddresses.add(input.email);
     const verifiedAt = verifiedAtOf(address, input.now);
@@ -109,6 +131,7 @@ export async function addNotifyAddress(
           : `${input.email} was verified before and is ready to use.`,
     };
   } catch (error) {
+    await mail.giveBack();
     return failed(error);
   }
 }
@@ -125,7 +148,8 @@ export async function resendNotifyAddress(
   if (row.lastResentAt !== null && input.now - row.lastResentAt < RESEND_WAIT_MS) {
     return { ok: false, message: "A verification email was sent a moment ago. Wait a minute before sending another." };
   }
-  if (!(await mayMail(db, row.email, input.now))) return TOO_MANY;
+  const mail = await reserveMail(db, row.email, input.now);
+  if (!mail.allowed) return mail.result;
   try {
     const address = await resendOrAdd(hosting, row);
     const verifiedAt = verifiedAtOf(address, input.now);
@@ -140,6 +164,7 @@ export async function resendNotifyAddress(
       message: verifiedAt === null ? `Verification email sent again to ${row.email}.` : `${row.email} is verified.`,
     };
   } catch (error) {
+    await mail.giveBack();
     return failed(error);
   }
 }

@@ -95,6 +95,44 @@ describe("add", () => {
     expect((await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + 6 * 3_600_000 + 10 })).ok).toBe(true);
   });
 
+  test("a failed Cloudflare call does not use up the allowance", async () => {
+    const { db, hosting } = await setup();
+    for (let round = 0; round < 6; round++) {
+      hosting.failNext("notifyAddresses", new HostingError("unavailable", "Cloudflare is down."));
+      expect((await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + round })).ok).toBe(false);
+    }
+
+    expect((await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + 10 })).ok).toBe(true);
+    expect(hosting.verificationMails).toEqual([SECOND]);
+  });
+
+  test("parallel adds of one address cannot get past the per-address limit", async () => {
+    const { db, hosting } = await setup();
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, i) => addNotifyAddress(db, hosting, { email: SECOND, now: NOW + i })),
+    );
+
+    expect(hosting.verificationMails.length).toBeLessThanOrEqual(5);
+    expect(results.filter((result) => result.ok).length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("a session cannot mail more than twenty different addresses in an hour", async () => {
+    const { db, hosting } = await setup();
+    for (let n = 0; n < 20; n++) {
+      expect((await addNotifyAddress(db, hosting, { email: `buyer${n}@example.com`, now: NOW + n })).ok).toBe(true);
+    }
+
+    const twenty1st = await addNotifyAddress(db, hosting, { email: "buyer20@example.com", now: NOW + 100 });
+
+    expect(twenty1st.ok).toBe(false);
+    expect(twenty1st.message).toContain("Too many verification emails");
+    expect(hosting.verificationMails).toHaveLength(20);
+    expect((await addNotifyAddress(db, hosting, { email: "buyer20@example.com", now: NOW + 3_600_000 + 100 })).ok).toBe(
+      true,
+    );
+  });
+
   test("a rejected token is reported as such, and nothing is stored", async () => {
     const { db, hosting } = await setup();
     hosting.failNext("notifyAddresses", new HostingError("credentials-rejected", "Cloudflare refused the token."));

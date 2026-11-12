@@ -383,6 +383,15 @@ describe("rate limits", () => {
     expect(counts.sort()).toEqual([1, 2, 3, 4, 5]);
   });
 
+  test("a refund takes one hit back, only from the window it was counted in", async () => {
+    const first = await hit(NOW);
+    await hit(NOW + 1);
+    await q.refundRateLimit(db, { key: "login:abc", windowStart: first.windowStart });
+    expect(await hit(NOW + 2)).toEqual({ count: 2, windowStart: NOW });
+    await q.refundRateLimit(db, { key: "login:abc", windowStart: NOW - 1 });
+    expect(await hit(NOW + 3)).toEqual({ count: 3, windowStart: NOW });
+  });
+
   test("clear forgets a key and prune drops old windows", async () => {
     await hit(NOW);
     await hit(NOW + 5000, "offer:abc");
