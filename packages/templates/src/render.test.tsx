@@ -26,7 +26,7 @@ describe("render", () => {
     expect(files["index.html"]).toMatchSnapshot();
   });
 
-  it.each(["gradient", "editorial"] as const)("renders %s with the default config", (variant) => {
+  it.each(["gradient", "editorial", "mono", "split"] as const)("renders %s with the default config", (variant) => {
     expect(render({ ...defaultConfig(), variant }, "example.com", options)["index.html"]).toMatchSnapshot();
   });
 
