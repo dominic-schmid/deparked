@@ -18,7 +18,7 @@ async function guarded<T>(run: () => Promise<T>): Promise<Result<T>> {
   }
 }
 
-export const getTokenHealth = createServerFn({ method: "GET" }).handler(async () => {
+export const getTokenHealth = createServerFn({ method: "POST" }).handler(async () => {
   await requireSession();
   return guarded(async () => {
     const health = await (await hub()).tokenHealth();
@@ -34,8 +34,9 @@ export const replaceToken = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireSession();
     return guarded(async () => {
-      const result = await (await hub()).replaceToken(data.token);
-      if (result.ok) tokenCache.current = { accepted: true, checkedAt: Date.now() };
+      const result = await (await hub(data.token)).replaceToken(data.token);
+      // The running admin keeps the old secret until Cloudflare restarts it: let the next check ask again.
+      if (result.ok) tokenCache.current = null;
       return result;
     });
   });

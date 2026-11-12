@@ -105,4 +105,24 @@ describe("uninstalling", () => {
     expect(reports.every((report) => report.outcome !== "failed")).toBe(true);
     expect(mock.state.scripts.has("deparked-admin")).toBe(false);
   });
+
+  it("refuses a step whose earlier steps are not done, and deletes nothing", async () => {
+    const { hub, mock, db } = await world();
+    await insertLedgerEntry(db, { resource: "worker", cfId: "deparked-admin", action: "created", now: 1 });
+    await insertDomain(db, { domain: { host: "example.com", zoneId: "zone-1" }, now: 1 });
+    await insertLedgerEntry(db, {
+      host: "example.com",
+      zoneId: "zone-1",
+      resource: "route",
+      cfId: "route-1",
+      action: "created",
+      now: 1,
+    });
+    const { steps } = await hub.describeUninstall();
+
+    const report = await hub.uninstallStep({ next: steps.length - 1 });
+    expect(report).toMatchObject({ outcome: "blocked", finished: false, state: { next: steps.length - 1 } });
+    expect(mock.state.scripts.has("deparked-admin")).toBe(true);
+    expect(mock.calls.some((call) => call.method === "DELETE")).toBe(false);
+  });
 });

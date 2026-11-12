@@ -85,7 +85,11 @@ function CloudflarePage() {
       const answer = await replace({ data: parsed.data });
       if (answer.ok && answer.value.ok) {
         setToken("");
-        setResult({ ok: true, message: "The new token is saved. Deparked uses it from now on." });
+        setResult({
+          ok: true,
+          message:
+            "The new token is saved. Deparked switches to it within about a minute; until then it may still use the old one.",
+        });
         await router.invalidate();
       } else {
         setResult({ ok: false, message: answer.ok ? (answer.value.ok ? "" : answer.value.message) : answer.message });

@@ -1,5 +1,6 @@
 import type { HubSetup } from "@deparked/hosting";
 import { z } from "zod";
+import { hostingConnection } from "../hosting-env";
 
 /** A pasted API token: Cloudflare's are 40 characters of letters, digits, `-` and `_`. Never echoed back. */
 export const tokenSchema = z.object({
@@ -42,4 +43,19 @@ export async function tokenRejected(
   } catch {
     return false;
   }
+}
+
+/**
+ * What the hub setup connects with: the stored token, or `token` when one is given (Replace token checks and
+ * stores the new one, so it must work while no token, or a dead one, is stored). Null without an account or token.
+ */
+export function hubConnection(vars: Record<string, unknown>, accountId: string | null, token?: string) {
+  const connection = hostingConnection(vars, accountId);
+  const chosen = token ?? connection.token;
+  if (chosen === "" || connection.accountId === "unconfigured") return null;
+  return {
+    token: chosen,
+    accountId: connection.accountId,
+    ...(connection.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl }),
+  };
 }

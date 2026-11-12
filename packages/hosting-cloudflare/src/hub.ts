@@ -139,7 +139,25 @@ export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetu
       }),
 
     async uninstallStep(state) {
-      const report = await runNextStep(await planUninstall(ctx), state);
+      const plan = await planUninstall(ctx);
+      // The browser sends the index; the order is the server's. A step runs only once every step before it is
+      // done, so a stale or forged index can never delete the admin while routes still point at it.
+      const index = Math.min(Math.max(0, Math.trunc(state.next)), plan.steps.length);
+      for (const earlier of plan.steps.slice(0, index)) {
+        if ((await cloudflare(() => earlier.check(ctx))).status !== "done") {
+          const step = plan.steps[index];
+          return {
+            step: step === undefined ? null : { id: step.id, title: step.title, index, total: plan.steps.length },
+            outcome: "blocked",
+            message: `“${earlier.title}” is not done yet. Start the uninstall again from the first step.`,
+            effects: [],
+            state: { next: index },
+            finished: false,
+            credentialsRejected: false,
+          };
+        }
+      }
+      const report = await runNextStep(plan, { next: index });
       return {
         step: report.step,
         outcome: report.outcome,

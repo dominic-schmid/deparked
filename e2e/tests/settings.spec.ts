@@ -50,7 +50,7 @@ test("the owner sees the token's state, gets a banner when Cloudflare rejects it
 
   await page.getByLabel("New API token").fill(NEW_TOKEN);
   await page.getByRole("button", { name: "Check and save" }).click();
-  await expect(page.getByText("The new token is saved.")).toBeVisible();
+  await expect(page.getByText("The new token is saved.")).toContainText("within about a minute");
   const secret = mock.liveBindings("deparked-admin").find((binding) => binding.name === "CF_API_TOKEN");
   expect(secret).toMatchObject({ type: "secret_text", text: NEW_TOKEN });
   await expect(page.getByLabel("New API token")).toHaveValue("");
@@ -59,6 +59,8 @@ test("the owner sees the token's state, gets a banner when Cloudflare rejects it
   mock.state.token = TEST_TOKEN;
   await page.reload();
   await expect(page.getByText("Works", { exact: true })).toBeVisible();
+  await page.goto(`${urls.admin}/admin`);
+  await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
   await expect(banner).toHaveCount(0);
 });
 

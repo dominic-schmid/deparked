@@ -2,25 +2,19 @@ import { env } from "cloudflare:workers";
 import { createDb, getWorkspace } from "@deparked/db";
 import { HostingError, type HubSetup } from "@deparked/hosting";
 import { createCloudflareHubSetup } from "@deparked/hosting-cloudflare";
-import { hostingConnection } from "../hosting-env";
-import { type TokenCache, tokenRejected } from "./hub";
+import { hubConnection, type TokenCache, tokenRejected } from "./hub";
 
 // Not in `functions.ts`: an exported plain function there would pull `cloudflare:workers` into the client bundle.
 
-export async function hub(): Promise<HubSetup> {
+/** The hub setup on the stored token, or on `token` (Replace token) when one is given. */
+export async function hub(token?: string): Promise<HubSetup> {
   const db = createDb(env.DB);
   const workspace = await getWorkspace(db);
-  const connection = hostingConnection(env as unknown as Record<string, unknown>, workspace?.cfAccountId ?? null);
-  if (connection.token === "" || connection.accountId === "unconfigured") {
+  const connection = hubConnection(env as unknown as Record<string, unknown>, workspace?.cfAccountId ?? null, token);
+  if (connection === null) {
     throw new HostingError("credentials-rejected", "No Cloudflare token is stored for this install.");
   }
-  return createCloudflareHubSetup({
-    token: connection.token,
-    accountId: connection.accountId,
-    ...(connection.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl }),
-    db,
-    now: Date.now,
-  });
+  return createCloudflareHubSetup({ ...connection, db, now: Date.now });
 }
 
 export const tokenCache: { current: TokenCache } = { current: null };

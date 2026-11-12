@@ -276,4 +276,21 @@ describe("uninstalling", () => {
       path: expect.stringContaining("deparked-admin"),
     });
   });
+
+  it("records the admin's removal before deleting it, so the final call has nothing left to write", async () => {
+    const context = await setup();
+    const { db, mock, ctx } = context;
+    await install(context);
+    // Sites is deleted first, then the admin: its delete answers 500, as a lost answer would look.
+    mock.failNext({ route: "workers.deleteScript", nth: 2, times: 3, status: 500 });
+    const reports = await runPlan(await planUninstall(ctx));
+    expect(reports.at(-1)).toMatchObject({ outcome: "failed", step: { id: "remove-admin" } });
+    expect(await listLedger(db, { host: null, activeOnly: true })).toEqual([]);
+    expect(mock.state.scripts.has("deparked-admin")).toBe(true);
+
+    // Retry: the ledger says undone, but the Worker is still there, so the step still deletes it.
+    const retry = await runPlan(await planUninstall(ctx));
+    expect(retry.at(-1)).toMatchObject({ finished: true });
+    expect(mock.state.scripts.has("deparked-admin")).toBe(false);
+  });
 });

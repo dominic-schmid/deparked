@@ -9,6 +9,7 @@ import {
   initWorkspace,
   type LedgerEntry,
   listDomains,
+  listLedger,
   listSiteFiles,
   listSiteFilesByHost,
   listTurnstileWidgets,
@@ -461,15 +462,24 @@ export async function planUninstall(ctx: ProvisionContext): Promise<Plan> {
           return { effects: [{ kind: "remove", what: `the Worker ${name}` }] };
         },
       },
-      removeHubStep({
+      {
+        // The ledger is written before the delete: run from the admin, the delete is the last call it can make.
+        // A Worker the ledger names (even as undone) that is still there is deleted again on a retry.
         id: "remove-admin",
         title: "Delete the admin panel",
-        match: worker(admin),
-        async undo(ctx) {
-          await ctx.cf.workers.deleteScript(admin);
-          return { kind: "remove", what: `the Worker ${admin}, with your token and its other secrets` };
+        async check(ctx) {
+          const named = (await listLedger(ctx.db, { host: null })).some(worker(admin));
+          if (!named || (await ctx.cf.workers.getSettings(admin)) === null) return done();
+          return needed([{ kind: "remove", what: `the Worker ${admin}, with your token and its other secrets` }]);
         },
-      }),
+        async run(ctx) {
+          for (const entry of (await activeLedger(ctx, null)).filter(worker(admin))) {
+            await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
+          }
+          await unlessGone(ctx.cf.workers.deleteScript(admin));
+          return { effects: [{ kind: "remove", what: `the Worker ${admin}, with your token and its other secrets` }] };
+        },
+      },
     ],
   };
 }

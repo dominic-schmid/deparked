@@ -25,7 +25,30 @@ function Progress(props: { steps: { id: string; title: string }[]; confirmation:
   const step = useServerFn(uninstallStep);
   const [finished, setFinished] = useState(false);
   const { confirmation } = props;
-  const run: StepRun = useCallback((state) => step({ data: { confirmation, state } }), [step, confirmation]);
+  const total = props.steps.length;
+  const run: StepRun = useCallback(
+    async (state) => {
+      try {
+        return await step({ data: { confirmation, state } });
+      } catch (error) {
+        // The last step deletes this admin: an answer lost right after it is the admin being gone, not a failure.
+        if (state.next !== total - 1) throw error;
+        return {
+          ok: true,
+          value: {
+            step: null,
+            outcome: "ran",
+            message: "",
+            effects: [],
+            state: { next: total },
+            finished: true,
+            credentialsRejected: false,
+          },
+        };
+      }
+    },
+    [step, confirmation, total],
+  );
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm font-medium" aria-live="polite">

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { TOKEN_CHECK_TTL_MS, type TokenCache, tokenRejected, tokenSchema, uninstallConfirmationSchema } from "./hub";
+import {
+  hubConnection,
+  TOKEN_CHECK_TTL_MS,
+  type TokenCache,
+  tokenRejected,
+  tokenSchema,
+  uninstallConfirmationSchema,
+} from "./hub";
 
 describe("the pasted token", () => {
   it("takes a Cloudflare-shaped token and trims it", () => {
@@ -54,5 +61,18 @@ describe("the token banner", () => {
     });
     expect(await tokenRejected(cache, failing, 1)).toBe(false);
     expect(cache.current).toBeNull();
+  });
+});
+
+describe("the hub's connection", () => {
+  it("uses the new token when none is stored, so Replace token works on an install that lost it", () => {
+    expect(hubConnection({}, "account-1", "new-token")).toEqual({ token: "new-token", accountId: "account-1" });
+    expect(hubConnection({ CF_API_TOKEN: "old" }, "account-1", "new-token")?.token).toBe("new-token");
+  });
+
+  it("has nothing to connect with without a token or an account", () => {
+    expect(hubConnection({}, "account-1")).toBeNull();
+    expect(hubConnection({ CF_API_TOKEN: "old" }, null)).toBeNull();
+    expect(hubConnection({ CF_API_TOKEN: "old", CF_ACCOUNT_ID: "account-2" }, null)?.accountId).toBe("account-2");
   });
 });
