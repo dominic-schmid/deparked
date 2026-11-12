@@ -62,6 +62,16 @@ describe("inbox pages", () => {
     expect((await loadOffers(db, { status: "ignored" })).offers.map((offer) => offer.amountMinor)).toEqual([0]);
     expect((await loadOffers(db, { host: "other.example" })).offers).toEqual([]);
   });
+
+  test("pages highest first, newest of equal amounts first", async () => {
+    const db = await seeded();
+    for (const [index, amountMinor] of [500, 90_000, 500, 7].entries()) {
+      await insertOffer(db, { offer: { ...buyer, amountMinor, name: `Buyer ${index}` }, now: NOW + index });
+    }
+    const page = await loadOffers(db, { sort: "highest" });
+    expect(page.offers.map((offer) => offer.name)).toEqual(["Buyer 1", "Buyer 2", "Buyer 0", "Buyer 3"]);
+    expect(offerPageSchema.safeParse({ sort: "cheapest" }).success).toBe(false);
+  });
 });
 
 describe("CSV export", () => {

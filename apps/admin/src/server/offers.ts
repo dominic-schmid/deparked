@@ -1,6 +1,7 @@
 import {
   type Db,
   listOffers,
+  OFFER_SORTS,
   OFFER_STATUSES,
   type Offer,
   type OfferPage,
@@ -21,7 +22,8 @@ export const offerFilterSchema = z.object({
 export type OfferFilter = z.infer<typeof offerFilterSchema>;
 
 export const offerPageSchema = offerFilterSchema.extend({
-  before: z.object({ createdAt: z.number().int().nonnegative(), id: z.string().min(1).max(64) }).optional(),
+  sort: z.enum(OFFER_SORTS).optional(),
+  before: z.object({ key: z.number().int().nonnegative(), id: z.string().min(1).max(64) }).optional(),
 });
 export type OfferPageInput = z.infer<typeof offerPageSchema>;
 
@@ -36,10 +38,11 @@ function where(filter: OfferFilter): { host?: string; status?: OfferStatus } {
   };
 }
 
-/** One page of the inbox, newest first. Pass the page's `next` back as `before` for the older page. */
+/** One page of the inbox, newest or highest first. Pass the page's `next` back as `before` for the next page. */
 export function loadOffers(db: Db, input: OfferPageInput): Promise<OfferPage> {
   return listOffers(db, {
     ...where(input),
+    ...(input.sort === undefined ? {} : { sort: input.sort }),
     ...(input.before === undefined ? {} : { before: input.before }),
     limit: INBOX_PAGE_SIZE,
   });
