@@ -100,12 +100,13 @@ export function createFakeHosting(options: FakeHostingOptions = {}) {
       const missing = input.files.filter(
         (file, index) => !stored.has(file.hash) && input.files.findIndex((other) => other.hash === file.hash) === index,
       );
+      const perBatch = Math.min(batchSize, input.maxFilesPerUpload ?? batchSize);
       const batches = Math.min(
-        Math.ceil(missing.length / batchSize),
+        Math.ceil(missing.length / perBatch),
         input.maxUploadBatches ?? DEFAULT_MAX_UPLOAD_BATCHES,
       );
       const uploaded: string[] = [];
-      for (const file of missing.slice(0, batches * batchSize)) {
+      for (const file of missing.slice(0, batches * perBatch)) {
         const content = await input.getContent(file.path);
         if (content.length !== file.size) {
           throw new HostingError("invalid-input", `Cannot publish ${file.path}: its content is not the size listed.`);
