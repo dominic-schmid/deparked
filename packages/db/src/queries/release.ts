@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "../client";
 import { type ReleaseState, releaseState } from "../schema";
 
@@ -16,4 +16,10 @@ export async function updateReleaseState(db: Db, patch: ReleaseStatePatch): Prom
     .insert(releaseState)
     .values({ id: ROW, ...patch })
     .onConflictDoUpdate({ target: releaseState.id, set: patch });
+}
+
+/** The newest migration this database has run, or null before any. */
+export async function appliedSchema(db: Db): Promise<string | null> {
+  const row = await db.get<{ name: string | null }>(sql`SELECT max(name) AS name FROM d1_migrations`);
+  return row?.name ?? null;
 }

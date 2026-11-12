@@ -311,3 +311,4 @@ export type {
   TokenHealth,
   TokenPermissionGap,
 } from "./setup";
+export { compareVersions, RELEASE_VERSION } from "./version";

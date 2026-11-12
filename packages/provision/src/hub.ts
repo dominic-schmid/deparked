@@ -302,13 +302,19 @@ function adminStep(options: HubOptions): Step {
           },
         });
       });
+      // Before `installed_release`, which marks the step done: a retry after a crash here writes it again.
+      await updateReleaseState(ctx.db, {
+        installedSha256: options.release.sha256,
+        installedSchema: release.schema,
+        adminUploadedAt: ctx.now(),
+      });
       await ctx.cf.workers.setSubdomain(admin, true);
       await initWorkspace(ctx.db, { cfAccountId: ctx.cf.accountId, now: ctx.now() });
       await updateWorkspace(ctx.db, {
         patch: { cfAccountId: ctx.cf.accountId, installedRelease: release.version },
         now: ctx.now(),
       });
-      await updateReleaseState(ctx.db, { installedSha256: options.release.sha256 });
+
       return { effects: [{ kind: "create", what: `the Worker ${admin}, reachable on its workers.dev address` }] };
     },
   };

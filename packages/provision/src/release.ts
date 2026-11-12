@@ -59,6 +59,11 @@ const releaseSchema = z.object({
   version,
   /** The oldest installer that can install this release. */
   minInstallerVersion: version,
+  /**
+   * The database schema this release's code runs on: the name of its last migration. Migrations only add, and
+   * their names sort in order, so this release runs on any database whose newest migration is at most this one.
+   */
+  schema: z.string().regex(/^[\w.-]+\.sql$/),
   /** Base URL that serves each catalog file at `<base><path>` without a redirect: the admin's `RELEASE_FILES_URL`. */
   catalogFilesUrl: z.url({ protocol: /^https?$/ }).refine(filesUrlAllowed, "https only (http on this machine)"),
   tokenPermissions: z.array(z.object({ key: z.string(), type: z.enum(["read", "edit"]) })),
@@ -109,6 +114,12 @@ export async function parseRelease(bytes: Uint8Array, pinnedSha256: string): Pro
     if (!pathAllowed(file.pack, file.path))
       throw new ReleaseError(`release.json names a file Deparked refuses: ${file.path.slice(0, 80)}`);
   }
+  const last = parsed.files
+    .filter((file) => file.pack === "migrations")
+    .map((file) => file.path)
+    .sort()
+    .at(-1);
+  if (last !== parsed.schema) throw new ReleaseError("release.json names a schema that is not its last migration.");
   for (const pack of parsed.packs) {
     let offset = 0;
     for (const file of parsed.files.filter((entry) => entry.pack === pack.name)) {

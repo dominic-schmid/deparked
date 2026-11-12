@@ -209,7 +209,7 @@ export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetu
     },
 
     async releaseStatus() {
-      const [workspace, state, change, rollbackTo] = await Promise.all([
+      const [workspace, state, change, rollback] = await Promise.all([
         getWorkspace(options.db),
         getReleaseState(options.db),
         currentChange(ctx),
@@ -219,7 +219,7 @@ export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetu
       return {
         installed: version === null ? null : { version, sha256: state?.installedSha256 ?? null },
         change,
-        rollbackTo,
+        rollback,
       };
     },
 
@@ -235,6 +235,7 @@ export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetu
             status: step.status,
             effects: step.status === "blocked" ? [{ kind: "reuse" as const, what: step.reason }] : step.effects,
           })),
+          rollback: preview.rollback,
         };
       }),
 
@@ -247,7 +248,8 @@ export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetu
         title: step.title,
       })),
 
-    releaseStep: (state) => cloudflare(async () => toSetupReport(await runReleaseStep(ctx, update, state))),
+    releaseStep: (state, expected) =>
+      cloudflare(async () => toSetupReport(await runReleaseStep(ctx, update, state, expected))),
 
     finishRelease: () => finishReleaseChange(ctx),
   };

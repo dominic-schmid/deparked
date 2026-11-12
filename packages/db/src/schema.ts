@@ -104,15 +104,23 @@ export const releaseState = sqliteTable(
   {
     id: integer("id").primaryKey(),
     installedSha256: text("installed_sha256"),
+    /** The last migration the installed release ships: the database schema its code runs on. */
+    installedSchema: text("installed_schema"),
+    latestVersion: text("latest_version"),
     latestSha256: text("latest_sha256"),
+    latestCheckedAt: integer("latest_checked_at"),
     changeKind: text("change_kind", { enum: RELEASE_CHANGE_KINDS }),
     changeVersion: text("change_version"),
     changeSha256: text("change_sha256"),
     changeStartedAt: integer("change_started_at"),
-    changeVerifiedAt: integer("change_verified_at"),
+    /** Index of the first step of the change not yet done: steps after it are refused. */
+    changeNext: integer("change_next").notNull().default(0),
     changeFinishedAt: integer("change_finished_at"),
+    /** When the admin step last uploaded the admin Worker. */
+    adminUploadedAt: integer("admin_uploaded_at"),
     previousVersion: text("previous_version"),
     previousSha256: text("previous_sha256"),
+    previousSchema: text("previous_schema"),
   },
   (t) => [
     check("release_state_single_row", sql`${t.id} = 1`),

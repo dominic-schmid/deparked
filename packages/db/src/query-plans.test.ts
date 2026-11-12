@@ -122,6 +122,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   releaseProvisionLock: [[1]],
   getReleaseState: [[]],
   updateReleaseState: [[{ latestSha256: "a".repeat(64) }]],
+  appliedSchema: [[]],
 };
 
 // At most one row each, by a CHECK constraint.

@@ -159,8 +159,11 @@ export interface ReleaseStatus {
   installed: { version: string; sha256: string | null } | null;
   /** The change last started, finished or not. */
   change: ReleaseChange | null;
-  /** What Roll back installs, or null when there is nothing to go back to. */
-  rollbackTo: ReleasePin | null;
+  /**
+   * What Roll back installs, or null when there is nothing to go back to. `possible` is false (with the reason in
+   * plain words) when the earlier release cannot run on the database as it is now, or its checksum is unknown.
+   */
+  rollback: { pin: ReleasePin; possible: boolean; reason: string } | null;
 }
 
 export type ReleaseChangeResult = { ok: true; change: ReleaseChange } | { ok: false; message: string };
@@ -195,15 +198,15 @@ export interface HubSetup {
   >;
   /** Starts the update to `pin`, which the owner confirmed. Starting the same one again resumes it. */
   startUpdate(pin: ReleasePin): Promise<ReleaseChangeResult>;
-  /** Starts going back to `releaseStatus().rollbackTo`. The only way to install an older version. */
+  /** Starts going back to `releaseStatus().rollback`. The only way to install an older version. */
   startRollback(): Promise<ReleaseChangeResult>;
   /** The titles of an update's or rollback's steps, in order. No request. */
   releaseStepTitles(): { id: string; title: string }[];
   /**
-   * Looks at exactly one step of the running change: runs it when needed. One call per request; a step runs only
-   * once every step before it is done.
+   * Looks at exactly one step of the running change, `expected`: runs it when needed. One call per request; a step
+   * runs only once every step before it is done, and nothing runs when another change has replaced `expected`.
    */
-  releaseStep(state: SetupState): Promise<SetupStepReport>;
+  releaseStep(state: SetupState, expected: Pick<ReleaseChange, "kind" | "pin">): Promise<SetupStepReport>;
   /** Marks the running change finished once its release is installed. */
   finishRelease(): Promise<ReleaseChangeResult>;
 }
