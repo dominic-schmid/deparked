@@ -1,11 +1,15 @@
-import { and, asc, desc, eq, isNull, lte, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lte, ne, type SQL, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import type { Db } from "../client";
 import {
+  config,
+  configHistory,
   type Deployment,
   type DeploymentKind,
   type DeploymentStatus,
   type DeploymentWorker,
   deployments,
+  domains,
   type PublishLock,
   publishLock,
   type SiteFile,
@@ -122,20 +126,25 @@ export function getDeployment(db: Db, id: number): Promise<Deployment | undefine
 /** A Worker's deployments, newest first, optionally only those with one status. */
 export function listDeployments(
   db: Db,
-  input: { worker: DeploymentWorker; status?: DeploymentStatus; limit?: number },
+  input: { worker: DeploymentWorker; status?: DeploymentStatus; host?: string; limit?: number },
 ): Promise<Deployment[]> {
-  const ofWorker = eq(deployments.worker, input.worker);
   return db
     .select()
     .from(deployments)
-    .where(input.status === undefined ? ofWorker : and(ofWorker, eq(deployments.status, input.status)))
+    .where(
+      and(
+        eq(deployments.worker, input.worker),
+        input.status === undefined ? undefined : eq(deployments.status, input.status),
+        input.host === undefined ? undefined : eq(deployments.host, input.host),
+      ),
+    )
     .orderBy(desc(deployments.startedAt), desc(deployments.id))
     .limit(input.limit ?? 20);
 }
 
 export async function latestDeployment(
   db: Db,
-  input: { worker: DeploymentWorker; status?: DeploymentStatus },
+  input: { worker: DeploymentWorker; status?: DeploymentStatus; host?: string },
 ): Promise<Deployment | undefined> {
   const rows = await listDeployments(db, { ...input, limit: 1 });
   return rows[0];
@@ -172,4 +181,107 @@ export async function releasePublishLock(db: Db, deploymentId: number): Promise<
     .where(and(eq(publishLock.id, ROW), eq(publishLock.deploymentId, deploymentId)))
     .returning({ id: publishLock.id });
   return rows.length === 1;
+}
+
+/**
+ * Extends the lock if this deployment still holds it and its time has not run out. True means nobody else can
+ * take the lock for another `ttlMs`, so it is also the check to make before a write that needs the lock.
+ */
+export async function renewPublishLock(
+  db: Db,
+  input: { deploymentId: number; ttlMs: number; now: number },
+): Promise<boolean> {
+  const rows = await db
+    .update(publishLock)
+    .set({ expiresAt: input.now + input.ttlMs })
+    .where(
+      and(
+        eq(publishLock.id, ROW),
+        eq(publishLock.deploymentId, input.deploymentId),
+        gt(publishLock.expiresAt, input.now),
+      ),
+    )
+    .returning({ id: publishLock.id });
+  return rows.length === 1;
+}
+
+/** What one host looks like after a publish. No files: the host is unpublished. */
+export type PublishedHost = {
+  host: string;
+  files: readonly NewSiteFile[];
+  /** Set when the files were rendered from the draft: it becomes the live config, with a history row. */
+  published?: { json: string; schemaVersion: number };
+  /** True when the files were rendered again from the live config: only the release they were built with changes. */
+  rerendered?: boolean;
+};
+
+/**
+ * Records a version that is now live, in one transaction: each host's files in the manifest, a published draft as
+ * the live config, the release the pages were rendered with, and, with `finish`, the deployment as done and the
+ * lock released. The caller must hold the lock (`renewPublishLock`) when it calls this.
+ */
+export async function commitPublish(
+  db: Db,
+  input: {
+    deploymentId: number;
+    versionId: string;
+    hosts: readonly PublishedHost[];
+    release: string | null;
+    finish: boolean;
+    now: number;
+  },
+): Promise<void> {
+  const { now, release } = input;
+  const statements: BatchItem<"sqlite">[] = [];
+  for (const entry of input.hosts) {
+    const { host, published } = entry;
+    statements.push(db.delete(siteFiles).where(eq(siteFiles.host, host)));
+    for (let start = 0; start < entry.files.length; start += FILES_PER_STATEMENT) {
+      statements.push(
+        db
+          .insert(siteFiles)
+          .values(entry.files.slice(start, start + FILES_PER_STATEMENT).map((file) => ({ ...file, host, updatedAt: now }))),
+      );
+    }
+    if (published !== undefined) {
+      const live = {
+        liveJson: published.json,
+        liveSchemaVersion: published.schemaVersion,
+        publishedAt: now,
+        publishedRelease: release,
+      };
+      statements.push(
+        db
+          .insert(config)
+          .values({
+            host,
+            draftJson: published.json,
+            draftSchemaVersion: published.schemaVersion,
+            updatedAt: now,
+            ...live,
+          })
+          .onConflictDoUpdate({ target: config.host, set: live }),
+        db
+          .insert(configHistory)
+          .values({ host, json: published.json, schemaVersion: published.schemaVersion, publishedAt: now }),
+        db
+          .update(domains)
+          .set({ status: "live", turnedOffAt: null, removedAt: null, updatedAt: now })
+          .where(and(eq(domains.host, host), ne(domains.status, "live"))),
+      );
+    } else if (entry.rerendered) {
+      statements.push(db.update(config).set({ publishedRelease: release }).where(eq(config.host, host)));
+    }
+  }
+  if (input.finish) {
+    statements.push(
+      db
+        .update(deployments)
+        .set({ status: "done", cfVersionId: input.versionId, error: null, finishedAt: now })
+        .where(and(eq(deployments.id, input.deploymentId), eq(deployments.status, "running"))),
+      db.delete(publishLock).where(and(eq(publishLock.id, ROW), eq(publishLock.deploymentId, input.deploymentId))),
+    );
+  }
+  const [first, ...rest] = statements;
+  if (first !== undefined) await db.batch([first, ...rest]);
 }

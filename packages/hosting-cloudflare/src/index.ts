@@ -187,7 +187,14 @@ export function createCloudflareHosting(options: CloudflareHostingOptions): Host
       if (completion === undefined) {
         throw new HostingError("failed", "Cloudflare took every file but did not confirm the upload. Publish again.");
       }
-      const assets = { jwt: completion, config: { html_handling: "none", not_found_handling: "none" } as const };
+      const assets = {
+        jwt: completion,
+        config: {
+          html_handling: "none",
+          not_found_handling: "none",
+          ...(input.headers === undefined ? {} : { _headers: input.headers }),
+        } as const,
+      };
       const deployments = await cloudflare(async () => {
         await client.workers.uploadScript(sites, {
           compatibilityDate: options.compatibilityDate ?? SITES_COMPATIBILITY_DATE,

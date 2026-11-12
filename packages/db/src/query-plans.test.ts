@@ -78,11 +78,31 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   insertDeployment: [[{ worker: "sites", kind: "publish", host: HOST, now: NOW }]],
   finishDeployment: [[{ id: 1, status: "done", cfVersionId: "v", now: NOW }]],
   getDeployment: [[1]],
-  listDeployments: [[{ worker: "sites" }], [{ worker: "sites", status: "done" }]],
+  listDeployments: [[{ worker: "sites" }], [{ worker: "sites", status: "done" }], [{ worker: "sites", host: HOST }]],
   latestDeployment: [[{ worker: "admin" }]],
   getPublishLock: [[]],
   acquirePublishLock: [[{ deploymentId: 1, ttlMs: 60_000, now: NOW }]],
   releasePublishLock: [[1]],
+  renewPublishLock: [[{ deploymentId: 1, ttlMs: 60_000, now: NOW }]],
+  commitPublish: [
+    [
+      {
+        deploymentId: 1,
+        versionId: "v",
+        hosts: [
+          {
+            host: HOST,
+            files: [{ path: `/sites/${HOST}/index.html`, hash: "h", size: 1, contentType: "text/html" }],
+            published: { json: "{}", schemaVersion: 1 },
+          },
+          { host: "other.example", files: [], rerendered: true },
+        ],
+        release: "1.0.0",
+        finish: true,
+        now: NOW,
+      },
+    ],
+  ],
 
   insertLedgerEntry: [[{ host: HOST, zoneId: "zone-1", resource: "route", cfId: "r1", action: "created", now: NOW }]],
   listLedger: [[{ host: HOST }], [{ host: null, activeOnly: true }]],

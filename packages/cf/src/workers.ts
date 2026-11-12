@@ -21,6 +21,8 @@ export interface AssetsConfig {
   html_handling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
   not_found_handling?: "none" | "404-page" | "single-page-application";
   run_worker_first?: boolean | string[];
+  /** The text of a `_headers` file: response header rules for the assets of this version. */
+  _headers?: string;
 }
 
 export interface WorkerModule {

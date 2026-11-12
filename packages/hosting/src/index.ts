@@ -59,6 +59,11 @@ export interface PublishInput {
    */
   getContent(path: string): Promise<Uint8Array>;
   /**
+   * Response header rules for the published files, in the `_headers` file format. They belong to the version:
+   * send them on every publish, or the new version serves none.
+   */
+  headers?: string;
+  /**
    * Upper bound of upload batches in this call (each is one request to the host). When more are needed the
    * call resolves with `done: false`; call `publish` again with the same manifest to continue.
    * Default `DEFAULT_MAX_UPLOAD_BATCHES`.

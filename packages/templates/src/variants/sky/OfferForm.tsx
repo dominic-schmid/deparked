@@ -207,7 +207,7 @@ export function OfferForm({
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify(body),
       });
-      const result: Partial<OfferResponse> = await response.json().catch(() => ({}));
+      const result = (await response.json().catch(() => ({}))) as Partial<OfferResponse>;
       if (!response.ok) {
         const failed = result.ok === false ? result : undefined;
         throw new OfferError(failed?.error || "That didn't go through. Try again in a minute.", failed?.field);

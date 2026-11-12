@@ -109,6 +109,17 @@ describe("publish", () => {
     expect(version?.metadata).not.toHaveProperty("main_module");
   });
 
+  it("sends the header rules with the version", async () => {
+    const { mock, hosting } = setup();
+    const headers = "/*\n  X-Content-Type-Options: nosniff\n";
+
+    await hosting.publish({ ...(await site(PAGES)), headers });
+
+    expect(mock.state.scripts.get(SITES)?.versions[0]?.metadata).toMatchObject({
+      assets: { config: { html_handling: "none", _headers: headers } },
+    });
+  });
+
   it("republishing an unchanged manifest uploads nothing and reads no content", async () => {
     const { mock, hosting } = setup();
     await hosting.publish(await site(PAGES));
