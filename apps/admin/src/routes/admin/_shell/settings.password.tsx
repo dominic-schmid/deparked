@@ -1,6 +1,7 @@
 import { Button } from "@deparked/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
 import { createFileRoute } from "@tanstack/react-router";
-import { AuthForm, AuthPage, PasswordField } from "../../../components/auth-form";
+import { AuthForm, PasswordField } from "../../../components/auth-form";
 import {
   lockedMessage,
   NEW_PASSWORD_ERRORS,
@@ -17,8 +18,14 @@ import { requireSession } from "../../../server/require-session";
 
 const PATH = "/admin/settings/password";
 
-export const Route = createFileRoute("/admin/settings/password")({
-  validateSearch: (search) => ({
+export const Route = createFileRoute("/admin/_shell/settings/password")({
+  validateSearch: (
+    search,
+  ): {
+    error?: "too_short" | "too_long" | "mismatch" | "invalid" | "locked" | undefined;
+    retry?: number | undefined;
+    changed?: 1 | undefined;
+  } => ({
     error: oneOf(search.error, ["too_short", "too_long", "mismatch", "invalid", "locked"]),
     retry: retryMinutes(search.retry),
     changed: search.changed === 1 ? (1 as const) : undefined,
@@ -61,35 +68,49 @@ function ChangePasswordPage() {
           ? NEW_PASSWORD_ERRORS[error]
           : undefined;
   return (
-    <AuthPage title="Change password" description="Changing it logs out every other browser. This one stays logged in.">
-      <AuthForm
-        action={PATH}
-        submit="Change password"
-        submitting="Changing…"
-        error={message}
-        notice={changed ? "Password changed. Every other browser was logged out." : undefined}
-      >
-        <PasswordField label="Current password" name="current" autoComplete="current-password" />
-        <PasswordField
-          label="New password"
-          name="password"
-          autoComplete="new-password"
-          minLength={PASSWORD_MIN_LENGTH}
-          hint={PASSWORD_HINT}
-        />
-        <PasswordField label="Repeat new password" name="confirm" autoComplete="new-password" />
-        <a href="/admin" className="text-sm text-muted-foreground underline underline-offset-4">
-          Back to the admin
-        </a>
-      </AuthForm>
-      <form method="post" action="/admin/settings/logout-everywhere" className="mt-8 flex flex-col gap-3 border-t pt-6">
-        <p className="text-sm text-muted-foreground">
-          Log out here and in every other browser, without changing the password.
-        </p>
-        <Button type="submit" variant="outline" className="w-full">
-          Log out everywhere
-        </Button>
-      </form>
-    </AuthPage>
+    <div className="flex max-w-md flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Change password</h2>
+          </CardTitle>
+          <CardDescription>Changing it logs out every other browser. This one stays logged in.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AuthForm
+            action={PATH}
+            submit="Change password"
+            submitting="Changing…"
+            error={message}
+            notice={changed ? "Password changed. Every other browser was logged out." : undefined}
+          >
+            <PasswordField label="Current password" name="current" autoComplete="current-password" />
+            <PasswordField
+              label="New password"
+              name="password"
+              autoComplete="new-password"
+              minLength={PASSWORD_MIN_LENGTH}
+              hint={PASSWORD_HINT}
+            />
+            <PasswordField label="Repeat new password" name="confirm" autoComplete="new-password" />
+          </AuthForm>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Log out everywhere</h2>
+          </CardTitle>
+          <CardDescription>Log out here and in every other browser, without changing the password.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form method="post" action="/admin/settings/logout-everywhere">
+            <Button type="submit" variant="outline">
+              Log out everywhere
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

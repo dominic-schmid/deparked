@@ -10,22 +10,35 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminShellRouteImport } from './routes/admin/_shell'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminLogoutRouteImport } from './routes/admin/logout'
+import { Route as AdminOffersDotcsvRouteImport } from './routes/admin/offers[.]csv'
+import { Route as AdminShellIndexRouteImport } from './routes/admin/_shell/index'
+import { Route as AdminShellAddRouteImport } from './routes/admin/_shell/add'
+import { Route as AdminShellInboxRouteImport } from './routes/admin/_shell/inbox'
+import { Route as AdminShellSettingsRouteImport } from './routes/admin/_shell/settings'
 import { Route as AdminSettingsLogoutEverywhereRouteImport } from './routes/admin/settings/logout-everywhere'
-import { Route as AdminSettingsPasswordRouteImport } from './routes/admin/settings/password'
 import { Route as AdminSetupIndexRouteImport } from './routes/admin/setup/index'
 import { Route as AdminSetupDoneRouteImport } from './routes/admin/setup/done'
+import { Route as AdminShellDHostRouteImport } from './routes/admin/_shell/d.$host'
+import { Route as AdminShellSettingsIndexRouteImport } from './routes/admin/_shell/settings.index'
+import { Route as AdminShellSettingsCloudflareRouteImport } from './routes/admin/_shell/settings.cloudflare'
+import { Route as AdminShellSettingsDangerRouteImport } from './routes/admin/_shell/settings.danger'
+import { Route as AdminShellSettingsPasswordRouteImport } from './routes/admin/_shell/settings.password'
+import { Route as AdminShellSettingsUpdatesRouteImport } from './routes/admin/_shell/settings.updates'
+import { Route as AdminShellDHostIndexRouteImport } from './routes/admin/_shell/d.$host.index'
+import { Route as AdminShellDHostOffersRouteImport } from './routes/admin/_shell/d.$host.offers'
+import { Route as AdminShellDHostSettingsRouteImport } from './routes/admin/_shell/d.$host.settings'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminIndexRoute = AdminIndexRouteImport.update({
-  id: '/admin/',
-  path: '/admin/',
+const AdminShellRoute = AdminShellRouteImport.update({
+  id: '/admin/_shell',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
@@ -38,17 +51,37 @@ const AdminLogoutRoute = AdminLogoutRouteImport.update({
   path: '/admin/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminOffersDotcsvRoute = AdminOffersDotcsvRouteImport.update({
+  id: '/admin/offers.csv',
+  path: '/admin/offers.csv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminShellIndexRoute = AdminShellIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminShellRoute,
+} as any)
+const AdminShellAddRoute = AdminShellAddRouteImport.update({
+  id: '/add',
+  path: '/add',
+  getParentRoute: () => AdminShellRoute,
+} as any)
+const AdminShellInboxRoute = AdminShellInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => AdminShellRoute,
+} as any)
+const AdminShellSettingsRoute = AdminShellSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminShellRoute,
+} as any)
 const AdminSettingsLogoutEverywhereRoute =
   AdminSettingsLogoutEverywhereRouteImport.update({
     id: '/admin/settings/logout-everywhere',
     path: '/admin/settings/logout-everywhere',
     getParentRoute: () => rootRouteImport,
   } as any)
-const AdminSettingsPasswordRoute = AdminSettingsPasswordRouteImport.update({
-  id: '/admin/settings/password',
-  path: '/admin/settings/password',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminSetupIndexRoute = AdminSetupIndexRouteImport.update({
   id: '/admin/setup/',
   path: '/admin/setup/',
@@ -59,78 +92,199 @@ const AdminSetupDoneRoute = AdminSetupDoneRouteImport.update({
   path: '/admin/setup/done',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminShellDHostRoute = AdminShellDHostRouteImport.update({
+  id: '/d/$host',
+  path: '/d/$host',
+  getParentRoute: () => AdminShellRoute,
+} as any)
+const AdminShellSettingsIndexRoute = AdminShellSettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminShellSettingsRoute,
+} as any)
+const AdminShellSettingsCloudflareRoute =
+  AdminShellSettingsCloudflareRouteImport.update({
+    id: '/cloudflare',
+    path: '/cloudflare',
+    getParentRoute: () => AdminShellSettingsRoute,
+  } as any)
+const AdminShellSettingsDangerRoute =
+  AdminShellSettingsDangerRouteImport.update({
+    id: '/danger',
+    path: '/danger',
+    getParentRoute: () => AdminShellSettingsRoute,
+  } as any)
+const AdminShellSettingsPasswordRoute =
+  AdminShellSettingsPasswordRouteImport.update({
+    id: '/password',
+    path: '/password',
+    getParentRoute: () => AdminShellSettingsRoute,
+  } as any)
+const AdminShellSettingsUpdatesRoute =
+  AdminShellSettingsUpdatesRouteImport.update({
+    id: '/updates',
+    path: '/updates',
+    getParentRoute: () => AdminShellSettingsRoute,
+  } as any)
+const AdminShellDHostIndexRoute = AdminShellDHostIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminShellDHostRoute,
+} as any)
+const AdminShellDHostOffersRoute = AdminShellDHostOffersRouteImport.update({
+  id: '/offers',
+  path: '/offers',
+  getParentRoute: () => AdminShellDHostRoute,
+} as any)
+const AdminShellDHostSettingsRoute = AdminShellDHostSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminShellDHostRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminShellRouteWithChildren
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
-  '/admin/': typeof AdminIndexRoute
+  '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/add': typeof AdminShellAddRoute
+  '/admin/inbox': typeof AdminShellInboxRoute
+  '/admin/settings': typeof AdminShellSettingsRouteWithChildren
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
-  '/admin/settings/password': typeof AdminSettingsPasswordRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
+  '/admin/': typeof AdminShellIndexRoute
   '/admin/setup/': typeof AdminSetupIndexRoute
+  '/admin/d/$host': typeof AdminShellDHostRouteWithChildren
+  '/admin/settings/cloudflare': typeof AdminShellSettingsCloudflareRoute
+  '/admin/settings/danger': typeof AdminShellSettingsDangerRoute
+  '/admin/settings/password': typeof AdminShellSettingsPasswordRoute
+  '/admin/settings/updates': typeof AdminShellSettingsUpdatesRoute
+  '/admin/settings/': typeof AdminShellSettingsIndexRoute
+  '/admin/d/$host/offers': typeof AdminShellDHostOffersRoute
+  '/admin/d/$host/settings': typeof AdminShellDHostSettingsRoute
+  '/admin/d/$host/': typeof AdminShellDHostIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
-  '/admin': typeof AdminIndexRoute
+  '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/add': typeof AdminShellAddRoute
+  '/admin/inbox': typeof AdminShellInboxRoute
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
-  '/admin/settings/password': typeof AdminSettingsPasswordRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
+  '/admin': typeof AdminShellIndexRoute
   '/admin/setup': typeof AdminSetupIndexRoute
+  '/admin/settings/cloudflare': typeof AdminShellSettingsCloudflareRoute
+  '/admin/settings/danger': typeof AdminShellSettingsDangerRoute
+  '/admin/settings/password': typeof AdminShellSettingsPasswordRoute
+  '/admin/settings/updates': typeof AdminShellSettingsUpdatesRoute
+  '/admin/settings': typeof AdminShellSettingsIndexRoute
+  '/admin/d/$host/offers': typeof AdminShellDHostOffersRoute
+  '/admin/d/$host/settings': typeof AdminShellDHostSettingsRoute
+  '/admin/d/$host': typeof AdminShellDHostIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin/_shell': typeof AdminShellRouteWithChildren
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
-  '/admin/': typeof AdminIndexRoute
+  '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/_shell/add': typeof AdminShellAddRoute
+  '/admin/_shell/inbox': typeof AdminShellInboxRoute
+  '/admin/_shell/settings': typeof AdminShellSettingsRouteWithChildren
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
-  '/admin/settings/password': typeof AdminSettingsPasswordRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
+  '/admin/_shell/': typeof AdminShellIndexRoute
   '/admin/setup/': typeof AdminSetupIndexRoute
+  '/admin/_shell/d/$host': typeof AdminShellDHostRouteWithChildren
+  '/admin/_shell/settings/cloudflare': typeof AdminShellSettingsCloudflareRoute
+  '/admin/_shell/settings/danger': typeof AdminShellSettingsDangerRoute
+  '/admin/_shell/settings/password': typeof AdminShellSettingsPasswordRoute
+  '/admin/_shell/settings/updates': typeof AdminShellSettingsUpdatesRoute
+  '/admin/_shell/settings/': typeof AdminShellSettingsIndexRoute
+  '/admin/_shell/d/$host/offers': typeof AdminShellDHostOffersRoute
+  '/admin/_shell/d/$host/settings': typeof AdminShellDHostSettingsRoute
+  '/admin/_shell/d/$host/': typeof AdminShellDHostIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/admin/login'
     | '/admin/logout'
-    | '/admin/'
+    | '/admin/offers.csv'
+    | '/admin/add'
+    | '/admin/inbox'
+    | '/admin/settings'
     | '/admin/settings/logout-everywhere'
-    | '/admin/settings/password'
     | '/admin/setup/done'
+    | '/admin/'
     | '/admin/setup/'
+    | '/admin/d/$host'
+    | '/admin/settings/cloudflare'
+    | '/admin/settings/danger'
+    | '/admin/settings/password'
+    | '/admin/settings/updates'
+    | '/admin/settings/'
+    | '/admin/d/$host/offers'
+    | '/admin/d/$host/settings'
+    | '/admin/d/$host/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/admin/login'
     | '/admin/logout'
-    | '/admin'
+    | '/admin/offers.csv'
+    | '/admin/add'
+    | '/admin/inbox'
     | '/admin/settings/logout-everywhere'
-    | '/admin/settings/password'
     | '/admin/setup/done'
+    | '/admin'
     | '/admin/setup'
+    | '/admin/settings/cloudflare'
+    | '/admin/settings/danger'
+    | '/admin/settings/password'
+    | '/admin/settings/updates'
+    | '/admin/settings'
+    | '/admin/d/$host/offers'
+    | '/admin/d/$host/settings'
+    | '/admin/d/$host'
   id:
     | '__root__'
     | '/'
+    | '/admin/_shell'
     | '/admin/login'
     | '/admin/logout'
-    | '/admin/'
+    | '/admin/offers.csv'
+    | '/admin/_shell/add'
+    | '/admin/_shell/inbox'
+    | '/admin/_shell/settings'
     | '/admin/settings/logout-everywhere'
-    | '/admin/settings/password'
     | '/admin/setup/done'
+    | '/admin/_shell/'
     | '/admin/setup/'
+    | '/admin/_shell/d/$host'
+    | '/admin/_shell/settings/cloudflare'
+    | '/admin/_shell/settings/danger'
+    | '/admin/_shell/settings/password'
+    | '/admin/_shell/settings/updates'
+    | '/admin/_shell/settings/'
+    | '/admin/_shell/d/$host/offers'
+    | '/admin/_shell/d/$host/settings'
+    | '/admin/_shell/d/$host/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminShellRoute: typeof AdminShellRouteWithChildren
   AdminLoginRoute: typeof AdminLoginRoute
   AdminLogoutRoute: typeof AdminLogoutRoute
-  AdminIndexRoute: typeof AdminIndexRoute
+  AdminOffersDotcsvRoute: typeof AdminOffersDotcsvRoute
   AdminSettingsLogoutEverywhereRoute: typeof AdminSettingsLogoutEverywhereRoute
-  AdminSettingsPasswordRoute: typeof AdminSettingsPasswordRoute
   AdminSetupDoneRoute: typeof AdminSetupDoneRoute
   AdminSetupIndexRoute: typeof AdminSetupIndexRoute
 }
@@ -144,11 +298,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/': {
-      id: '/admin/'
+    '/admin/_shell': {
+      id: '/admin/_shell'
       path: '/admin'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AdminIndexRouteImport
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminShellRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/login': {
@@ -165,18 +319,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/offers.csv': {
+      id: '/admin/offers.csv'
+      path: '/admin/offers.csv'
+      fullPath: '/admin/offers.csv'
+      preLoaderRoute: typeof AdminOffersDotcsvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/_shell/': {
+      id: '/admin/_shell/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminShellIndexRouteImport
+      parentRoute: typeof AdminShellRoute
+    }
+    '/admin/_shell/add': {
+      id: '/admin/_shell/add'
+      path: '/add'
+      fullPath: '/admin/add'
+      preLoaderRoute: typeof AdminShellAddRouteImport
+      parentRoute: typeof AdminShellRoute
+    }
+    '/admin/_shell/inbox': {
+      id: '/admin/_shell/inbox'
+      path: '/inbox'
+      fullPath: '/admin/inbox'
+      preLoaderRoute: typeof AdminShellInboxRouteImport
+      parentRoute: typeof AdminShellRoute
+    }
+    '/admin/_shell/settings': {
+      id: '/admin/_shell/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminShellSettingsRouteImport
+      parentRoute: typeof AdminShellRoute
+    }
     '/admin/settings/logout-everywhere': {
       id: '/admin/settings/logout-everywhere'
       path: '/admin/settings/logout-everywhere'
       fullPath: '/admin/settings/logout-everywhere'
       preLoaderRoute: typeof AdminSettingsLogoutEverywhereRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/settings/password': {
-      id: '/admin/settings/password'
-      path: '/admin/settings/password'
-      fullPath: '/admin/settings/password'
-      preLoaderRoute: typeof AdminSettingsPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/setup/': {
@@ -193,16 +375,134 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSetupDoneRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/_shell/d/$host': {
+      id: '/admin/_shell/d/$host'
+      path: '/d/$host'
+      fullPath: '/admin/d/$host'
+      preLoaderRoute: typeof AdminShellDHostRouteImport
+      parentRoute: typeof AdminShellRoute
+    }
+    '/admin/_shell/settings/': {
+      id: '/admin/_shell/settings/'
+      path: '/'
+      fullPath: '/admin/settings/'
+      preLoaderRoute: typeof AdminShellSettingsIndexRouteImport
+      parentRoute: typeof AdminShellSettingsRoute
+    }
+    '/admin/_shell/settings/cloudflare': {
+      id: '/admin/_shell/settings/cloudflare'
+      path: '/cloudflare'
+      fullPath: '/admin/settings/cloudflare'
+      preLoaderRoute: typeof AdminShellSettingsCloudflareRouteImport
+      parentRoute: typeof AdminShellSettingsRoute
+    }
+    '/admin/_shell/settings/danger': {
+      id: '/admin/_shell/settings/danger'
+      path: '/danger'
+      fullPath: '/admin/settings/danger'
+      preLoaderRoute: typeof AdminShellSettingsDangerRouteImport
+      parentRoute: typeof AdminShellSettingsRoute
+    }
+    '/admin/_shell/settings/password': {
+      id: '/admin/_shell/settings/password'
+      path: '/password'
+      fullPath: '/admin/settings/password'
+      preLoaderRoute: typeof AdminShellSettingsPasswordRouteImport
+      parentRoute: typeof AdminShellSettingsRoute
+    }
+    '/admin/_shell/settings/updates': {
+      id: '/admin/_shell/settings/updates'
+      path: '/updates'
+      fullPath: '/admin/settings/updates'
+      preLoaderRoute: typeof AdminShellSettingsUpdatesRouteImport
+      parentRoute: typeof AdminShellSettingsRoute
+    }
+    '/admin/_shell/d/$host/': {
+      id: '/admin/_shell/d/$host/'
+      path: '/'
+      fullPath: '/admin/d/$host/'
+      preLoaderRoute: typeof AdminShellDHostIndexRouteImport
+      parentRoute: typeof AdminShellDHostRoute
+    }
+    '/admin/_shell/d/$host/offers': {
+      id: '/admin/_shell/d/$host/offers'
+      path: '/offers'
+      fullPath: '/admin/d/$host/offers'
+      preLoaderRoute: typeof AdminShellDHostOffersRouteImport
+      parentRoute: typeof AdminShellDHostRoute
+    }
+    '/admin/_shell/d/$host/settings': {
+      id: '/admin/_shell/d/$host/settings'
+      path: '/settings'
+      fullPath: '/admin/d/$host/settings'
+      preLoaderRoute: typeof AdminShellDHostSettingsRouteImport
+      parentRoute: typeof AdminShellDHostRoute
+    }
   }
 }
 
+interface AdminShellSettingsRouteChildren {
+  AdminShellSettingsCloudflareRoute: typeof AdminShellSettingsCloudflareRoute
+  AdminShellSettingsDangerRoute: typeof AdminShellSettingsDangerRoute
+  AdminShellSettingsPasswordRoute: typeof AdminShellSettingsPasswordRoute
+  AdminShellSettingsUpdatesRoute: typeof AdminShellSettingsUpdatesRoute
+  AdminShellSettingsIndexRoute: typeof AdminShellSettingsIndexRoute
+}
+
+const AdminShellSettingsRouteChildren: AdminShellSettingsRouteChildren = {
+  AdminShellSettingsCloudflareRoute: AdminShellSettingsCloudflareRoute,
+  AdminShellSettingsDangerRoute: AdminShellSettingsDangerRoute,
+  AdminShellSettingsPasswordRoute: AdminShellSettingsPasswordRoute,
+  AdminShellSettingsUpdatesRoute: AdminShellSettingsUpdatesRoute,
+  AdminShellSettingsIndexRoute: AdminShellSettingsIndexRoute,
+}
+
+const AdminShellSettingsRouteWithChildren =
+  AdminShellSettingsRoute._addFileChildren(AdminShellSettingsRouteChildren)
+
+interface AdminShellDHostRouteChildren {
+  AdminShellDHostOffersRoute: typeof AdminShellDHostOffersRoute
+  AdminShellDHostSettingsRoute: typeof AdminShellDHostSettingsRoute
+  AdminShellDHostIndexRoute: typeof AdminShellDHostIndexRoute
+}
+
+const AdminShellDHostRouteChildren: AdminShellDHostRouteChildren = {
+  AdminShellDHostOffersRoute: AdminShellDHostOffersRoute,
+  AdminShellDHostSettingsRoute: AdminShellDHostSettingsRoute,
+  AdminShellDHostIndexRoute: AdminShellDHostIndexRoute,
+}
+
+const AdminShellDHostRouteWithChildren = AdminShellDHostRoute._addFileChildren(
+  AdminShellDHostRouteChildren,
+)
+
+interface AdminShellRouteChildren {
+  AdminShellAddRoute: typeof AdminShellAddRoute
+  AdminShellInboxRoute: typeof AdminShellInboxRoute
+  AdminShellSettingsRoute: typeof AdminShellSettingsRouteWithChildren
+  AdminShellIndexRoute: typeof AdminShellIndexRoute
+  AdminShellDHostRoute: typeof AdminShellDHostRouteWithChildren
+}
+
+const AdminShellRouteChildren: AdminShellRouteChildren = {
+  AdminShellAddRoute: AdminShellAddRoute,
+  AdminShellInboxRoute: AdminShellInboxRoute,
+  AdminShellSettingsRoute: AdminShellSettingsRouteWithChildren,
+  AdminShellIndexRoute: AdminShellIndexRoute,
+  AdminShellDHostRoute: AdminShellDHostRouteWithChildren,
+}
+
+const AdminShellRouteWithChildren = AdminShellRoute._addFileChildren(
+  AdminShellRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminShellRoute: AdminShellRouteWithChildren,
   AdminLoginRoute: AdminLoginRoute,
   AdminLogoutRoute: AdminLogoutRoute,
-  AdminIndexRoute: AdminIndexRoute,
+  AdminOffersDotcsvRoute: AdminOffersDotcsvRoute,
   AdminSettingsLogoutEverywhereRoute: AdminSettingsLogoutEverywhereRoute,
-  AdminSettingsPasswordRoute: AdminSettingsPasswordRoute,
   AdminSetupDoneRoute: AdminSetupDoneRoute,
   AdminSetupIndexRoute: AdminSetupIndexRoute,
 }
