@@ -27,6 +27,7 @@ export interface MockDnsRecord {
   name: string;
   content: string;
   priority?: number;
+  proxied?: boolean;
 }
 
 export interface MockRule {
@@ -135,7 +136,7 @@ export interface MockState {
   workersSubdomain: string | null;
   zones: MockZone[];
   dnsRecords: Map<string, MockDnsRecord[]>;
-  routes: Map<string, { id: string; pattern: string; script: string }[]>;
+  routes: Map<string, { id: string; pattern: string; script?: string }[]>;
   /** Keyed by `<zoneId>:<phase>`. */
   rulesets: Map<string, MockRuleset>;
   emailRouting: Map<string, boolean>;
@@ -520,6 +521,49 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        id: "dns.create",
+        method: "POST",
+        pattern: "/zones/:zone/dns_records",
+        permission: "dns",
+        handle: (context) => {
+          const zoneId = zone(context).id;
+          const record: MockDnsRecord = {
+            id: nextId("dns"),
+            type: text(context.json.type, "type"),
+            name: text(context.json.name, "name"),
+            content: text(context.json.content, "content"),
+            ...(typeof context.json.priority === "number" ? { priority: context.json.priority } : {}),
+            ...(typeof context.json.proxied === "boolean" ? { proxied: context.json.proxied } : {}),
+          };
+          const list = state.dnsRecords.get(zoneId) ?? [];
+          if (
+            list.some(
+              (entry) => entry.type === record.type && entry.name === record.name && entry.content === record.content,
+            )
+          ) {
+            throw new MockError(400, 81058, "An identical record already exists.");
+          }
+          state.dnsRecords.set(zoneId, [...list, record]);
+          return { result: record };
+        },
+      },
+      {
+        id: "dns.delete",
+        method: "DELETE",
+        pattern: "/zones/:zone/dns_records/:record",
+        permission: "dns",
+        handle: (context) => {
+          const zoneId = zone(context).id;
+          const list = state.dnsRecords.get(zoneId) ?? [];
+          if (!list.some((record) => record.id === context.params.record)) throw notFound("record");
+          state.dnsRecords.set(
+            zoneId,
+            list.filter((record) => record.id !== context.params.record),
+          );
+          return { result: { id: context.params.record } };
+        },
+      },
+      {
         id: "routes.list",
         method: "GET",
         pattern: "/zones/:zone/workers/routes",
@@ -541,6 +585,26 @@ export function createMockCloudflare(seed: MockSeed = {}) {
           const route = { id: nextId("route"), pattern, script: text(context.json.script, "script") };
           state.routes.set(zoneId, [...list, route]);
           return { result: route };
+        },
+      },
+      {
+        id: "routes.update",
+        method: "PUT",
+        pattern: "/zones/:zone/workers/routes/:route",
+        permission: "routes",
+        handle: (context) => {
+          const zoneId = zone(context).id;
+          const list = state.routes.get(zoneId) ?? [];
+          const found = list.find((route) => route.id === context.params.route);
+          if (found === undefined) throw notFound("route");
+          const pattern = text(context.json.pattern, "pattern");
+          if (list.some((route) => route !== found && route.pattern === pattern)) {
+            throw new MockError(409, 10020, "A route with the same pattern already exists.");
+          }
+          found.pattern = pattern;
+          if (typeof context.json.script === "string") found.script = context.json.script;
+          else delete found.script;
+          return { result: found };
         },
       },
       {
@@ -959,6 +1023,23 @@ export function createMockCloudflare(seed: MockSeed = {}) {
             ),
             { id: nextId("dns"), type: "MX", name: found.name, content: "route1.mx.cloudflare.net", priority: 10 },
           ]);
+          return { result: routingJson(found) };
+        },
+      },
+      {
+        id: "email.disableRouting",
+        method: "POST",
+        pattern: "/zones/:zone/email/routing/disable",
+        permission: "email_routing",
+        handle: (context) => {
+          const found = zone(context);
+          state.emailRouting.set(found.id, false);
+          state.dnsRecords.set(
+            found.id,
+            (state.dnsRecords.get(found.id) ?? []).filter(
+              (record) => !(record.type === "MX" && record.content.endsWith(".mx.cloudflare.net")),
+            ),
+          );
           return { result: routingJson(found) };
         },
       },

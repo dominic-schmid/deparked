@@ -9,5 +9,13 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@deparked/cf": "workspace:*",
+    "@deparked/db": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261110.1"
   }
 }

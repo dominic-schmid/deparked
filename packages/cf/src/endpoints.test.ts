@@ -96,6 +96,50 @@ describe("accounts, zones, DNS and routes", () => {
     await client.zones.deleteRoute(ZONE.id, lander.id);
     expect(await client.zones.listRoutes(ZONE.id)).toEqual([admin]);
   });
+
+  it("points an existing route at another Worker, or at none, keeping its id", async () => {
+    const { client } = setup();
+    const route = await client.zones.createRoute(ZONE.id, { pattern: "example.com/*", script: "blog" });
+
+    const moved = await client.zones.updateRoute(ZONE.id, route.id, {
+      pattern: route.pattern,
+      script: "deparked-sites",
+    });
+    expect(moved).toEqual({ id: route.id, pattern: "example.com/*", script: "deparked-sites" });
+
+    await client.zones.updateRoute(ZONE.id, route.id, { pattern: route.pattern });
+    expect(await client.zones.listRoutes(ZONE.id)).toEqual([{ id: route.id, pattern: "example.com/*" }]);
+    await expect(client.zones.updateRoute(ZONE.id, "nope", { pattern: "example.com/*" })).rejects.toThrow(
+      "update Worker route failed: 404",
+    );
+  });
+
+  it("adds one DNS record with an automatic TTL and deletes it again, leaving the others alone", async () => {
+    const existing = { id: "r1", type: "TXT", name: "example.com", content: "v=spf1 -all" };
+    const { mock, client } = setup({ dnsRecords: { [ZONE.id]: [existing] } });
+
+    const placeholder = await client.zones.createDnsRecord(ZONE.id, {
+      type: "AAAA",
+      name: "example.com",
+      content: "100::",
+      proxied: true,
+    });
+    expect(placeholder).toMatchObject({ type: "AAAA", name: "example.com", content: "100::", proxied: true });
+    expect(mock.callsTo("dns.create")[0]?.body).toEqual({
+      type: "AAAA",
+      name: "example.com",
+      content: "100::",
+      proxied: true,
+      ttl: 1,
+    });
+    expect(mock.state.dnsRecords.get(ZONE.id)).toHaveLength(2);
+
+    await client.zones.deleteDnsRecord(ZONE.id, placeholder.id);
+    expect(mock.state.dnsRecords.get(ZONE.id)).toEqual([existing]);
+    await expect(client.zones.deleteDnsRecord(ZONE.id, placeholder.id)).rejects.toThrow(
+      "delete DNS record failed: 404",
+    );
+  });
 });
 
 describe("rulesets", () => {
@@ -399,6 +443,15 @@ describe("Email Routing", () => {
 
     await client.email.enableRouting(ZONE, { replaceExistingMx: true });
     expect(mock.state.emailRouting.get(ZONE.id)).toBe(true);
+  });
+
+  it("turns Email Routing off again, which removes Cloudflare's MX records only", async () => {
+    const other = { id: "mx-sub", type: "MX", name: "mail.example.com", content: "aspmx.l.google.com", priority: 1 };
+    const { mock, client } = setup({ dnsRecords: { [ZONE.id]: [other] } });
+    await client.email.enableRouting(ZONE, { replaceExistingMx: false });
+
+    expect(await client.email.disableRouting(ZONE.id)).toMatchObject({ enabled: false });
+    expect(mock.state.dnsRecords.get(ZONE.id)).toEqual([other]);
   });
 
   it("classifies apex MX records: none, Cloudflare's, or someone else's mail", () => {

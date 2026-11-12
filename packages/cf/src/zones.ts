@@ -59,12 +59,40 @@ export function zonesApi(http: Http) {
     get(zoneId: string): Promise<Zone> {
       return http.request({ call: "read zone", method: "GET", path: `/zones/${segment(zoneId)}` }, zoneSchema);
     },
-    /** Read only. `name` matches exactly. One request per page of 100. */
+    /** `name` matches exactly. One request per page of 100. */
     listDnsRecords(zoneId: string, filter: { type?: string; name?: string } = {}): Promise<DnsRecord[]> {
       return http.paginate(
         { call: "list DNS records", method: "GET", path: `/zones/${segment(zoneId)}/dns_records`, query: filter },
         dnsRecordSchema,
         { perPage: 100 },
+      );
+    },
+    /**
+     * Adds one record; nothing existing is touched. TTL is automatic. Provisioning uses it for the proxied
+     * placeholder (`AAAA 100::`) a hostname without an origin needs, and to put MX records back on Turn off.
+     */
+    createDnsRecord(
+      zoneId: string,
+      record: { type: string; name: string; content: string; proxied?: boolean; priority?: number },
+    ): Promise<DnsRecord> {
+      return http.request(
+        {
+          call: "create DNS record",
+          method: "POST",
+          path: `/zones/${segment(zoneId)}/dns_records`,
+          json: { ...record, ttl: 1 },
+        },
+        dnsRecordSchema,
+      );
+    },
+    async deleteDnsRecord(zoneId: string, recordId: string): Promise<void> {
+      await http.request(
+        {
+          call: "delete DNS record",
+          method: "DELETE",
+          path: `/zones/${segment(zoneId)}/dns_records/${segment(recordId)}`,
+        },
+        z.unknown(),
       );
     },
     /** Cloudflare returns every route of the zone in one response. */
@@ -77,6 +105,18 @@ export function zonesApi(http: Http) {
     createRoute(zoneId: string, route: { pattern: string; script: string }): Promise<WorkerRoute> {
       return http.request(
         { call: "create Worker route", method: "POST", path: `/zones/${segment(zoneId)}/workers/routes`, json: route },
+        routeSchema,
+      );
+    },
+    /** Points an existing route at another Worker in one call. Without `script` the route runs no Worker. */
+    updateRoute(zoneId: string, routeId: string, route: { pattern: string; script?: string }): Promise<WorkerRoute> {
+      return http.request(
+        {
+          call: "update Worker route",
+          method: "PUT",
+          path: `/zones/${segment(zoneId)}/workers/routes/${segment(routeId)}`,
+          json: route,
+        },
         routeSchema,
       );
     },
