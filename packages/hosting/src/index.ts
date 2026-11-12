@@ -69,6 +69,12 @@ export interface PublishInput {
    * Default `DEFAULT_MAX_UPLOAD_BATCHES`.
    */
   maxUploadBatches?: number;
+  /**
+   * Upper bound of files in one upload batch. The host's own grouping is split to fit, so a caller that can
+   * fetch only a few files per call still makes progress: files sent in an earlier call are not asked for again.
+   * Default: the host's grouping.
+   */
+  maxFilesPerUpload?: number;
 }
 
 export type PublishResult =

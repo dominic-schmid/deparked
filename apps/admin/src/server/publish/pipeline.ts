@@ -64,8 +64,11 @@ export const HOSTS_PER_STEP = 1;
 export const STEP_REQUEST_BUDGET = 40;
 /** Requests one `hosting.publish` call makes besides its upload batches (session, deploy, version id). */
 const PUBLISH_CALL_REQUESTS = 3;
-/** Upload batches per `hosting.publish` call, at most. The step budget usually allows fewer. */
-export const UPLOAD_BATCHES_PER_STEP = 30;
+/**
+ * Upload batches per `hosting.publish` call, at most. Each batch carries as many files as the rest of the step's
+ * budget can download, so few large batches send the most files per step.
+ */
+export const UPLOAD_BATCHES_PER_STEP = 2;
 /** How often one step starts over because another domain's pages turned out to be stale. */
 export const MAX_STALE_ROUNDS = 3;
 
@@ -126,8 +129,8 @@ const LOCK_LOST = "This publish took too long and another one took over. Publish
 const LIVE_NOT_RECORDED =
   "The new pages went live, but another publish took over before they were recorded here. Publish again so this admin matches what visitors see.";
 
-/** This step has used its request budget; the next step continues. */
-class BudgetSpent extends Error {}
+const NO_UPLOAD =
+  "The upload stopped without sending a file, so this publish stopped instead of trying again forever. Nothing was changed; publish again.";
 
 /** Another domain's file was asked for, and rendering it again gives different bytes than the manifest lists. */
 class StaleHost extends Error {
@@ -313,16 +316,19 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
     for (const { host, source } of hosts) builds.set(host, await buildHost(ctx, host, source));
     const others = new Map<string, HostBuild>();
     const running = (message: string): StepResult => ({ status: "running", progress, message });
+    // A step that sent nothing would be followed by an identical one: fail instead of answering `running` forever.
+    const uploading = async (message: string): Promise<StepResult> =>
+      progress.uploaded > 0
+        ? running(message)
+        : fail(ctx, deploymentId, new PublishFailure("hosting", NO_UPLOAD), progress);
 
     for (let round = 0; ; round += 1) {
-      const left = STEP_REQUEST_BUDGET - progress.requests;
-      // Half of what is left for upload batches, the other half for release files the host may ask for.
-      const maxUploadBatches = Math.min(
-        ctx.maxUploadBatches ?? UPLOAD_BATCHES_PER_STEP,
-        Math.floor((left - PUBLISH_CALL_REQUESTS) / 2),
-      );
-      if (maxUploadBatches < 1) return running("Uploading: continuing in the next step.");
-      const downloadsAllowed = left - PUBLISH_CALL_REQUESTS - maxUploadBatches;
+      const room = STEP_REQUEST_BUDGET - progress.requests - PUBLISH_CALL_REQUESTS;
+      // Every batch is one request plus at most `maxFilesPerUpload` release downloads, so all of them fit in `room`.
+      const maxUploadBatches = Math.min(ctx.maxUploadBatches ?? UPLOAD_BATCHES_PER_STEP, Math.floor(room / 2));
+      if (maxUploadBatches < 1) return await uploading("Uploading: continuing in the next step.");
+      const maxFilesPerUpload = Math.floor((room - maxUploadBatches) / maxUploadBatches);
+      const downloadsAllowed = maxUploadBatches * maxFilesPerUpload;
       let downloads = 0;
       let asked = 0;
 
@@ -338,7 +344,9 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
         const row = keptByPath.get(path);
         if (row === undefined) throw new PublishFailure("unexpected", `${path} is not part of this publish.`);
         if (row.host === null) {
-          if (downloads === downloadsAllowed) throw new BudgetSpent();
+          if (downloads === downloadsAllowed) {
+            throw new PublishFailure("hosting", "The host asked for more files than one step can send. Publish again.");
+          }
           downloads += 1;
           const content = await ctx.fetchReleaseFile(path, row.size);
           if (content.length !== row.size || (await contentHash(path, content)) !== row.hash) {
@@ -362,13 +370,13 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
           getContent,
           headers: ctx.headers,
           maxUploadBatches,
+          maxFilesPerUpload,
         });
       } catch (error) {
-        if (!(error instanceof StaleHost || error instanceof BudgetSpent)) throw error;
+        if (!(error instanceof StaleHost)) throw error;
         // The call stopped inside `getContent`: the session request, and at most one upload batch per file asked
         // for before this one (every batch asks for at least one).
         progress.requests += Math.min(1 + maxUploadBatches, asked) + downloads;
-        if (error instanceof BudgetSpent) return running("Uploading: continuing in the next step.");
         if (round === MAX_STALE_ROUNDS) {
           throw new PublishFailure(
             "invalid",
@@ -383,7 +391,7 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
       progress.uploaded += result.uploaded.length;
       if (!result.done) {
         progress.pending = result.pending;
-        return running(`Uploading: ${result.pending} files to go.`);
+        return await uploading(`Uploading: ${result.pending} files to go.`);
       }
 
       const committed = await commitPublish(db, {

@@ -164,6 +164,20 @@ describe("publish", () => {
     expect(mock.deployedAssets(SITES).size).toBe(3);
   });
 
+  it("splits one bucket into smaller uploads, and the next call asks only for the files still missing", async () => {
+    const { mock, hosting } = setup({ bucketSize: 100 });
+    const pages = await site(Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`/catalog/f${i}.css`, `f${i}`])));
+
+    const first = await hosting.publish({ ...pages, maxUploadBatches: 2, maxFilesPerUpload: 10 });
+
+    expect(first).toMatchObject({ done: false, pending: 40, requests: 3 });
+    expect(pages.read).toHaveLength(20);
+    const rest = await published(hosting.publish({ ...pages, maxUploadBatches: 4, maxFilesPerUpload: 10 }));
+    expect(rest.uploaded).toHaveLength(40);
+    expect(new Set(pages.read).size).toBe(60);
+    expect(mock.deployedAssets(SITES).size).toBe(60);
+  });
+
   it("refuses content that is not the size the manifest lists", async () => {
     const { mock, hosting } = setup();
     const pages = await site(PAGES);
