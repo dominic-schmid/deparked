@@ -51,7 +51,11 @@ export function PreviewFrame(props: { html: string | null; host: string; stale: 
           ))}
         </fieldset>
         <p aria-live="polite" className="text-xs text-muted-foreground">
-          {props.stale ? "Showing the last valid version." : props.loading ? "Updating…" : ""}
+          {props.stale
+            ? "Preview out of date: it shows the last version that could be rendered."
+            : props.loading
+              ? "Updating…"
+              : ""}
         </p>
       </div>
       <div ref={box} className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted">

@@ -3,11 +3,10 @@ import { createDb, getDomain } from "@deparked/db";
 import { catalog } from "@deparked/templates/catalog";
 import { notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { isHostName } from "../publish/files";
 import { requireSession } from "../require-session";
-import { loadEditor, loadPublishState, renderPreview } from "./editor";
+import { loadEditor, loadPublishState, parseOrigin, renderPreview } from "./editor";
 
 const host = z.string().refine(isHostName, "Not a domain name.");
 
@@ -28,19 +27,30 @@ export const getEditorPublishState = createServerFn()
     return loadPublishState({ db: createDb(env.DB), now: Date.now }, data.host);
   });
 
+/** Far more than any valid config; a larger body is refused before it is parsed. */
+export const PREVIEW_MAX_BYTES = 64 * 1024;
+
 /**
- * Renders the lander for a posted, unsaved draft. Writes nothing. On a managed domain the page's `/catalog/*`
- * paths load from that domain; elsewhere (the admin's `workers.dev` address) from the domain being edited.
+ * Renders the lander for a posted, unsaved draft. Writes nothing. `origin` is the admin page's own origin: the
+ * preview's images and fonts load from its `/catalog/*`.
  */
 export const previewDraft = createServerFn({ method: "POST" })
-  .validator(z.object({ host, config: z.unknown() }))
+  .validator(
+    z.object({
+      host,
+      origin: z.string().max(300),
+      config: z
+        .unknown()
+        .refine((value) => (JSON.stringify(value) ?? "").length <= PREVIEW_MAX_BYTES, "This design is too large."),
+    }),
+  )
   .handler(async ({ data }) => {
     await requireSession();
-    const db = createDb(env.DB);
-    if ((await getDomain(db, data.host)) === undefined) {
+    const domain = await getDomain(createDb(env.DB), data.host);
+    if (domain === undefined || domain.status === "removed") {
       return { ok: false as const, errors: { form: "This domain is not managed here." } };
     }
-    const here = new URL(getRequest().url).hostname;
-    const servesCatalog = isHostName(here) && (await getDomain(db, here)) !== undefined;
-    return renderPreview({ catalog }, data.host, data.config, servesCatalog ? null : `https://${data.host}/`);
+    const origin = parseOrigin(data.origin);
+    if (origin === null) return { ok: false as const, errors: { form: "The preview could not be rendered here." } };
+    return renderPreview({ catalog }, data.host, data.config, origin);
   });

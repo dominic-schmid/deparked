@@ -20,6 +20,8 @@ export type FieldsProps = {
   variants: VariantOption[];
   backgrounds: BackgroundOption[];
   onChange: <K extends FormField>(field: K, value: EditorForm[K]) => void;
+  /** Read-only while a publish or revert runs, so nothing is typed into a draft that is being replaced. */
+  disabled: boolean;
 };
 
 const currencyNames = (() => {
@@ -110,7 +112,8 @@ export function EditorFields(props: FieldsProps) {
   const contrastId = useId();
 
   return (
-    <div className="flex flex-col gap-8">
+    <fieldset disabled={props.disabled} className="flex min-w-0 flex-col gap-8 disabled:opacity-70">
+      <legend className="sr-only">Design settings</legend>
       <FieldSet>
         <FieldLegend>Design</FieldLegend>
         <RadioGroup
@@ -298,7 +301,7 @@ export function EditorFields(props: FieldsProps) {
           </div>
         ) : null}
       </FieldSet>
-    </div>
+    </fieldset>
   );
 }
 

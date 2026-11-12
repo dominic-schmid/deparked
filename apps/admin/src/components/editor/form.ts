@@ -1,4 +1,4 @@
-import type { Config, ConfigErrors } from "@deparked/config";
+import { type Config, type ConfigErrors, parseConfig } from "@deparked/config";
 
 /** The editor's inputs, as the owner types them. `fromForm` turns them into a config for `parseConfig`. */
 export type EditorForm = {
@@ -41,12 +41,16 @@ export function toForm(config: Config, colors: VariantColors): EditorForm {
   };
 }
 
-/** Digits with the usual thousands separators ("25,000", "25 000", "25'000") are a number; anything else is left
- * for the schema to reject with its own message. */
-function readAmount(text: string): unknown {
-  const digits = text.trim().replace(/[\s,'_]/g, "");
-  if (digits === "") return undefined;
-  return /^-?\d+$/.test(digits) ? Number(digits) : text;
+/** Plain digits, or digits grouped in threes by one separator used throughout ("25,000", "25.000", "25 000",
+ * "1'250'000"). Anything else ("1,5", "12,50") is left as text for the schema to reject: separators are never
+ * guessed. */
+const GROUPED = /^\d{1,3}([,. '\u00a0\u202f])\d{3}(?:\1\d{3})*$/;
+
+export function readAmount(text: string): unknown {
+  const trimmed = text.trim();
+  if (trimmed === "") return undefined;
+  if (/^-?\d+$/.test(trimmed)) return Number(trimmed);
+  return GROUPED.test(trimmed) ? Number(trimmed.replace(/\D/g, "")) : trimmed;
 }
 
 /** The form as a config candidate. Unvalidated: `parseConfig` decides. */
@@ -91,12 +95,25 @@ const FORM_FIELDS: Record<FormField, true> = {
   accentContrast: true,
 };
 
+/**
+ * The config as the form will save it. A stored config the form cannot express exactly (one accent colour set,
+ * the other left to the design) comes back with the gap filled in, so loading it is not an unsaved change.
+ */
+export function normalize(config: Config, colors: VariantColors): Config {
+  const parsed = parseConfig(fromForm(toForm(config, colors), config.version));
+  return parsed.ok ? parsed.config : config;
+}
+
+/** The form fields whose errors these are: an edit to one of them clears its server error. */
+export function fieldOf(path: string): FormField | "form" {
+  return ERROR_FIELDS[path] ?? (path in FORM_FIELDS ? (path as FormField) : "form");
+}
+
 /** `parseConfig`'s errors by the input they belong to. Errors without one (`form`, `version`) go to `form`. */
 export function errorsByField(errors: ConfigErrors): Partial<Record<FormField | "form", string>> {
   const result: Partial<Record<FormField | "form", string>> = {};
   for (const [path, message] of Object.entries(errors)) {
-    const field = ERROR_FIELDS[path] ?? (path in FORM_FIELDS ? (path as FormField) : "form");
-    result[field] ??= message;
+    result[fieldOf(path)] ??= message;
   }
   return result;
 }

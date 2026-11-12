@@ -27,6 +27,7 @@ export type PublishView =
   | { phase: "idle" }
   | { phase: "running"; text: string }
   | { phase: "following"; text: string }
+  | { phase: "notice"; text: string }
   | { phase: "ended"; outcome: PublishOutcome; retry: (() => void) | null };
 
 const SAVE_TEXT: Record<SaveStatus, string> = {
@@ -37,14 +38,27 @@ const SAVE_TEXT: Record<SaveStatus, string> = {
   invalid: "Not saved: fix the marked fields",
 };
 
-export function SaveState(props: { status: SaveStatus; invalidCount: number; onRetry: () => void }) {
-  const text =
-    props.status === "invalid"
+export function SaveState(props: {
+  status: SaveStatus;
+  invalidCount: number;
+  /** An error that belongs to no field (`form`, `version`): shown here instead of the plain state. */
+  problem?: string | undefined;
+  onRetry: () => void;
+}) {
+  const text = props.problem
+    ? `Not saved: ${props.problem}`
+    : props.status === "invalid"
       ? `Not saved: fix ${props.invalidCount === 1 ? "the marked field" : `the ${props.invalidCount} marked fields`}`
       : SAVE_TEXT[props.status];
   return (
     <p role="status" className="flex min-h-6 items-center gap-2 text-sm text-muted-foreground">
-      <span className={props.status === "error" || props.status === "invalid" ? "text-destructive" : undefined}>
+      <span
+        className={
+          props.problem || props.status === "error" || props.status === "invalid"
+            ? "text-destructive [overflow-wrap:anywhere]"
+            : undefined
+        }
+      >
         {text}
       </span>
       {props.status === "error" ? (
@@ -62,6 +76,7 @@ const linkClass =
 function Outcome(props: { view: PublishView; host: string; onFollow: () => void }) {
   const { view } = props;
   if (view.phase === "idle") return null;
+  if (view.phase === "notice") return <p className="text-sm">{view.text}</p>;
   if (view.phase === "running" || view.phase === "following") {
     return (
       <p className="flex items-start gap-2 text-sm">
@@ -71,6 +86,7 @@ function Outcome(props: { view: PublishView; host: string; onFollow: () => void 
     );
   }
   const { outcome } = view;
+  if (outcome.status === "stopped") return null;
   if (outcome.status === "done") {
     return (
       <Alert>
@@ -81,7 +97,13 @@ function Outcome(props: { view: PublishView; host: string; onFollow: () => void 
   }
   return (
     <Alert variant="destructive">
-      <AlertTitle>{outcome.reason === "busy" ? "Another publish is running" : "Not published"}</AlertTitle>
+      <AlertTitle>
+        {outcome.reason === "busy"
+          ? "Another publish is running"
+          : outcome.reason === "stalled"
+            ? "The publish stalled"
+            : "Not published"}
+      </AlertTitle>
       <AlertDescription>
         <p className="[overflow-wrap:anywhere]">{outcome.message}</p>
         {outcome.reason === "credentials-rejected" ? (
@@ -95,7 +117,7 @@ function Outcome(props: { view: PublishView; host: string; onFollow: () => void 
         <div className="mt-1 flex flex-wrap gap-2">
           {outcome.reason === "busy" ? (
             <Button variant="outline" size="sm" onClick={props.onFollow}>
-              Wait for it
+              Wait until it has finished
             </Button>
           ) : null}
           {view.retry ? (
@@ -118,7 +140,7 @@ export function PublishBar(props: {
   hasLive: boolean;
   canPublish: boolean;
   view: PublishView;
-  save: { status: SaveStatus; invalidCount: number; onRetry: () => void };
+  save: { status: SaveStatus; invalidCount: number; problem?: string | undefined; onRetry: () => void };
   onPublish: () => void;
   onFollow: () => void;
   onResetToLive: () => void;

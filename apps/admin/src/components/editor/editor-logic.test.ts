@@ -1,8 +1,8 @@
 import { CONFIG_VERSION, defaultConfig, parseConfig } from "@deparked/config";
 import { describe, expect, it } from "vitest";
 import type { StartResult, StepResult } from "../../server/publish/pipeline";
-import { changedFields, configKey, errorsByField, fromForm, toForm } from "./form";
-import { progressText, runPublish, waitUntilFree } from "./publish-loop";
+import { changedFields, configKey, errorsByField, fieldOf, fromForm, normalize, readAmount, toForm } from "./form";
+import { progressText, revertWroteDraft, runPublish, STALL_STEPS, waitUntilFree } from "./publish-loop";
 
 const COLORS = { color: "#7f9fbf", contrast: "#ffffff" };
 const PROGRESS = { uploaded: 0, pending: 0, remainingHosts: 0, requests: 0 };
@@ -14,15 +14,34 @@ describe("the editor form", () => {
     expect(parsed).toEqual({ ok: true, config });
   });
 
-  it("reads thousands separators in the minimum offer and leaves other text to the schema", () => {
+  it("reads only unambiguous thousands grouping in the minimum offer and never guesses a separator", () => {
+    for (const [text, amount] of [
+      ["25000", 25_000],
+      ["25,000", 25_000],
+      ["25.000", 25_000],
+      [" 25 000 ", 25_000],
+      ["1'250'000", 1_250_000],
+      ["-5", -5],
+    ] as const) {
+      expect(readAmount(text), text).toBe(amount);
+    }
+    expect(readAmount("")).toBeUndefined();
     const form = toForm(defaultConfig(), COLORS);
-    expect(fromForm({ ...form, minOffer: "25,000" }, 1).minOffer).toBe(25_000);
-    expect(fromForm({ ...form, minOffer: " 25 000 " }, 1).minOffer).toBe(25_000);
-    expect(fromForm({ ...form, minOffer: "" }, 1).minOffer).toBeUndefined();
-    const decimal = parseConfig(fromForm({ ...form, minOffer: "12.5" }, 1));
-    expect(decimal.ok ? null : errorsByField(decimal.errors).minOffer).toBe(
-      "Enter the minimum offer as a whole number, like 1000.",
-    );
+    for (const text of ["1,5", "12,50", "12.5", "1,000.50", "1,00,000", "1.000,000", "25 000,00"]) {
+      const parsed = parseConfig(fromForm({ ...form, minOffer: text }, 1));
+      expect(parsed.ok ? null : errorsByField(parsed.errors).minOffer, text).toBe(
+        "Enter the minimum offer as a whole number, like 1000.",
+      );
+    }
+  });
+
+  it("treats a stored config with one accent colour as what the form saves, so loading it changes nothing", () => {
+    const stored = { ...defaultConfig(), accent: { primary: "#aa0000" } };
+    const normalized = normalize(stored, COLORS);
+    expect(normalized.accent).toEqual({ primary: "#aa0000", contrast: "#ffffff" });
+    const fromTheForm = parseConfig(fromForm(toForm(stored, COLORS), CONFIG_VERSION));
+    expect(fromTheForm.ok && configKey(fromTheForm.config)).toBe(configKey(normalized));
+    expect(changedFields(normalized, normalize(stored, COLORS))).toEqual([]);
   });
 
   it("sends colours only when the override is on", () => {
@@ -31,6 +50,13 @@ describe("the editor form", () => {
     expect(fromForm(form, 1)).not.toHaveProperty("accent");
     const on = parseConfig(fromForm({ ...form, accentOn: true, accentPrimary: "#AA0000" }, 1));
     expect(on.ok && on.config.accent).toEqual({ primary: "#aa0000", contrast: "#ffffff" });
+  });
+
+  it("maps dotted schema paths to the input whose edit clears them", () => {
+    expect(fieldOf("seo.title")).toBe("seoTitle");
+    expect(fieldOf("accent.primary")).toBe("accentPrimary");
+    expect(fieldOf("minOffer")).toBe("minOffer");
+    expect(fieldOf("version")).toBe("form");
   });
 
   it("puts each schema error on the input it belongs to", () => {
@@ -137,9 +163,44 @@ describe("runPublish", () => {
     expect(calls.filter((call) => call === "start")).toHaveLength(1);
   });
 
+  it("calls a publish stalled when its progress does not change for several steps", async () => {
+    const { calls, deps } = fake(Array.from({ length: 10 }, () => running(2)));
+    const outcome = await runPublish(deps);
+    expect(outcome).toMatchObject({ status: "failed", reason: "stalled" });
+    expect(outcome.status === "failed" && outcome.message).not.toContain("connection");
+    expect(calls.filter((call) => call === "step 7")).toHaveLength(STALL_STEPS);
+  });
+
+  it("keeps going while the progress moves", async () => {
+    const { deps } = fake([running(9), running(8), running(7), running(6), running(5), running(4), done]);
+    expect(await runPublish(deps)).toEqual({ status: "done", message: "Published." });
+  });
+
   it("gives up after the step limit", async () => {
-    const { deps } = fake([running(1), running(1), running(1)]);
-    expect(await runPublish({ ...deps, maxSteps: 2 })).toMatchObject({ status: "failed", reason: "network" });
+    const { deps } = fake([running(3), running(2), running(1)]);
+    expect(await runPublish({ ...deps, maxSteps: 2 })).toMatchObject({ status: "failed", reason: "stalled" });
+  });
+
+  it("stops sending steps once the page has gone away", async () => {
+    const controller = new AbortController();
+    const { calls, deps } = fake([running(3), running(2), done]);
+    const outcome = await runPublish({
+      ...deps,
+      signal: controller.signal,
+      onStep: (result) => {
+        calls.push(`seen ${result.status}`);
+        controller.abort();
+      },
+    });
+    expect(outcome).toEqual({ status: "stopped" });
+    expect(calls).toEqual(["start", "step 7", "seen running"]);
+  });
+
+  it("knows when a revert has already replaced the draft", () => {
+    expect(revertWroteDraft({ ok: true, deploymentId: 1 })).toBe(true);
+    expect(revertWroteDraft({ ok: false, reason: "unexpected", message: "x", deploymentId: 1 })).toBe(true);
+    expect(revertWroteDraft({ ok: false, reason: "busy", message: "x", deploymentId: 1 })).toBe(false);
+    expect(revertWroteDraft({ ok: false, reason: "invalid", message: "x" })).toBe(false);
   });
 
   it("describes the progress in words", () => {
@@ -164,8 +225,22 @@ describe("waitUntilFree", () => {
       },
       signal: new AbortController().signal,
     });
-    expect(free).toBe(true);
+    expect(free).toBe("free");
     expect(sleeps).toEqual([2000, 2000]);
+  });
+
+  it("gives up when polls keep failing, as with an expired session", async () => {
+    let reads = 0;
+    const ended = await waitUntilFree({
+      read: async () => {
+        reads += 1;
+        throw new Error("401");
+      },
+      sleep: async () => {},
+      signal: new AbortController().signal,
+    });
+    expect(ended).toBe("unreachable");
+    expect(reads).toBe(3);
   });
 
   it("stops when aborted", async () => {
@@ -173,6 +248,6 @@ describe("waitUntilFree", () => {
     controller.abort();
     expect(
       await waitUntilFree({ read: async () => ({ holder: 1 }), sleep: async () => {}, signal: controller.signal }),
-    ).toBe(false);
+    ).toBe("aborted");
   });
 });

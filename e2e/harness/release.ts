@@ -15,7 +15,13 @@ export interface ReleaseFiles {
  */
 export async function startReleaseFiles(root: string): Promise<ReleaseFiles> {
   const server = createServer((incoming, outgoing) => {
-    const path = decodeURIComponent(new URL(incoming.url ?? "/", "http://release").pathname);
+    let path: string;
+    try {
+      path = decodeURIComponent(new URL(incoming.url ?? "/", "http://release").pathname);
+    } catch {
+      outgoing.writeHead(400).end();
+      return;
+    }
     const file = resolve(root, `.${path}`);
     if (relative(root, file).startsWith("..")) {
       outgoing.writeHead(404).end();

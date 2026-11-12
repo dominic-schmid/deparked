@@ -3,30 +3,27 @@ import { type Db, insertDomain, publishConfig, saveDraft } from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
 import { catalog } from "@deparked/templates/catalog";
 import { beforeEach, describe, expect, it } from "vitest";
-import { loadEditor, PREVIEW_SITEKEY, renderPreview } from "./editor";
+import { loadEditor, PREVIEW_SITEKEY, parseOrigin, renderPreview } from "./editor";
 
 const HOST = "a.example";
 
 describe("renderPreview", () => {
+  const ORIGIN = "https://a.example";
+
   it("renders the posted draft with the domain filled in, inert and without a real sitekey", () => {
-    const result = renderPreview({ catalog }, HOST, { ...defaultConfig(), headline: "Buy {domain} today" }, null);
+    const result = renderPreview({ catalog }, HOST, { ...defaultConfig(), headline: "Buy {domain} today" }, ORIGIN);
     if (!result.ok) throw new Error("expected a page");
     expect(result.html).toContain("Buy a.example today");
     expect(result.html).toMatch(/^<!doctype html><html[^>]*><head><meta http-equiv="Content-Security-Policy"/);
-    expect(result.html).toContain("script-src 'none'");
-    expect(result.html).toContain("form-action 'none'");
+    expect(result.html).toContain(
+      "default-src 'none'; img-src https://a.example data:; font-src https://a.example; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+    );
     expect(result.html).toContain(PREVIEW_SITEKEY);
     expect(result.html).not.toContain("<base");
   });
 
-  it("points the catalog at the edited domain when the admin does not serve it", () => {
-    const result = renderPreview({ catalog }, HOST, defaultConfig(), "https://a.example/");
-    if (!result.ok) throw new Error("expected a page");
-    expect(result.html).toContain('<base href="https://a.example/">');
-  });
-
   it("returns the field errors for an invalid draft", () => {
-    const result = renderPreview({ catalog }, HOST, { ...defaultConfig(), headline: "", minOffer: -1 }, null);
+    const result = renderPreview({ catalog }, HOST, { ...defaultConfig(), headline: "", minOffer: -1 }, ORIGIN);
     expect(result).toEqual({
       ok: false,
       errors: { headline: "Add a headline.", minOffer: "The minimum offer can't be negative." },
@@ -34,10 +31,18 @@ describe("renderPreview", () => {
   });
 
   it("refuses something that is not a config", () => {
-    expect(renderPreview({ catalog }, HOST, "<script>", null)).toEqual({
+    expect(renderPreview({ catalog }, HOST, "<script>", ORIGIN)).toEqual({
       ok: false,
       errors: { form: "This config can't be read." },
     });
+  });
+
+  it("accepts only a bare http(s) origin for the policy", () => {
+    expect(parseOrigin("https://a.example")).toBe("https://a.example");
+    expect(parseOrigin("http://127.0.0.1:8787")).toBe("http://127.0.0.1:8787");
+    expect(parseOrigin("https://a.example/")).toBeNull();
+    expect(parseOrigin("https://a.example; script-src *")).toBeNull();
+    expect(parseOrigin("javascript:alert(1)")).toBeNull();
   });
 });
 

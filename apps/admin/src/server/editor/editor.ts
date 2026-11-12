@@ -17,28 +17,49 @@ export const PREVIEW_SITEKEY = "1x00000000000000000000AA";
 /** The preview re-renders while the owner types: entrance animations would replay on every change. */
 const PREVIEW_STYLE = "<style>*,::before,::after{animation-delay:0s!important;animation-duration:0s!important}</style>";
 
-/** Belt and braces next to the iframe's empty `sandbox`: the preview runs no script and posts no form. */
-const PREVIEW_CSP = "script-src 'none'; form-action 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'";
+/**
+ * The page's own policy, next to the iframe's empty `sandbox`: no script, no form, no requests but the catalog's
+ * images and fonts from `origin`. The srcdoc document also inherits the admin page's policy.
+ */
+function previewPolicy(origin: string): string {
+  return [
+    "default-src 'none'",
+    `img-src ${origin} data:`,
+    `font-src ${origin}`,
+    "style-src 'unsafe-inline'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+}
 
 export type PreviewResult = { ok: true; html: string } | { ok: false; errors: ConfigErrors };
 
 /**
- * The lander for an unsaved draft, exactly as `render` publishes it, made inert for an iframe. `assetBase` is the
- * origin that serves `/catalog/*`: null when the admin is opened on a managed domain, which serves it itself.
- * Never writes anything.
+ * The lander for an unsaved draft, exactly as `render` publishes it, made inert for an iframe. `origin` is the
+ * admin page's origin, which serves `/catalog/*` (a managed domain through the pages Worker, the admin's own
+ * address from its own assets). Never writes anything.
  */
 export function renderPreview(
   input: { catalog: Catalog },
   host: string,
   config: unknown,
-  assetBase: string | null,
+  origin: string,
 ): PreviewResult {
   const parsed = parseConfig(config);
   if (!parsed.ok) return parsed;
   const html = render(parsed.config, host, { catalog: input.catalog, sitekey: PREVIEW_SITEKEY })["index.html"];
-  const base = assetBase === null ? "" : `<base href="${escapeAttribute(assetBase)}">`;
-  const head = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">${base}`;
+  const head = `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(previewPolicy(origin))}">`;
   return { ok: true, html: html.replace("<head>", `<head>${head}`).replace("</head>", `${PREVIEW_STYLE}</head>`) };
+}
+
+/** `value` when it is exactly an http(s) origin (`https://example.com`, `http://localhost:5173`), else null. */
+export function parseOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.origin === value ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function escapeAttribute(value: string): string {

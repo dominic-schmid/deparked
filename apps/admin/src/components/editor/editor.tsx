@@ -19,10 +19,20 @@ import { getEditor, getEditorPublishState, previewDraft } from "../../server/edi
 import { revertTo, saveDraft, startPublish, stepPublish } from "../../server/publish/functions";
 import type { StartResult } from "../../server/publish/pipeline";
 import { EditorFields } from "./fields";
-import { changedFields, configKey, type EditorForm, errorsByField, type FormField, fromForm, toForm } from "./form";
+import {
+  changedFields,
+  configKey,
+  type EditorForm,
+  errorsByField,
+  type FormField,
+  fieldOf,
+  fromForm,
+  normalize,
+  toForm,
+} from "./form";
 import { PreviewFrame } from "./preview";
 import { HistoryList, PublishBar, type PublishView, type SaveStatus } from "./publish-bar";
-import { progressText, runPublish, waitUntilFree } from "./publish-loop";
+import { type PublishOutcome, progressText, revertWroteDraft, runPublish, waitUntilFree } from "./publish-loop";
 
 const SAVE_DELAY_MS = 800;
 const PREVIEW_DELAY_MS = 300;
@@ -37,6 +47,8 @@ function usePreview(host: string, config: Config | null) {
   const preview = useServerFn(previewDraft);
   const [html, setHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  /** The server refused the last config (it found a problem the form did not): the page shown is older. */
+  const [refused, setRefused] = useState(false);
   const sequence = useRef(0);
   // An invalid form keeps the last valid config, so a preview already on its way is not cancelled.
   const lastValid = useRef<Config | null>(config);
@@ -52,9 +64,11 @@ function usePreview(host: string, config: Config | null) {
     setLoading(true);
     const timer = setTimeout(
       () => {
-        preview({ data: { host, config } })
+        preview({ data: { host, config, origin: window.location.origin } })
           .then((result) => {
-            if (ticket === sequence.current && result.ok) setHtml(result.html);
+            if (ticket !== sequence.current) return;
+            setRefused(!result.ok);
+            if (result.ok) setHtml(result.html);
           })
           .catch(() => undefined)
           .finally(() => {
@@ -66,7 +80,12 @@ function usePreview(host: string, config: Config | null) {
     return () => clearTimeout(timer);
   }, [key, host]);
 
-  return { html, loading };
+  return { html, loading, refused };
+}
+
+/** What the stored draft looks like once the form has read it: the state that counts as saved. */
+function savedKeyOf(data: EditorData): string | null {
+  return data.draftStored ? configKey(normalize(data.draft, colorsOf(data, data.draft.variant))) : null;
 }
 
 export function Editor(props: { data: EditorData }) {
@@ -81,9 +100,13 @@ export function Editor(props: { data: EditorData }) {
   const readEditor = useServerFn(getEditor);
 
   const [form, setForm] = useState<EditorForm>(() => toForm(data.draft, colorsOf(data, data.draft.variant)));
+  const live = useMemo(
+    () => (data.live === null ? null : normalize(data.live, colorsOf(data, data.live.variant))),
+    [data],
+  );
   const [touched, setTouched] = useState<ReadonlySet<FormField>>(() => new Set());
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
-  const [savedKey, setSavedKey] = useState<string | null>(data.draftStored ? configKey(data.draft) : null);
+  const [savedKey, setSavedKey] = useState<string | null>(() => savedKeyOf(data));
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const [inFlight, setInFlight] = useState(false);
   const [view, setView] = useState<PublishView>({ phase: "idle" });
@@ -96,10 +119,12 @@ export function Editor(props: { data: EditorData }) {
   const key = config === null ? null : configKey(config);
   const errors = parsed.ok ? errorsByField(serverErrors) : errorsByField(parsed.errors);
   const invalidCount = Object.keys(errors).length;
-  const shown = useMemo(
-    () => new Set([...touched, ...(Object.keys(serverErrors) as FormField[])]),
-    [touched, serverErrors],
-  );
+  const shown = useMemo(() => {
+    const fields = Object.keys(serverErrors)
+      .map(fieldOf)
+      .filter((field): field is FormField => field !== "form");
+    return new Set([...touched, ...fields]);
+  }, [touched, serverErrors]);
 
   const status: SaveStatus =
     config === null
@@ -193,26 +218,49 @@ export function Editor(props: { data: EditorData }) {
     });
     setTouched((previous) => (previous.has(field) ? previous : new Set([...previous, field])));
     setEdited(true);
-    if (field in serverErrors) setServerErrors({});
+    setServerErrors((previous) => {
+      const kept = Object.entries(previous).filter(([path]) => fieldOf(path) !== field);
+      return kept.length === Object.keys(previous).length ? previous : Object.fromEntries(kept);
+    });
   }
 
   const preview = usePreview(host, config);
 
-  async function drive(begin: () => Promise<StartResult>, resume?: number) {
+  const unmounted = useRef(new AbortController());
+  useEffect(() => {
+    const controller = new AbortController();
+    unmounted.current = controller;
+    return () => controller.abort();
+  }, []);
+
+  /** Runs a publish to its end. `after` runs after every attempt, Retry included. */
+  async function drive(
+    begin: () => Promise<StartResult>,
+    options: { resume?: number; after?: () => Promise<void> } = {},
+  ): Promise<void> {
+    const { resume, after } = options;
     setView({ phase: "running", text: resume === undefined ? "Starting the publish…" : "Continuing the publish…" });
-    const outcome = await runPublish({
+    const outcome: PublishOutcome = await runPublish({
       start: begin,
       step: (deploymentId) => step({ data: { deploymentId } }),
       onStep: (result) => setView({ phase: "running", text: progressText(result) }),
+      signal: unmounted.current.signal,
       ...(resume === undefined ? {} : { resume }),
     });
+    if (outcome.status === "stopped") return;
     const retry =
       outcome.status === "failed" && outcome.reason !== "busy" && outcome.reason !== "invalid"
-        ? () => void drive(begin, outcome.reason === "network" ? outcome.deploymentId : undefined)
+        ? () =>
+            void drive(begin, {
+              ...(outcome.reason === "network" && outcome.deploymentId !== undefined
+                ? { resume: outcome.deploymentId }
+                : {}),
+              ...(after ? { after } : {}),
+            })
         : null;
+    if (after) await after();
     setView({ phase: "ended", outcome, retry });
     await router.invalidate();
-    return outcome;
   }
 
   async function publish() {
@@ -242,25 +290,28 @@ export function Editor(props: { data: EditorData }) {
     const controller = new AbortController();
     following.current = controller;
     setView({ phase: "following", text: "Waiting for the other publish to finish…" });
-    await waitUntilFree({
+    const ended = await waitUntilFree({
       read: () => readState({ data: { host } }),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       signal: controller.signal,
     });
-    if (controller.signal.aborted) return;
-    setView({ phase: "idle" });
+    if (ended === "aborted") return;
+    setView(
+      ended === "free"
+        ? { phase: "notice", text: "The other publish has finished. Click Publish to publish your draft." }
+        : {
+            phase: "notice",
+            text: "The admin stopped answering while waiting. Reload the page (you may have to log in again).",
+          },
+    );
     await router.invalidate();
   }
 
-  async function revertToItem(item: HistoryItem) {
-    if (pendingTimer.current) clearTimeout(pendingTimer.current);
-    while (saving.current) await saving.current;
-    const outcome = await drive(() => revert({ data: { historyId: item.id } }));
-    // The revert replaced the stored draft (unless it never started): the form takes the stored one over.
-    if (outcome.status === "failed" && outcome.reason === "busy") return;
+  /** The form takes over the stored draft, after a revert replaced it. Unsaved edits were saved before. */
+  async function reloadDraft() {
     try {
       const fresh = await readEditor({ data: { host } });
-      const next = fresh.draftStored ? configKey(fresh.draft) : null;
+      const next = savedKeyOf(fresh);
       savedRef.current = next;
       setSavedKey(next);
       setForm(toForm(fresh.draft, colorsOf(fresh, fresh.draft.variant)));
@@ -272,6 +323,23 @@ export function Editor(props: { data: EditorData }) {
     }
   }
 
+  async function revertToItem(item: HistoryItem) {
+    if (pendingTimer.current) clearTimeout(pendingTimer.current);
+    setView({ phase: "running", text: "Saving the draft…" });
+    while (saving.current) await saving.current;
+    // Pending edits are saved first: the revert replaces the stored draft, never one that only lived in the form.
+    if (config !== null && edited) await persist(config);
+    let wrote = false;
+    await drive(
+      async () => {
+        const result = await revert({ data: { historyId: item.id } });
+        wrote ||= revertWroteDraft(result);
+        return result;
+      },
+      { after: async () => (wrote ? reloadDraft() : undefined) },
+    );
+  }
+
   function resetToLive() {
     if (data.live === null) return;
     const next = toForm(data.live, colorsOf(data, data.live.variant));
@@ -280,7 +348,7 @@ export function Editor(props: { data: EditorData }) {
     setServerErrors({});
   }
 
-  const changes = config === null ? null : changedFields(config, data.live);
+  const changes = config === null ? null : changedFields(config, live);
   const canPublish = changes !== null && (changes.length > 0 || data.publish.outOfSync) && !publishing;
 
   return (
@@ -288,11 +356,6 @@ export function Editor(props: { data: EditorData }) {
       {data.notice ? (
         <Alert>
           <AlertDescription>{data.notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {errors.form ? (
-        <Alert variant="destructive">
-          <AlertDescription>{errors.form}</AlertDescription>
         </Alert>
       ) : null}
       <PublishBar
@@ -303,7 +366,7 @@ export function Editor(props: { data: EditorData }) {
         hasLive={data.live !== null}
         canPublish={canPublish}
         view={view}
-        save={{ status, invalidCount, onRetry: () => config && void persist(config) }}
+        save={{ status, invalidCount, problem: errors.form, onRetry: () => config && void persist(config) }}
         onPublish={() => void publish()}
         onFollow={() => void follow()}
         onResetToLive={resetToLive}
@@ -327,6 +390,7 @@ export function Editor(props: { data: EditorData }) {
             noValidate
           >
             <EditorFields
+              disabled={publishing}
               form={form}
               errors={errors}
               shown={shown}
@@ -344,7 +408,7 @@ export function Editor(props: { data: EditorData }) {
           <PreviewFrame
             html={preview.html}
             host={host}
-            stale={config === null && preview.html !== null}
+            stale={(config === null || preview.refused) && preview.html !== null}
             loading={preview.loading}
           />
         </TabsContent>
@@ -364,7 +428,7 @@ export function Editor(props: { data: EditorData }) {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {view.phase === "running"
-                ? "It stops if you leave this page now, and the next publish can only start in a few minutes."
+                ? "A publish only moves forward while this page is open. If you leave, it stops after the step running now and nothing new goes live; the next publish can start once its lock runs out, within five minutes."
                 : config === null
                   ? "Some fields have problems, so your latest changes are not saved. They are lost if you leave."
                   : "Your latest changes could not be saved. They are lost if you leave."}

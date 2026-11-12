@@ -1,14 +1,61 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { extname, relative, resolve } from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+const CATALOG = resolve(import.meta.dirname, "../sites/public/catalog");
+const TYPES: Record<string, string> = {
+  ".avif": "image/avif",
+  ".webp": "image/webp",
+  ".woff2": "font/woff2",
+  ".json": "application/json",
+};
+
+/**
+ * The lander catalog as the admin's own static files at `/catalog/*`, for the editor's preview: its srcdoc frame
+ * inherits the admin page's policy (`img-src 'self'`, `font-src 'self'`), so the images and fonts must come from
+ * the admin's origin. On a managed domain `/catalog/*` is the pages Worker's copy of the same files; on the
+ * admin's own address it is this one. The preview is a sandboxed (opaque) origin, so fonts need CORS.
+ */
+function catalogAssets(): Plugin {
+  const files = readdirSync(CATALOG, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => resolve(entry.parentPath, entry.name));
+  return {
+    name: "deparked-catalog-assets",
+    configureServer(server) {
+      server.middlewares.use("/catalog", (request, response, next) => {
+        const file = resolve(CATALOG, `.${decodeURIComponent((request.url ?? "/").split("?")[0] ?? "/")}`);
+        if (!files.includes(file)) return next();
+        response.setHeader("Content-Type", TYPES[extname(file)] ?? "application/octet-stream");
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.end(readFileSync(file));
+      });
+    },
+    generateBundle() {
+      if (this.environment.name !== "client") return;
+      for (const file of files) {
+        this.emitFile({ type: "asset", fileName: `catalog/${relative(CATALOG, file)}`, source: readFileSync(file) });
+      }
+      this.emitFile({
+        type: "asset",
+        fileName: "_headers",
+        source:
+          "/catalog/fonts/*\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=31536000, immutable\n",
+      });
+    },
+  };
+}
 
 // A managed domain routes only `<host>/admin*` and `<host>/api/*` to this Worker (everything else is the lander),
 // so every URL the admin's pages load must sit under `/admin`: its built files and its server functions.
 export default defineConfig({
   build: { assetsDir: "admin/_assets" },
   plugins: [
+    catalogAssets(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tailwindcss(),
     // The global request middleware checks Origin on every state-changing request, server functions included.
