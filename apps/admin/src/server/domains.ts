@@ -4,13 +4,18 @@ import {
   getConfig,
   getDomain,
   listDomains,
+  listLedger,
   listNotifyAddresses,
   listPublishedAt,
   listSiteFilesByHost,
+  type NotifyAddress,
   offerStatsForHosts,
 } from "@deparked/db";
 import { z } from "zod";
 import { rangeStart } from "./analytics";
+import { type NoSiteReason, noSiteReason } from "./analytics-shape";
+import { type OfferMail, offerMail } from "./notify-default";
+import { type PendingChange, pendingChange } from "./pending-change";
 
 export const hostSchema = z.string().trim().toLowerCase().min(1).max(253);
 
@@ -27,9 +32,12 @@ export function displayStatus(
   return domain.notifyEmail !== null && verifiedEmails.has(domain.notifyEmail) ? "live" : "email_pending";
 }
 
-async function verifiedEmails(db: Db): Promise<Set<string>> {
-  const addresses = await listNotifyAddresses(db);
+function verifiedOf(addresses: NotifyAddress[]): Set<string> {
   return new Set(addresses.filter((address) => address.verifiedAt !== null).map((address) => address.email));
+}
+
+async function verifiedEmails(db: Db): Promise<Set<string>> {
+  return verifiedOf(await listNotifyAddresses(db));
 }
 
 export type DomainSummary = { host: string; status: DisplayStatus };
@@ -41,6 +49,10 @@ export async function loadDomainSummaries(db: Db): Promise<DomainSummary[]> {
 }
 
 export type DomainOverview = DomainSummary & {
+  /** Whether its offers are emailed, and if not why. */
+  mail: OfferMail;
+  /** Why it has no Web Analytics site; null when it has one. */
+  noSite: NoSiteReason | null;
   offers: number;
   newOffers: number;
   /** Offers over the 30 days the visits cover: the conversion is these over the visits. */
@@ -51,7 +63,12 @@ export type DomainOverview = DomainSummary & {
 };
 
 export async function loadOverview(db: Db, now: number): Promise<DomainOverview[]> {
-  const [domains, verified, published] = await Promise.all([listDomains(db), verifiedEmails(db), listPublishedAt(db)]);
+  const [domains, addresses, published] = await Promise.all([
+    listDomains(db),
+    listNotifyAddresses(db),
+    listPublishedAt(db),
+  ]);
+  const verified = verifiedOf(addresses);
   const stats = await offerStatsForHosts(
     db,
     domains.map((domain) => domain.host),
@@ -64,6 +81,8 @@ export async function loadOverview(db: Db, now: number): Promise<DomainOverview[
     return {
       host: domain.host,
       status: displayStatus(domain, verified),
+      mail: offerMail(domain.notifyEmail, addresses),
+      noSite: domain.analyticsSiteTag === null ? noSiteReason(domain) : null,
       offers: stat?.total ?? 0,
       newOffers: stat?.newCount ?? 0,
       recentOffers: stat?.recentCount ?? 0,
@@ -79,17 +98,22 @@ export type DomainDetail = DomainSummary & {
   hasPages: boolean;
   notifyEmail: string | null;
   notifyVerified: boolean;
+  mail: OfferMail;
+  /** A change to the domain that stopped half-way, or null. */
+  pending: PendingChange | null;
 };
 
 /** One managed domain. Null for a host that is not managed, or was removed. */
 export async function loadDomain(db: Db, host: string): Promise<DomainDetail | null> {
   const domain = await getDomain(db, host);
   if (domain === undefined || domain.status === "removed") return null;
-  const [verified, config, pages] = await Promise.all([
-    verifiedEmails(db),
+  const [addresses, config, pages, ledger] = await Promise.all([
+    listNotifyAddresses(db),
     getConfig(db, host),
     listSiteFilesByHost(db, host),
+    listLedger(db, { host }),
   ]);
+  const verified = verifiedOf(addresses);
   return {
     host: domain.host,
     status: displayStatus(domain, verified),
@@ -97,5 +121,7 @@ export async function loadDomain(db: Db, host: string): Promise<DomainDetail | n
     hasPages: pages.length > 0,
     notifyEmail: domain.notifyEmail,
     notifyVerified: domain.notifyEmail !== null && verified.has(domain.notifyEmail),
+    mail: offerMail(domain.notifyEmail, addresses),
+    pending: pendingChange({ ...domain, ledger, hasPages: pages.length > 0 }),
   };
 }

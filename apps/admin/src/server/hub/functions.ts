@@ -1,8 +1,12 @@
+import { env } from "cloudflare:workers";
+import { createDb } from "@deparked/db";
 import { HostingError } from "@deparked/hosting";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { stateSchema } from "../domain-setup/steps";
 import { requireSession } from "../require-session";
+import { loadUninstallFacts, uninstallWaiverSchema } from "../uninstall";
+import { uninstallCopyGate } from "../uninstall-gate";
 import { hub, tokenCache } from "./connect";
 import { tokenSchema, uninstallConfirmationSchema } from "./hub";
 
@@ -47,10 +51,17 @@ export const describeUninstall = createServerFn({ method: "GET" }).handler(async
   return guarded(async () => (await hub()).describeUninstall());
 });
 
-/** One step of Uninstall per request. The typed confirmation travels with each, so no step runs without it. */
+/**
+ * One step of Uninstall per request. The typed confirmation travels with each, so no step runs without it; the
+ * first step also needs a copy of the offers, or the owner's word that they need none.
+ */
 export const uninstallStep = createServerFn({ method: "POST" })
-  .validator(z.object({ confirmation: uninstallConfirmationSchema, state: stateSchema }))
+  .validator(z.object({ confirmation: uninstallConfirmationSchema, waived: uninstallWaiverSchema, state: stateSchema }))
   .handler(async ({ data }) => {
     await requireSession();
+    if (data.state.next === 0) {
+      const gate = uninstallCopyGate(await loadUninstallFacts(createDb(env.DB)), data.waived);
+      if (!gate.ok) return { ok: false as const, credentialsRejected: false, message: gate.reason };
+    }
     return guarded(async () => (await hub()).uninstallStep(data.state));
   });

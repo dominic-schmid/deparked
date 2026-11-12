@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { UntilHydrated } from "../../components/hydrated";
 import { PageError, PagePending } from "../../components/page";
 import { AppShell } from "../../components/shell";
 import { getShell } from "../../server/domains.functions";
@@ -19,8 +20,10 @@ export const Route = createFileRoute("/admin/_shell")({
 
 function Shell() {
   return (
-    <AppShell data={Route.useLoaderData()}>
-      <Outlet />
-    </AppShell>
+    <UntilHydrated>
+      <AppShell data={Route.useLoaderData()}>
+        <Outlet />
+      </AppShell>
+    </UntilHydrated>
   );
 }

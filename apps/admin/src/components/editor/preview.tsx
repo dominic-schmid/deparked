@@ -1,6 +1,7 @@
 import { cn } from "@deparked/ui/lib/utils";
 import { Monitor, Smartphone, Tablet } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { inertPreview } from "./preview-html";
 
 const DEVICES = [
   { id: "phone", label: "Phone", width: 390, Icon: Smartphone },
@@ -12,7 +13,7 @@ type DeviceId = (typeof DEVICES)[number]["id"];
 
 /**
  * The lander as visitors get it, in a sandbox with no permissions: no script runs, no form is sent, nothing reaches
- * the admin's origin. Laid out at the device's width and scaled down to fit.
+ * the admin's origin, and links stay put (`inertPreview`). Laid out at the device's width and scaled down to fit.
  */
 export function PreviewFrame(props: { html: string | null; host: string; stale: boolean; loading: boolean }) {
   const [device, setDevice] = useState<DeviceId>("desktop");
@@ -29,6 +30,7 @@ export function PreviewFrame(props: { html: string | null; host: string; stale: 
     return () => observer.disconnect();
   }, []);
 
+  const srcDoc = useMemo(() => (props.html === null ? null : inertPreview(props.html)), [props.html]);
   const width = DEVICES.find((candidate) => candidate.id === device)?.width ?? 1280;
   const scale = size.width === 0 ? 1 : Math.min(1, size.width / width);
 
@@ -59,7 +61,7 @@ export function PreviewFrame(props: { html: string | null; host: string; stale: 
         </p>
       </div>
       <div ref={box} className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted">
-        {props.html === null ? (
+        {srcDoc === null ? (
           <p className="p-4 text-sm text-muted-foreground">
             {props.loading ? "Loading the preview…" : "No preview yet."}
           </p>
@@ -68,7 +70,7 @@ export function PreviewFrame(props: { html: string | null; host: string; stale: 
             title={`Preview of ${props.host}`}
             sandbox=""
             referrerPolicy="no-referrer"
-            srcDoc={props.html}
+            srcDoc={srcDoc}
             className={cn("absolute top-0 border-0 bg-white", props.stale && "opacity-60")}
             style={{
               width,

@@ -23,6 +23,7 @@ import {
   backgroundForVariant,
   changedFields,
   configKey,
+  describeChanges,
   type EditorForm,
   errorsByField,
   type FormField,
@@ -288,6 +289,14 @@ export function Editor(props: { data: EditorData }) {
   }
 
   const following = useRef<AbortController | null>(null);
+  const publishButton = useRef<HTMLButtonElement>(null);
+  /** Set when the wait for another publish ends: Publish takes focus once it can be pressed again. */
+  const focusPublish = useRef(false);
+  useEffect(() => {
+    if (!focusPublish.current || view.phase !== "notice") return;
+    focusPublish.current = false;
+    publishButton.current?.focus();
+  }, [view]);
   useEffect(() => () => following.current?.abort(), []);
 
   async function follow() {
@@ -301,9 +310,13 @@ export function Editor(props: { data: EditorData }) {
       signal: controller.signal,
     });
     if (ended === "aborted") return;
+    focusPublish.current = ended === "free";
     setView(
       ended === "free"
-        ? { phase: "notice", text: "The other publish has finished. Click Publish to publish your draft." }
+        ? {
+            phase: "notice",
+            text: "The other publish has finished. Your draft is not published yet: press Publish when you are ready.",
+          }
         : {
             phase: "notice",
             text: "The admin stopped answering while waiting. Reload the page (you may have to log in again).",
@@ -354,6 +367,11 @@ export function Editor(props: { data: EditorData }) {
   }
 
   const changes = config === null ? null : changedFields(config, live);
+  const diff = useMemo(() => {
+    if (config === null || live === null) return null;
+    const label = new Map(data.backgrounds.map((background) => [background.id, background.label]));
+    return describeChanges(config, live, { background: (id) => label.get(id) ?? id });
+  }, [config, live, data.backgrounds]);
   const canPublish = changes !== null && (changes.length > 0 || data.publish.outOfSync) && !publishing;
 
   return (
@@ -368,12 +386,14 @@ export function Editor(props: { data: EditorData }) {
         state={data.publish}
         now={data.now}
         changes={changes}
+        diff={diff}
         hasLive={data.live !== null}
         canPublish={canPublish}
         view={view}
         save={{ status, invalidCount, problem: errors.form, onRetry: () => config && void persist(config) }}
         onPublish={() => void publish()}
         onFollow={() => void follow()}
+        publishRef={publishButton}
         onResetToLive={resetToLive}
       />
       <Tabs

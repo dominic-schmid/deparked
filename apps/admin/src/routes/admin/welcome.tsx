@@ -17,6 +17,7 @@ import { PageError } from "../../components/page";
 import { CredentialsRejected } from "../../components/setup-runner";
 import type { NotifyResult } from "../../server/notify";
 import { addNotify, checkNotify, resendNotify } from "../../server/notify.functions";
+import { defaultNotifyAddress } from "../../server/notify-default";
 import { getOnboarding } from "../../server/onboarding.functions";
 
 // The first-run wizard after the password (decision doc section 13, steps 5 and 6). Which screen shows is derived
@@ -62,7 +63,7 @@ function WelcomePage() {
       <Screen key={data.screen}>
         {data.screen === "notify" ? <NotifyScreen /> : null}
         {data.screen === "inbox" ? <InboxScreen addresses={data.addresses} /> : null}
-        {data.screen === "domain" ? <DomainScreen /> : null}
+        {data.screen === "domain" ? <DomainScreen addresses={data.addresses} /> : null}
       </Screen>
     </OnboardingShell>
   );
@@ -207,10 +208,10 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
   const navigate = useNavigate();
   const resend = useServerFn(resendNotify);
   const check = useServerFn(checkNotify);
-  const [busy, setBusy] = useState<"check" | "resend" | null>(null);
+  /** "check", or the address whose mail is being sent again. */
+  const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<NotifyResult | null>(null);
   const pending = props.addresses.filter((address) => address.verifiedAt === null);
-  const first = pending[0] ?? props.addresses[0];
   const next = useRef<HTMLButtonElement>(null);
   const wasPending = useRef(pending.length > 0);
   const [verifiedNote, setVerifiedNote] = useState(false);
@@ -224,7 +225,7 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
     wasPending.current = pending.length > 0;
   }, [pending.length]);
 
-  async function run(kind: "check" | "resend", action: () => Promise<NotifyResult>) {
+  async function run(kind: string, action: () => Promise<NotifyResult>) {
     if (busy !== null) return;
     setBusy(kind);
     setResult(null);
@@ -267,25 +268,31 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
                   {address.email}
                 </span>
               </span>
-              <Badge variant={verified ? "secondary" : "outline"}>{verified ? "Verified" : "Pending"}</Badge>
+              <span className="flex items-center gap-2">
+                <Badge variant={verified ? "secondary" : "outline"}>{verified ? "Verified" : "Pending"}</Badge>
+                {verified ? null : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-disabled={busy !== null}
+                    onClick={() => void run(address.email, () => resend({ data: { email: address.email } }))}
+                  >
+                    {busy === address.email ? <Spinner /> : null}
+                    {busy === address.email ? "Sending…" : "Send it again"}
+                    <span className="sr-only"> to {address.email}</span>
+                  </Button>
+                )}
+              </span>
             </li>
           );
         })}
       </ul>
 
-      {pending.length > 0 && first !== undefined ? (
+      {pending.length > 0 ? (
         <div className="mt-4 flex max-w-xl flex-wrap gap-3">
           <Button variant="outline" aria-disabled={busy !== null} onClick={() => void run("check", () => check())}>
             {busy === "check" ? <Spinner /> : <RotateCw aria-hidden />}
             {busy === "check" ? "Checking…" : "I clicked the link"}
-          </Button>
-          <Button
-            variant="ghost"
-            aria-disabled={busy !== null}
-            onClick={() => void run("resend", () => resend({ data: { email: first.email } }))}
-          >
-            {busy === "resend" ? <Spinner /> : null}
-            {busy === "resend" ? "Sending…" : "Send it again"}
           </Button>
         </div>
       ) : null}
@@ -293,7 +300,7 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
         <p className="sr-only">
           {busy === "check"
             ? "Checking…"
-            : busy === "resend"
+            : busy !== null
               ? "Sending…"
               : verifiedNote
                 ? "Your address is verified."
@@ -334,7 +341,8 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
 }
 
 /** Step "Add your first domain, or skip": the zone picker of "+ Add domain"; a pick continues in that flow. */
-function DomainScreen() {
+function DomainScreen(props: { addresses: NotifyAddress[] }) {
+  const address = defaultNotifyAddress(props.addresses);
   return (
     <>
       <ScreenTitle eyebrow="Last step" title="Add your first domain">
@@ -349,6 +357,23 @@ function DomainScreen() {
           .
         </p>
       </ScreenTitle>
+      <p className="mb-6 flex max-w-2xl gap-3 rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+        <MailCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          {address === null ? (
+            "Its offers wait in the inbox until one of your addresses is verified. The first one verified gets them."
+          ) : (
+            <>
+              Offers for it go to{" "}
+              <span className="font-medium text-foreground" translate="no">
+                {address.email}
+              </span>
+              {address.verifiedAt === null ? ", once you have clicked the link in Cloudflare's email." : "."} You can
+              pick another address on the domain's settings later.
+            </>
+          )}
+        </span>
+      </p>
       <DomainPicker />
       <div className="mt-10 flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
         <Button asChild variant="ghost" className="self-start">

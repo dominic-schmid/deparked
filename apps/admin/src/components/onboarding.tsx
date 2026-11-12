@@ -1,6 +1,7 @@
 import { cn } from "@deparked/ui/lib/utils";
 import { Check, LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
+import { UntilHydrated } from "./hydrated";
 
 // The installer's onboarding frame (apps/install/src/ui/parts.tsx), continued here for the first-run screens: the
 // installer cannot share React code with the admin, so the two copies are kept alike by hand.
@@ -58,36 +59,38 @@ function Stages(props: { current: Stage }) {
 
 export function OnboardingShell(props: { stage: Stage; children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <a
-        href="#main"
-        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
-      >
-        Skip to the setup
-      </a>
-      <header className="border-b">
-        <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Wordmark />
-          <Stages current={props.stage} />
-        </div>
-      </header>
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-10 pb-16 sm:px-6 sm:pt-14">
-        {props.children}
-      </main>
-      <footer className="border-t">
-        <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-4 text-xs text-muted-foreground sm:px-6">
-          <span>Deparked runs in your Cloudflare account. No server of ours is involved.</span>
-          <form method="post" action="/admin/logout">
-            <button
-              type="submit"
-              className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
-              Log out
-            </button>
-          </form>
-        </div>
-      </footer>
-    </div>
+    <UntilHydrated>
+      <div className="flex min-h-dvh flex-col">
+        <a
+          href="#main"
+          className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+        >
+          Skip to the setup
+        </a>
+        <header className="border-b">
+          <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-4 px-4 sm:px-6">
+            <Wordmark />
+            <Stages current={props.stage} />
+          </div>
+        </header>
+        <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-10 pb-16 sm:px-6 sm:pt-14">
+          {props.children}
+        </main>
+        <footer className="border-t">
+          <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-4 text-xs text-muted-foreground sm:px-6">
+            <span>Deparked runs in your Cloudflare account. No server of ours is involved.</span>
+            <form method="post" action="/admin/logout">
+              <button
+                type="submit"
+                className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                Log out
+              </button>
+            </form>
+          </div>
+        </footer>
+      </div>
+    </UntilHydrated>
   );
 }
 

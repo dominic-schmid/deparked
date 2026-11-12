@@ -1,4 +1,5 @@
 import {
+  assignMissingNotifyEmail,
   type Db,
   deleteNotifyAddress,
   getDomain,
@@ -19,6 +20,7 @@ import {
   type HostingErrorCode,
 } from "@deparked/hosting";
 import { z } from "zod";
+import { defaultNotifyAddress } from "./notify-default";
 
 export const notifyEmailSchema = z.object({ email: z.string().trim().toLowerCase().pipe(z.email().max(254)) });
 
@@ -48,14 +50,28 @@ const MAIL_WINDOW_MS = 6 * 3_600_000;
 const ALL_MAILS_PER_WINDOW = 20;
 const ALL_MAIL_WINDOW_MS = 3_600_000;
 
-const TOO_MANY: NotifyResult = {
-  ok: false,
-  message: "Too many verification emails went to this address. Try again in a few hours.",
-};
-const TOO_MANY_ALL: NotifyResult = {
-  ok: false,
-  message: "Too many verification emails went out in the last hour. Try again in an hour.",
-};
+/** "in about 3 hours", "in about 40 minutes", "in a minute": when a window that started at `start` ends. */
+export function waitWords(start: number, windowMs: number, now: number): string {
+  const minutes = Math.max(1, Math.ceil((start + windowMs - now) / 60_000));
+  if (minutes === 1) return "in a minute";
+  if (minutes < 90) return `in about ${minutes} minutes`;
+  return `in about ${Math.round(minutes / 60)} hours`;
+}
+
+function tooMany(start: number, now: number): NotifyResult {
+  return {
+    ok: false,
+    message: `Too many verification emails went to this address: Deparked sends at most ${MAILS_PER_WINDOW} to one address in ${MAIL_WINDOW_MS / 3_600_000} hours, so it cannot be used to flood someone's inbox. You can send the next one ${waitWords(start, MAIL_WINDOW_MS, now)}.`,
+  };
+}
+
+function tooManyAll(start: number, now: number): NotifyResult {
+  return {
+    ok: false,
+    message: `Too many verification emails went out: Deparked sends at most ${ALL_MAILS_PER_WINDOW} an hour across all addresses. You can send the next one ${waitWords(start, ALL_MAIL_WINDOW_MS, now)}.`,
+  };
+}
+
 const REMOVED: NotifyResult = { ok: false, message: "That address is not on the list any more." };
 
 type Reservation = { allowed: true; giveBack: () => Promise<void> } | { allowed: false; result: NotifyResult };
@@ -76,7 +92,11 @@ async function reserveMail(db: Db, email: string, now: number): Promise<Reservat
   };
   if (allHit.count <= ALL_MAILS_PER_WINDOW && eachHit.count <= MAILS_PER_WINDOW) return { allowed: true, giveBack };
   await giveBack();
-  return { allowed: false, result: allHit.count > ALL_MAILS_PER_WINDOW ? TOO_MANY_ALL : TOO_MANY };
+  return {
+    allowed: false,
+    result:
+      allHit.count > ALL_MAILS_PER_WINDOW ? tooManyAll(allHit.windowStart, now) : tooMany(eachHit.windowStart, now),
+  };
 }
 
 export function failed(error: unknown): NotifyResult {
@@ -98,6 +118,17 @@ function sameEmail(a: string, b: string): boolean {
 
 export function loadNotifyAddresses(db: Db): Promise<NotifyAddress[]> {
   return listNotifyAddresses(db);
+}
+
+/**
+ * Gives every domain without a notify address the default one (`defaultNotifyAddress`), so offers never silently
+ * go nowhere. Run whenever an address or a domain appears, or an address is verified. Returns the hosts it changed.
+ */
+export async function fillMissingNotifyAddresses(db: Db, now: number): Promise<string[]> {
+  const address = defaultNotifyAddress(await listNotifyAddresses(db));
+  if (address === null) return [];
+  // A verified default also takes over from an unverified address that a domain got by default.
+  return assignMissingNotifyEmail(db, { email: address.email, replaceUnverified: address.verifiedAt !== null, now });
 }
 
 /** Has the host send its verification mail, then lists the address as pending. Adding it twice changes nothing. */
@@ -123,6 +154,7 @@ export async function addNotifyAddress(
     // A second request added it in the meantime: that one's row stands.
     if (!inserted) return { ok: true, message: `${input.email} is already on the list.` };
     if (verifiedAt === null) await updateNotifyAddress(db, { email: input.email, patch: { lastResentAt: input.now } });
+    await fillMissingNotifyAddresses(db, input.now);
     return {
       ok: true,
       message:
@@ -146,7 +178,10 @@ export async function resendNotifyAddress(
   if (row === undefined) return REMOVED;
   if (row.verifiedAt !== null) return { ok: true, message: `${row.email} is already verified.` };
   if (row.lastResentAt !== null && input.now - row.lastResentAt < RESEND_WAIT_MS) {
-    return { ok: false, message: "A verification email was sent a moment ago. Wait a minute before sending another." };
+    return {
+      ok: false,
+      message: `A verification email went to ${row.email} less than a minute ago, and it can take a minute to arrive. You can send another ${waitWords(row.lastResentAt, RESEND_WAIT_MS, input.now)}.`,
+    };
   }
   const mail = await reserveMail(db, row.email, input.now);
   if (!mail.allowed) return mail.result;
@@ -159,6 +194,7 @@ export async function resendNotifyAddress(
     });
     // Removed by another request while the mail went out.
     if (updated === undefined) return REMOVED;
+    if (verifiedAt !== null) await fillMissingNotifyAddresses(db, input.now);
     return {
       ok: true,
       message: verifiedAt === null ? `Verification email sent again to ${row.email}.` : `${row.email} is verified.`,
@@ -181,39 +217,53 @@ async function resendOrAdd(hosting: HostingAdapter, row: NotifyAddress): Promise
 }
 
 /**
- * Takes the address off the list. Refused while a domain sends its offers there. At the host only a pending
+ * Takes the address off the list. A verified address is refused while a domain sends its offers there; a pending
+ * one never got any, so its domains move to the next default address (or to none). At the host only a pending
  * address is deleted: a verified one may serve the owner's own mail rules, which Deparked did not create.
  */
 export async function removeNotifyAddress(
   db: Db,
   hosting: HostingAdapter,
-  input: { email: string },
+  input: { email: string; now: number },
 ): Promise<NotifyResult> {
   const row = await getNotifyAddress(db, input.email);
   if (row === undefined) return { ok: true, message: "That address was removed already." };
   const users = (await listDomains(db)).filter((domain) => domain.notifyEmail === row.email);
   const first = users[0];
-  if (first !== undefined) {
-    const others = users.length - 1;
-    const names = others === 0 ? first.host : `${first.host} and ${others} more`;
+  if (first !== undefined && row.verifiedAt !== null) {
     return {
       ok: false,
-      message: `${names} still ${users.length === 1 ? "sends" : "send"} offers to ${row.email}. Pick another address there first.`,
+      message: `${hostList(users.map((domain) => domain.host))} still ${users.length === 1 ? "sends" : "send"} offers to ${row.email}. Pick another address there first.`,
     };
   }
   try {
     const remote = (await hosting.notifyAddresses.list()).find((address) => sameEmail(address.email, row.email));
     if (remote !== undefined && !remote.verified) await hosting.notifyAddresses.remove(remote.id);
+    for (const domain of users)
+      await updateDomain(db, { host: domain.host, patch: { notifyEmail: null }, now: input.now });
     await deleteNotifyAddress(db, row.email);
+    const removed = remote?.verified
+      ? `${row.email} was removed here. It stays a verified address in your Cloudflare account.`
+      : `${row.email} was removed.`;
+    if (first === undefined) return { ok: true, message: removed };
+    await fillMissingNotifyAddresses(db, input.now);
+    const next = (await getDomain(db, first.host))?.notifyEmail ?? null;
+    const names = hostList(users.map((domain) => domain.host));
     return {
       ok: true,
-      message: remote?.verified
-        ? `${row.email} was removed here. It stays a verified address in your Cloudflare account.`
-        : `${row.email} was removed.`,
+      message:
+        next === null
+          ? `${removed} ${names} ${users.length === 1 ? "has" : "have"} no address for offers now: they wait in the inbox.`
+          : `${removed} Offers for ${names} go to ${next} now.`,
     };
   } catch (error) {
     return failed(error);
   }
+}
+
+function hostList(hosts: string[]): string {
+  const [first, ...rest] = hosts;
+  return rest.length === 0 ? (first ?? "") : `${first} and ${rest.length} more`;
 }
 
 /** "Check now": copies each address's verification state from the host. An address the host lost becomes pending. */
@@ -236,6 +286,7 @@ export async function refreshNotifyAddresses(
         patch: { cfAddressId, verifiedAt: verifiedAt === null ? null : (row.verifiedAt ?? verifiedAt) },
       });
     }
+    await fillMissingNotifyAddresses(db, input.now);
     return { ok: true, message: verified === 1 ? "1 address is verified." : `${verified} addresses are verified.` };
   } catch (error) {
     return failed(error);

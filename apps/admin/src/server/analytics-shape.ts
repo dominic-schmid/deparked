@@ -22,9 +22,37 @@ export type OverviewVisits =
   | { ok: true; byHost: Record<string, HostVisits> }
   | { ok: false; problem: AnalyticsProblem };
 
+/**
+ * Why a domain has no Web Analytics site: `off`, turned off (which deletes it); `adding`, added half-way (it is
+ * created on the way); `missing`, on without one (adding the domain again creates it).
+ */
+export type NoSiteReason = "off" | "adding" | "missing";
+
+export function noSiteReason(domain: { status: string; turnedOffAt: number | null }): NoSiteReason {
+  if (domain.status !== "off") return "missing";
+  return domain.turnedOffAt === null ? "adding" : "off";
+}
+
+/** What a domain's visits cell shows. "Unavailable" only when reading failed; never for a domain without a site. */
+export type VisitsCellState =
+  | { kind: "ok"; visits: HostVisits }
+  | { kind: "no-visits" }
+  | { kind: "unavailable" }
+  | { kind: "not-set-up"; reason: NoSiteReason };
+
+export function visitsCellState(
+  domain: { host: string; noSite: NoSiteReason | null },
+  visits: OverviewVisits,
+): VisitsCellState {
+  if (domain.noSite !== null) return { kind: "not-set-up", reason: domain.noSite };
+  const own = visits.ok ? visits.byHost[domain.host] : undefined;
+  if (own === undefined) return { kind: "unavailable" };
+  return own.last30 === 0 ? { kind: "no-visits" } : { kind: "ok", visits: own };
+}
+
 export type DomainVisits =
-  /** The domain has no Web Analytics site yet. */
-  | { state: "not-set-up" }
+  /** The domain has no Web Analytics site. */
+  | { state: "not-set-up"; reason: NoSiteReason }
   | { state: "error"; problem: AnalyticsProblem }
   | {
       state: "ok";

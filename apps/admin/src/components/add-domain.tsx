@@ -18,6 +18,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ExternalLink, Search } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { attachStep, listAccountDomains, previewDomain, type SetupFailure } from "../server/domain-setup/functions";
+import { getDomainDetail } from "../server/domains.functions";
+import type { OfferMail } from "../server/notify-default";
+import { OfferMailNotice } from "./offer-mail";
 import { CredentialsRejected, SetupRunner, type StepRun } from "./setup-runner";
 
 export const CLOUDFLARE_ADD_SITE_GUIDE = "https://developers.cloudflare.com/fundamentals/manage-domains/add-site/";
@@ -395,7 +398,9 @@ function DomainProgress(props: { preview: DomainPreview; confirmations: SetupCon
   const { host } = props.preview;
   const router = useRouter();
   const attach = useServerFn(attachStep);
+  const detail = useServerFn(getDomainDetail);
   const [finished, setFinished] = useState(false);
+  const [mail, setMail] = useState<OfferMail | null>(null);
   const steps = useMemo(() => props.preview.steps.map(({ id, title }) => ({ id, title })), [props.preview.steps]);
   const run: StepRun = useCallback(
     (state) => attach({ data: { host, confirmations: props.confirmations, state } }),
@@ -404,7 +409,11 @@ function DomainProgress(props: { preview: DomainPreview; confirmations: SetupCon
   const onFinished = useCallback(() => {
     setFinished(true);
     void router.invalidate();
-  }, [router]);
+    // Where its offers go was settled by the last step: say so if they are not emailed yet.
+    detail({ data: { host } })
+      .then((answer) => setMail(answer.domain?.mail ?? null))
+      .catch(() => undefined);
+  }, [router, detail, host]);
 
   return (
     <section aria-labelledby="progress-title" className="flex max-w-2xl flex-col gap-4">
@@ -429,6 +438,7 @@ function DomainProgress(props: { preview: DomainPreview; confirmations: SetupCon
           </Button>
         }
       />
+      {finished && mail !== null ? <OfferMailNotice host={host} mail={mail} /> : null}
       {finished ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <Button asChild>

@@ -1,6 +1,7 @@
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, lt, not, sql } from "drizzle-orm";
 import type { Db } from "../client";
 import { rateLimits } from "../schema";
+import { isMark } from "./mark-keys";
 
 export type RateLimitHit = { count: number; windowStart: number };
 
@@ -42,9 +43,12 @@ export async function clearRateLimit(db: Db, key: string): Promise<void> {
   await db.delete(rateLimits).where(eq(rateLimits.key, key));
 }
 
-/** Deletes windows that started before `before`. Returns how many. */
+/** Deletes windows that started before `before`. Returns how many. Workspace marks (`marks.ts`) stay. */
 export async function pruneRateLimits(db: Db, before: number): Promise<number> {
-  const rows = await db.delete(rateLimits).where(lt(rateLimits.windowStart, before)).returning({ key: rateLimits.key });
+  const rows = await db
+    .delete(rateLimits)
+    .where(and(lt(rateLimits.windowStart, before), not(isMark)))
+    .returning({ key: rateLimits.key });
   return rows.length;
 }
 

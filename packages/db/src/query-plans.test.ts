@@ -26,6 +26,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   insertDomain: [[{ domain: { host: "other.example", zoneId: "zone-2" }, now: NOW }]],
   updateDomain: [[{ host: HOST, patch: { analyticsSiteTag: "tag" }, now: NOW }]],
   setDomainStatus: [[{ host: HOST, status: "off", now: NOW }]],
+  assignMissingNotifyEmail: [[{ email: NOTIFY, now: NOW }], [{ email: NOTIFY, replaceUnverified: true, now: NOW }]],
   getOfferTarget: [[HOST]],
 
   getConfig: [[HOST]],
@@ -120,6 +121,8 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   openOwnershipProof: [[{ ttlMs: 60_000, maxOpen: 20, now: NOW }]],
   acquireProvisionLock: [[{ holder: 1, ttlMs: 60_000, now: NOW }]],
   releaseProvisionLock: [[1]],
+  getWorkspaceMark: [["offers-exported"]],
+  setWorkspaceMark: [[{ mark: "setup-checklist-dismissed", now: NOW }]],
   getReleaseState: [[]],
   updateReleaseState: [[{ latestSha256: "a".repeat(64) }]],
   appliedSchema: [[]],
@@ -133,6 +136,7 @@ const FULL_READS: Partial<Record<keyof Queries, string>> = {
   listDomains: "domains", // about 200: 20 Turnstile widgets x 10 hostnames
   listPublishedAt: "config", // one row per domain
   listNotifyAddresses: "notify_addresses", // 200 Email Routing destination addresses per account
+  assignMissingNotifyEmail: "notify_addresses", // which addresses are unverified: the same 200 at most
   listTurnstileWidgets: "turnstile_widgets", // 20 widgets on the free plan
   listSiteFiles: "site_files", // the publish manifest is sent whole on every publish
 };
