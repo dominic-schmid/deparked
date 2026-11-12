@@ -3,7 +3,7 @@ import { SparkChart } from "@deparked/ui/ruixen/spark-chart";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { AnalyticsProblemAlert, formatConversion, formatCount } from "../../../components/analytics";
 import { PageError, PagePending } from "../../../components/page";
-import { DAYS, type DomainVisits } from "../../../server/analytics";
+import { DAYS, type DomainVisits } from "../../../server/analytics-shape";
 import { getDomainAnalytics } from "../../../server/domains.functions";
 
 export const Route = createFileRoute("/admin/_shell/d/$host/analytics")({

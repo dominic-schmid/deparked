@@ -1,13 +1,20 @@
 import { type Db, getDomain, listDomains, offerStatsForHosts } from "@deparked/db";
 import { type AnalyticsReport, type AnalyticsSite, type HostingAdapter, HostingError } from "@deparked/hosting";
+import {
+  type AnalyticsProblem,
+  DAYS,
+  type DomainAnalytics,
+  type HostVisits,
+  type OverviewVisits,
+} from "./analytics-shape";
 
-/** The longest range the admin shows: visits and conversion are over the last 30 days, today included. */
-export const DAYS = 30;
 const WEEK = 7;
 const DAY_MS = 86_400_000;
 const TOP = 10;
 /** Web Analytics lags by minutes anyway, and every read costs a subrequest. */
 const CACHE_TTL_MS = 5 * 60_000;
+/** After a timeout the next loads answer at once instead of waiting on Cloudflare again. */
+const TIMEOUT_TTL_MS = 30_000;
 const CACHE_ENTRIES = 32;
 /** The page renders without visits rather than wait on a slow Cloudflare (each attempt alone may take 10 s). */
 const TIMEOUT_MS = 5_000;
@@ -25,35 +32,34 @@ export function rangeStart(now: number, days = DAYS): number {
   return (Math.floor(now / DAY_MS) - (days - 1)) * DAY_MS;
 }
 
-/** Why visits are missing, in words for the owner. `credentials`: the fix is a new token in Settings. */
-export type AnalyticsProblem = { message: string; credentials: boolean };
+type ReportResult = { ok: true; report: AnalyticsReport } | { ok: false; problem: AnalyticsProblem };
 
 export interface ReportCache {
-  get(key: string): AnalyticsReport | undefined;
-  set(key: string, report: AnalyticsReport): void;
+  get(key: string): ReportResult | undefined;
+  set(key: string, result: ReportResult, ttlMs: number): void;
 }
 
-/** Reports by query, per isolate. Failures are never stored, so the next load tries Cloudflare again. */
+/** Results by query, per isolate: reports for five minutes, a timeout for 30 s, other failures not at all. */
 export function createReportCache(clock: () => number = Date.now): ReportCache {
-  const entries = new Map<string, { expires: number; report: AnalyticsReport }>();
+  const entries = new Map<string, { expires: number; result: ReportResult }>();
   return {
     get(key) {
       const entry = entries.get(key);
       if (entry === undefined) return undefined;
-      if (entry.expires > clock()) return entry.report;
+      if (entry.expires > clock()) return entry.result;
       entries.delete(key);
       return undefined;
     },
-    set(key, report) {
+    set(key, result, ttlMs) {
       entries.delete(key);
-      entries.set(key, { expires: clock() + CACHE_TTL_MS, report });
+      entries.set(key, { expires: clock() + ttlMs, result });
       const oldest = entries.keys().next().value;
       if (entries.size > CACHE_ENTRIES && oldest !== undefined) entries.delete(oldest);
     },
   };
 }
 
-/** The Worker's cache. Only referenced inside server function handlers, so it stays out of the client bundle. */
+/** The Worker's cache, one per isolate. This module is server-only: the client imports `analytics-shape`. */
 export const workerReportCache = createReportCache();
 
 export interface AnalyticsSource {
@@ -62,8 +68,6 @@ export interface AnalyticsSource {
   cache: ReportCache;
   timeoutMs?: number;
 }
-
-type ReportResult = { ok: true; report: AnalyticsReport } | { ok: false; problem: AnalyticsProblem };
 
 const UNREACHABLE: AnalyticsProblem = {
   message: "Cloudflare did not answer in time. Visits show again once it does.",
@@ -86,7 +90,7 @@ async function readReport(source: AnalyticsSource, sites: AnalyticsSite[], days:
     .sort()
     .join(",")}`;
   const cached = source.cache.get(key);
-  if (cached !== undefined) return { ok: true, report: cached };
+  if (cached !== undefined) return cached;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<"timeout">((resolve) => {
@@ -94,9 +98,9 @@ async function readReport(source: AnalyticsSource, sites: AnalyticsSite[], days:
   });
   try {
     const report = await Promise.race([source.hosting().readAnalytics({ sites, from, to }), timeout]);
-    if (report === "timeout") return { ok: false, problem: UNREACHABLE };
-    source.cache.set(key, report);
-    return { ok: true, report };
+    const result: ReportResult = report === "timeout" ? { ok: false, problem: UNREACHABLE } : { ok: true, report };
+    source.cache.set(key, result, result.ok ? CACHE_TTL_MS : TIMEOUT_TTL_MS);
+    return result;
   } catch (error) {
     return { ok: false, problem: problemOf(error) };
   } finally {
@@ -104,11 +108,16 @@ async function readReport(source: AnalyticsSource, sites: AnalyticsSite[], days:
   }
 }
 
-/** Visits per day for `days`, zero where the report has none. Rows of other hosts count when `host` is null. */
-function dailySeries(report: AnalyticsReport, days: string[], host: string | null): number[] {
+/**
+ * A domain's visits per day for `days`, zero where the report has none. Both screens count through this, so
+ * they agree: a row is the domain's when its host is the domain's, with or without `www.`. The overview reads
+ * all sites in one report whose rows name only the host, so the host is the only way to tell them apart.
+ */
+function dailySeries(report: AnalyticsReport, days: string[], host: string): number[] {
+  const own = apex(host);
   const byDate = new Map<string, number>();
   for (const row of report.visitsByDay) {
-    if (host !== null && apex(row.host) !== host) continue;
+    if (apex(row.host) !== own) continue;
     byDate.set(row.date, (byDate.get(row.date) ?? 0) + row.visits);
   }
   return days.map((date) => byDate.get(date) ?? 0);
@@ -121,21 +130,6 @@ function apex(host: string): string {
 }
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
-
-export type HostVisits = {
-  last7: number;
-  last30: number;
-  /** One entry per day of the last 30, oldest first. */
-  daily: number[];
-};
-
-/**
- * Visits for the overview. Hosts without a Web Analytics site are absent from `byHost`. A failure is one
- * problem for all domains: they share one request.
- */
-export type OverviewVisits =
-  | { ok: true; byHost: Record<string, HostVisits> }
-  | { ok: false; problem: AnalyticsProblem };
 
 export async function loadOverviewVisits(db: Db, source: AnalyticsSource, now: number): Promise<OverviewVisits> {
   const domains = (await listDomains(db)).filter((domain) => domain.analyticsSiteTag !== null);
@@ -155,26 +149,6 @@ export async function loadOverviewVisits(db: Db, source: AnalyticsSource, now: n
   return { ok: true, byHost };
 }
 
-export type DomainVisits =
-  /** The domain has no Web Analytics site yet. */
-  | { state: "not-set-up" }
-  | { state: "error"; problem: AnalyticsProblem }
-  | {
-      state: "ok";
-      days: { date: string; visits: number }[];
-      last7: number;
-      last30: number;
-      /** Most visits first, at most 10. An empty `host` is a direct visit. */
-      referrers: { host: string; visits: number }[];
-      countries: { country: string; visits: number }[];
-    };
-
-export type DomainAnalytics = {
-  /** Offers received over the same 30 days, from the database: shown even when visits are not. */
-  offers30: number;
-  visits: DomainVisits;
-};
-
 /** Null for a host that is not managed. */
 export async function loadDomainAnalytics(
   db: Db,
@@ -191,7 +165,7 @@ export async function loadDomainAnalytics(
   const days = lastDays(now);
   const result = await readReport(source, [{ host, siteId: domain.analyticsSiteTag }], days);
   if (!result.ok) return { offers30, visits: { state: "error", problem: result.problem } };
-  const daily = dailySeries(result.report, days, null);
+  const daily = dailySeries(result.report, days, host);
   return {
     offers30,
     visits: {

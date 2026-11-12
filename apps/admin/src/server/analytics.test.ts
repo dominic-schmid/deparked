@@ -121,13 +121,36 @@ describe("overview visits", () => {
       ok: false,
       problem: { message: "Cloudflare did not answer in time. Visits show again once it does.", credentials: false },
     });
+  });
 
+  test("a timeout is remembered for 30 s, so the next loads do not wait on Cloudflare again", async () => {
+    const { db, hosting, source, tick } = await setup();
+    hosting.analytics.push(row({ date: today, visits: 1 }));
+    let reads = 0;
+    let hang = true;
     const slow: AnalyticsSource = {
       ...source,
       timeoutMs: 10,
-      hosting: () => ({ ...hosting, readAnalytics: () => new Promise(() => {}) }),
+      hosting: () => ({
+        ...hosting,
+        readAnalytics: (query) => {
+          reads += 1;
+          return hang ? new Promise(() => {}) : hosting.readAnalytics(query);
+        },
+      }),
     };
-    expect(await loadOverviewVisits(db, slow, NOW)).toEqual(failing);
+    const timedOut = {
+      ok: false,
+      problem: { message: "Cloudflare did not answer in time. Visits show again once it does.", credentials: false },
+    };
+    expect(await loadOverviewVisits(db, slow, NOW)).toEqual(timedOut);
+    hang = false;
+    tick(29_000);
+    expect(await loadOverviewVisits(db, slow, NOW)).toEqual(timedOut);
+    expect(reads).toBe(1);
+    tick(1_000);
+    expect(await loadOverviewVisits(db, slow, NOW)).toMatchObject({ ok: true, byHost: { [HOST]: { last7: 1 } } });
+    expect(reads).toBe(2);
   });
 
   test("an unexpected error is a plain-words problem", async () => {
@@ -138,6 +161,30 @@ describe("overview visits", () => {
       problem: { message: "Visits could not be read from Cloudflare. Try again later.", credentials: false },
     });
   });
+});
+
+test("the overview and the domain count the same rows, www and other hosts of a shared site included", async () => {
+  const { db, hosting, source } = await setup();
+  await insertDomain(db, { domain: { host: "www.shop.example", zoneId: "z", analyticsSiteTag: "site-1" }, now: NOW });
+  hosting.analytics.push(
+    row({ date: today, visits: 4 }),
+    row({ date: today, host: "WWW.Example.com", visits: 1 }),
+    row({ date: today, host: "shop.example", visits: 2 }),
+    row({ date: today, host: "www.shop.example", visits: 3 }),
+    row({ date: today, host: "preview.example.net", visits: 50 }),
+  );
+
+  const overview = await loadOverviewVisits(db, source, NOW);
+  if (!overview.ok) throw new Error("expected visits");
+  for (const [host, expected] of [
+    [HOST, 5],
+    ["www.shop.example", 5],
+  ] as const) {
+    const detail = await loadDomainAnalytics(db, source, host, NOW);
+    if (detail?.visits.state !== "ok") throw new Error("expected visits");
+    expect(overview.byHost[host]).toMatchObject({ last7: expected, last30: expected });
+    expect(detail.visits).toMatchObject({ last7: expected, last30: expected });
+  }
 });
 
 describe("domain analytics", () => {

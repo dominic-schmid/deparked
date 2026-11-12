@@ -12,7 +12,7 @@ import { formatMoney } from "../../../components/format";
 import { PageError, PageHeader, PagePending } from "../../../components/page";
 import { StatusLabel } from "../../../components/status";
 import { RelativeTime } from "../../../components/time";
-import type { OverviewVisits } from "../../../server/analytics";
+import type { OverviewVisits } from "../../../server/analytics-shape";
 import type { DomainOverview } from "../../../server/domains";
 import { getAnalytics, getOverview } from "../../../server/domains.functions";
 

@@ -2,7 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
 import { Button } from "@deparked/ui/button";
 import { SparkChart } from "@deparked/ui/ruixen/spark-chart";
 import { Link, useRouter } from "@tanstack/react-router";
-import type { AnalyticsProblem } from "../server/analytics";
+import type { AnalyticsProblem } from "../server/analytics-shape";
 
 // One fixed locale, as in format.ts: the server and the browser must print the same text.
 const LOCALE = "en";
@@ -17,9 +17,13 @@ export function formatCompactCount(value: number): string {
   return new Intl.NumberFormat(LOCALE, { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
 
-/** Offers per visit as a percentage, or null when there were no visits to divide by. */
+/**
+ * Offers per visit as a percentage, or null when there were no visits to divide by. More offers than counted
+ * visits (blocked beacons, a visit counted on another day) reads ">100%" rather than a made-up rate.
+ */
 export function formatConversion(offers: number, visits: number): string | null {
   if (visits === 0) return null;
+  if (offers > visits) return ">100%";
   return new Intl.NumberFormat(LOCALE, { style: "percent", maximumFractionDigits: 1 }).format(offers / visits);
 }
 
