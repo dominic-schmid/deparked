@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { compareVersions } from "./version";
+import { compareVersions } from "./index";
 
 it("orders release versions by semantic version precedence", () => {
   const ordered = [

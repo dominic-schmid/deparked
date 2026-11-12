@@ -152,6 +152,28 @@ fetchReleaseFile }`, unit-tested with the in-memory D1 and the fake hosting adap
   asks for again; a step splits what is left of its budget between batches and downloads. "Republish all" deploys
   one version per host.
 
+## Update and rollback
+
+- **Where releases come from**: the upstream repository's latest GitHub Release. Its pin is the version and GitHub's
+  digest of `release.json` (or the release's `release.json.sha256`). Settings › Updates shows both. Nothing installs
+  until the owner confirms that pin, and every file is checked against it. The checksum catches a download corrupted
+  or altered on its way; it cannot tell a release published from a compromised repository.
+- **Steps** (`@deparked/provision` `update.ts`, one per request): download and check, migrate, upload the pages
+  Worker, replace the admin. `release_state.change_next` records how far a change got: a step beyond it is refused,
+  and a step for a change that another update or rollback replaced runs nothing. Then the page waits on
+  `GET /api/health` for the new release, reloads, and the new admin publishes every page again. Finish is refused
+  until a republish that started after the admin upload is done.
+- **Rollback** installs the pin from before the last update with the same steps (the admin is re-uploaded with its
+  secrets kept, not redeployed from an old version). Each release names its schema (its last migration). Rollback is
+  refused when the database ran a migration the older release does not know; the preview says so before an update
+  starts. The installer's recovery page can roll back too, for an admin that no longer answers.
+- **Cost**, measured in Node with the in-process mock (its own CPU subtracted) and a real release (2.5 MB of
+  packs), not on Cloudflare. Subrequests per step: download 5, migrate 4, sites 2 to 7, admin 12 to 14, a repeated
+  step 3 (limit 50). CPU per step: download 14 to 21 ms, migrate 4 to 7 ms, sites 9 ms (already done) to 88 ms (first
+  upload of the catalog), admin 31 to 68 ms. That includes in-process SQLite (I/O on Workers) and Node's JavaScript
+  base64, where workerd has `Uint8Array.prototype.toBase64`. These are the installer's own steps, so their fit in
+  Workers Free's 10 ms is the same open question as the install's (spike 2).
+
 ## URLs
 
 A managed domain routes only `<host>/admin*` and `<host>/api/*` here, so built files are served from
