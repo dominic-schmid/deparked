@@ -1,4 +1,10 @@
-import type { AccountDomain, DomainPreview, SetupConfirmation, SetupConfirmations } from "@deparked/hosting";
+import type {
+  AccountDomain,
+  DomainPreview,
+  SetupConfirmation,
+  SetupConfirmations,
+  SetupEffect,
+} from "@deparked/hosting";
 import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
 import { Badge } from "@deparked/ui/badge";
 import { Button } from "@deparked/ui/button";
@@ -15,6 +21,9 @@ import { attachStep, listAccountDomains, previewDomain, type SetupFailure } from
 import { CredentialsRejected, SetupRunner, type StepRun } from "./setup-runner";
 
 export const CLOUDFLARE_ADD_SITE_GUIDE = "https://developers.cloudflare.com/fundamentals/manage-domains/add-site/";
+
+/** For buttons that name the domain: a long name wraps instead of leaving the screen. */
+const WRAPS = "h-auto min-h-9 min-w-0 max-w-full shrink whitespace-normal py-2 [overflow-wrap:anywhere]";
 
 const TEXT_LINK =
   "rounded-sm underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
@@ -272,12 +281,8 @@ function DomainReview(props: {
     );
   }
 
-  const changes = result.steps.flatMap((step) =>
-    step.effects.filter((effect) => effect.kind !== "reuse").map((effect) => effect.what),
-  );
-  const kept = result.steps.flatMap((step) =>
-    step.effects.filter((effect) => effect.kind === "reuse").map((effect) => effect.what),
-  );
+  const effects = (kind: SetupEffect["kind"]) =>
+    result.steps.flatMap((step) => step.effects.filter((effect) => effect.kind === kind).map((effect) => effect.what));
   const missing = result.asks.filter((ask) => REQUIRED.includes(ask) && given[ask] !== true);
   const canStart = result.blockers.length === 0 && missing.length === 0;
 
@@ -287,7 +292,7 @@ function DomainReview(props: {
         <h2 id={`${hintId}-title`} className="text-lg font-semibold [overflow-wrap:anywhere]">
           {result.host}
         </h2>
-        <p className="mt-1 text-pretty">{result.summary}</p>
+        <p className="mt-1 text-pretty [overflow-wrap:anywhere]">{result.summary}</p>
       </div>
 
       {result.blockers.length > 0 ? (
@@ -314,7 +319,7 @@ function DomainReview(props: {
           <AlertTitle>Already set up</AlertTitle>
           <AlertDescription>
             <p>{result.host} is already in Deparked and nothing is missing.</p>
-            <Button asChild variant="outline" size="sm" className="mt-2">
+            <Button asChild variant="outline" size="sm" className={`mt-2 ${WRAPS}`}>
               <Link to="/admin/d/$host" params={{ host: result.host }}>
                 Open {result.host}
               </Link>
@@ -326,8 +331,9 @@ function DomainReview(props: {
       {result.blockers.length === 0 && !result.nothingToDo ? (
         <>
           <div className="flex flex-col gap-3 rounded-xl border p-4">
-            <EffectList title="Deparked will" items={changes} />
-            <EffectList title="Already in place, used as it is" items={kept} />
+            <EffectList title="Deparked will add" items={effects("create")} />
+            <EffectList title="Deparked will change" items={effects("change")} />
+            <EffectList title="Already in place, used as it is" items={effects("reuse")} />
             <p className="text-sm text-muted-foreground">
               Deparked only adds. It never edits or deletes what it did not create, and Turn off on the domain's page
               undoes everything it did.
@@ -360,9 +366,15 @@ function DomainReview(props: {
             </FieldSet>
           ) : null}
 
+          {canStart ? null : (
+            <p id={`${hintId}-hint`} className="text-sm text-muted-foreground">
+              Tick {missing.length === 1 ? "the first box" : "the first two boxes"} above to continue.
+            </p>
+          )}
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
             {back}
             <Button
+              className={WRAPS}
               disabled={!canStart}
               aria-describedby={canStart ? undefined : `${hintId}-hint`}
               onClick={() => props.onStart(result, given)}
@@ -370,11 +382,6 @@ function DomainReview(props: {
               Add {result.host}
             </Button>
           </div>
-          {canStart ? null : (
-            <p id={`${hintId}-hint`} className="-mt-2 text-sm text-muted-foreground">
-              Tick the confirmation above to continue.
-            </p>
-          )}
         </>
       ) : (
         <div>{back}</div>
@@ -384,7 +391,7 @@ function DomainReview(props: {
 }
 
 /** Step 3: the steps, one request each, and the way out once they are done. */
-function DomainProgress(props: { preview: DomainPreview; confirmations: SetupConfirmations }) {
+function DomainProgress(props: { preview: DomainPreview; confirmations: SetupConfirmations; onReview: () => void }) {
   const { host } = props.preview;
   const router = useRouter();
   const attach = useServerFn(attachStep);
@@ -411,7 +418,17 @@ function DomainProgress(props: { preview: DomainPreview; confirmations: SetupCon
             : "One step at a time. You can leave this page: adding the domain again picks up where it stopped."}
         </p>
       </div>
-      <SetupRunner steps={steps} run={run} onFinished={onFinished} label={`Steps to set up ${host}`} />
+      <SetupRunner
+        steps={steps}
+        run={run}
+        onFinished={onFinished}
+        label={`Steps to set up ${host}`}
+        blockedAction={
+          <Button variant="outline" size="sm" className={WRAPS} onClick={props.onReview}>
+            Review {host} again
+          </Button>
+        }
+      />
       {finished ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <Button asChild>
@@ -419,7 +436,7 @@ function DomainProgress(props: { preview: DomainPreview; confirmations: SetupCon
               Design its page
             </Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" className={WRAPS}>
             <a href={`https://${host}/`} target="_blank" rel="noreferrer">
               Visit {host}
               <ExternalLink aria-hidden="true" />
@@ -444,7 +461,15 @@ export function AddDomainFlow({ host }: { host: string | undefined }) {
   } | null>(null);
 
   if (host === undefined) return <DomainPicker />;
-  if (started?.for === host) return <DomainProgress preview={started.preview} confirmations={started.confirmations} />;
+  if (started?.for === host) {
+    return (
+      <DomainProgress
+        preview={started.preview}
+        confirmations={started.confirmations}
+        onReview={() => setStarted(null)}
+      />
+    );
+  }
   return (
     <DomainReview
       key={host}

@@ -4,7 +4,7 @@ import { Button } from "@deparked/ui/button";
 import { cn } from "@deparked/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { Check, Circle, CircleAlert, Clock, LoaderCircle, Minus } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { SetupFailure } from "../server/domain-setup/functions";
 import type { StepView } from "../server/domain-setup/steps";
 
@@ -78,6 +78,8 @@ export function SetupRunner(props: {
   onFinished: () => void;
   /** Accessible name of the progress list. */
   label: string;
+  /** Shown next to "Check again" when a step needs the owner: where they can act on it. */
+  blockedAction?: ReactNode;
 }) {
   const { run, onFinished } = props;
   const [rows, setRows] = useState<Row[]>(() =>
@@ -224,9 +226,12 @@ export function SetupRunner(props: {
           <AlertDescription>
             <p className="[overflow-wrap:anywhere]">{problem.message}</p>
             <p>Every step is safe to repeat: nothing is done twice.</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void go()} disabled={running}>
-              {problem.kind === "failed" ? "Retry" : "Check again"}
-            </Button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => void go()} disabled={running}>
+                {problem.kind === "failed" ? "Retry" : "Check again"}
+              </Button>
+              {problem.kind === "blocked" ? props.blockedAction : null}
+            </div>
           </AlertDescription>
         </Alert>
       )}

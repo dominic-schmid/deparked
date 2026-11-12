@@ -30,7 +30,7 @@ const VERB: Record<SetupEffect["kind"], string> = {
   create: "Adds",
   change: "Changes",
   remove: "Removes",
-  restore: "Puts back",
+  restore: "",
   reuse: "Leaves",
 };
 
@@ -107,7 +107,9 @@ function ChangeDialog(props: {
                 <ul className="mt-1 list-disc pl-5 text-muted-foreground">
                   {result.removal.effects.map((effect) => (
                     <li key={`${effect.kind}:${effect.what}`} className="[overflow-wrap:anywhere]">
-                      {VERB[effect.kind]} {effect.what}
+                      {effect.kind === "restore"
+                        ? `${effect.what.charAt(0).toUpperCase()}${effect.what.slice(1)}`
+                        : `${VERB[effect.kind]} ${effect.what}`}
                     </li>
                   ))}
                 </ul>
