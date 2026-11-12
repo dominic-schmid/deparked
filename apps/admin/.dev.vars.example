@@ -1,3 +1,9 @@
 # Copy to .dev.vars (git-ignored) for local dev. Dummy value: never put a real key in this file.
 # In production the installer generates SESSION_KEY and stores it as a secret on deparked-admin.
 SESSION_KEY=local-dev-only-session-key-not-a-secret-0000
+
+# Dummy values: calls to Cloudflare's API fail with "token rejected" until you put a real token in .dev.vars.
+CF_API_TOKEN=local-dev-no-token
+CF_ACCOUNT_ID=local-dev-no-account
+# Cloudflare's documented Turnstile test secret ("always passes") for widget deparked-1.
+TURNSTILE_SECRET_1=1x0000000000000000000000000000000AA

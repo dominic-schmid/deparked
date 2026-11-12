@@ -29,7 +29,7 @@ Everything is stopped when the worker ends. Each `wrangler dev` runs in its own 
 
 ## Variables the Workers must read
 
-The harness passes these with `wrangler dev --var`. No secret file exists or is needed. Code that calls Cloudflare must read the two overrides and fall back to the real URL when they are unset.
+The harness passes these with `wrangler dev --var`. No secret file exists or is needed. Code that calls Cloudflare must read the two overrides and fall back to the real URL when they are unset. The admin honours an override only when it is plain http to `127.0.0.1` or `localhost` with a port (`apps/admin/src/server/hosting-env.ts`).
 
 | Variable | Given to | Value in E2E | Use |
 | -- | -- | -- | -- |
