@@ -18,6 +18,20 @@
   --ease-swift: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/*
+ * If the brand font cannot load, the wordmark falls back to a common system face scaled (size-adjust) to the brand
+ * font's widths, measured over domain names; it was fitted to the page with those widths and would clip otherwise.
+ */
+@font-face {
+  font-family: "Newsreader Italic Fallback";
+  src:
+    local("Times New Roman Italic"), local("TimesNewRomanPS-ItalicMT"), local("Liberation Serif Italic"),
+    local("LiberationSerif-Italic"), local("Tinos Italic"), local("Times Italic");
+  size-adjust: 98%;
+  font-display: swap;
+  font-style: italic;
+}
+
 @layer base {
   :root {
     --panel: var(--accent, #1f2918);
@@ -103,7 +117,10 @@
   .mark {
     align-self: end;
     padding-top: clamp(32px, 8svh, 96px);
-    font: italic 400 min(var(--fit), 260px, 30svh) / 0.95 var(--font-serif);
+    font:
+      italic 400 min(var(--fit), 260px, 30svh) / 0.95 Newsreader,
+      "Newsreader Italic Fallback",
+      var(--font-serif);
     letter-spacing: -0.015em;
     padding-bottom: 0.12em;
     white-space: nowrap;

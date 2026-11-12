@@ -17,6 +17,19 @@
   --ease-swift: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/*
+ * If the brand font cannot load, the wordmark falls back to a common system face scaled (size-adjust) to the brand
+ * font's widths, measured over domain names; it was fitted to the page with those widths and would clip otherwise.
+ */
+@font-face {
+  font-family: "Newsreader Fallback";
+  src:
+    local("Times New Roman"), local("TimesNewRomanPSMT"), local("Liberation Serif"), local("LiberationSerif"),
+    local("Tinos"), local("Times");
+  size-adjust: 104%;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --paper: #f4efe6;
@@ -116,6 +129,7 @@
   /* the masthead takes whatever height the page has spare, centred between its rules */
   .masthead {
     position: relative;
+    font-family: Newsreader, "Newsreader Fallback", var(--font-serif);
     display: grid;
     align-content: center;
     font-weight: 400;

@@ -20,6 +20,20 @@
   --ease-swift: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/*
+ * If the brand font cannot load, the wordmark falls back to a common system face scaled (size-adjust) to the brand
+ * font's widths, measured over domain names; it was fitted to the page with those widths and would clip otherwise.
+ */
+@font-face {
+  font-family: "Archivo Condensed Fallback";
+  src:
+    local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("LiberationSans-Bold"),
+    local("Arimo Bold"), local("Arimo-Bold"), local("Helvetica Bold"), local("Helvetica-Bold");
+  size-adjust: 69%;
+  font-display: swap;
+  font-weight: 700 800;
+}
+
 @layer base {
   :root {
     --sky: var(--accent, #7f9fbf);
@@ -98,6 +112,7 @@
   }
 
   .mark {
+    font-family: Archivo, "Archivo Condensed Fallback", var(--font-sans);
     font-weight: 800;
     font-stretch: 62%;
     letter-spacing: -0.02em;
