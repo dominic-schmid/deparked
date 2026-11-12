@@ -20,7 +20,15 @@ import {
   updateInstallState,
   updateWorkspace,
 } from "@deparked/db";
-import { activeLedger, createOnce, findEntry, intentKey, type ProvisionContext, workerNames } from "./context";
+import {
+  activeLedger,
+  createOnce,
+  findEntry,
+  INSTALLER_WORKER,
+  intentKey,
+  type ProvisionContext,
+  workerNames,
+} from "./context";
 import { type Release, type ReleaseSource, sha256Hex } from "./release";
 import { type Effect, type Plan, type Step, StepBlockedError, type StepCheck } from "./steps";
 import { turnOffSteps } from "./turn-off";
@@ -349,7 +357,7 @@ export async function hubInstalled(ctx: Pick<ProvisionContext, "db">): Promise<R
 export const UNINSTALL_LEAVES: readonly Effect[] = [
   {
     kind: "reuse",
-    what: `the installer Worker deparked-install and the database ${DATABASE_NAME}: the Deploy button made them, so delete them yourself in Cloudflare (Workers & Pages, then D1) after you exported your offers`,
+    what: `the database ${DATABASE_NAME} with your offers: the admin needs it until its last step, so delete it yourself in Cloudflare (D1) after you exported your offers`,
   },
 ];
 
@@ -386,6 +394,8 @@ function removeHubStep(input: {
     },
   };
 }
+
+const installer = (ctx: ProvisionContext) => workerNames(ctx).installer ?? INSTALLER_WORKER;
 
 async function unlessGone(call: Promise<unknown>): Promise<void> {
   try {
@@ -436,6 +446,21 @@ export async function planUninstall(ctx: ProvisionContext): Promise<Plan> {
           return { kind: "remove", what: `the Worker ${sites} and every page on it` };
         },
       }),
+      {
+        id: "remove-installer",
+        title: "Delete the installer",
+        async check(ctx) {
+          const name = installer(ctx);
+          return (await ctx.cf.workers.getSettings(name)) === null
+            ? done()
+            : needed([{ kind: "remove", what: `the Worker ${name}, the installer the Deploy button created` }]);
+        },
+        async run(ctx) {
+          const name = installer(ctx);
+          await unlessGone(ctx.cf.workers.deleteScript(name));
+          return { effects: [{ kind: "remove", what: `the Worker ${name}` }] };
+        },
+      },
       removeHubStep({
         id: "remove-admin",
         title: "Delete the admin panel",

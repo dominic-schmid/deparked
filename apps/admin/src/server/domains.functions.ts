@@ -5,14 +5,19 @@ import { z } from "zod";
 import { type AnalyticsSource, loadDomainAnalytics, loadOverviewVisits, workerReportCache } from "./analytics";
 import { hostSchema, loadDomain, loadDomainSummaries, loadOverview } from "./domains";
 import { getHosting } from "./hosting";
+import { shellTokenRejected } from "./hub/connect";
 import { requireSession } from "./require-session";
 
 /** What every screen of the workspace needs: the domains for the switcher and the inbox badge. */
 export const getShell = createServerFn().handler(async () => {
   await requireSession();
   const db = createDb(env.DB);
-  const [domains, newOffers] = await Promise.all([loadDomainSummaries(db), countNewOffers(db)]);
-  return { domains, newOffers };
+  const [domains, newOffers, tokenRejected] = await Promise.all([
+    loadDomainSummaries(db),
+    countNewOffers(db),
+    shellTokenRejected(),
+  ]);
+  return { domains, newOffers, tokenRejected };
 });
 
 export const getOverview = createServerFn().handler(async () => {

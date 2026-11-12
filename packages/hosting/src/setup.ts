@@ -120,3 +120,39 @@ export interface DomainSetup {
   /** What Turn off and Remove delete or put back, and what stays. No request to the host. */
   describeRemoval(host: string): Promise<{ effects: SetupEffect[]; keeps: string[] }>;
 }
+
+/** A permission the stored token lacks or that could not be tried, with why Deparked needs it. */
+export interface TokenPermissionGap {
+  label: string;
+  why: string;
+}
+
+/**
+ * The stored token as the host sees it. `rejected`: the host refuses it (deleted, expired, disabled).
+ * `incomplete`: it works but lacks a permission Deparked uses. `unchecked` names permissions that could not be
+ * tried, for example zone permissions before the account has a domain.
+ */
+export interface TokenHealth {
+  state: "ok" | "incomplete" | "rejected";
+  missing: TokenPermissionGap[];
+  unchecked: TokenPermissionGap[];
+}
+
+export type ReplaceTokenResult = { ok: true; health: TokenHealth } | { ok: false; message: string };
+
+/** The hub as a whole: its token, and Uninstall. */
+export interface HubSetup {
+  /** False when the host refuses the stored token. One request; for the shell's banner. */
+  tokenAccepted(): Promise<boolean>;
+  /** Asks the host about the stored token. A few read requests. */
+  tokenHealth(): Promise<TokenHealth>;
+  /**
+   * Checks that `token` works, belongs to the same account and has every permission, then stores it in place of
+   * the old one. Nothing is stored when a check fails. The token is never logged or returned.
+   */
+  replaceToken(token: string): Promise<ReplaceTokenResult>;
+  /** What Uninstall deletes, and what stays. Reads the hub's own records only. */
+  describeUninstall(): Promise<{ steps: { id: string; title: string }[]; effects: SetupEffect[]; keeps: string[] }>;
+  /** Looks at exactly one step of Uninstall: runs it when needed. One call per request. */
+  uninstallStep(state: SetupState): Promise<SetupStepReport>;
+}

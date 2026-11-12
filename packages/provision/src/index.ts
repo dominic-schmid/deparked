@@ -1,6 +1,7 @@
 export { type AttachOptions, pickSenderHost, planAttachDomain } from "./attach";
 export {
   DEFAULT_WORKERS,
+  INSTALLER_WORKER,
   InvalidHostError,
   normalizeHost,
   type ProvisionContext,
@@ -54,5 +55,6 @@ export {
   type StepResult,
   withProvisionLock,
 } from "./steps";
+export { checkTokenPermissions, type PermissionGap } from "./token";
 export { describeRemoval, planRemoveDomain, planTurnOff, type RemovalDescription } from "./turn-off";
 export { PLACEHOLDER_RECORD, wantedRedirectRules, wantedRewriteRules, wantedRoutes } from "./wanted";

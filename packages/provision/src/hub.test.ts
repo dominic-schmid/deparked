@@ -238,10 +238,15 @@ describe("handing over", () => {
 });
 
 describe("uninstalling", () => {
-  it("removes only what the ledger names", async () => {
+  it("removes only what the ledger names, and the installer the Deploy button created", async () => {
     const context = await setup();
     const { cf, db, mock, ctx } = context;
     await install(context);
+    await cf.workers.uploadScript("deparked-install", {
+      mainModule: "index.js",
+      modules: [{ name: "index.js", content: "export default {}" }],
+      compatibilityDate: "2026-11-01",
+    });
     await cf.workers.uploadScript("owners-worker", {
       mainModule: "index.js",
       modules: [{ name: "index.js", content: "export default {}" }],

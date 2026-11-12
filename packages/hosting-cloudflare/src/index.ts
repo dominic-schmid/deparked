@@ -345,4 +345,5 @@ export function createCloudflareHosting(options: CloudflareHostingOptions): Host
   };
 }
 
+export { type CloudflareHubOptions, createCloudflareHubSetup } from "./hub";
 export { type CloudflareSetupOptions, createCloudflareDomainSetup } from "./setup";

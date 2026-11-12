@@ -29,9 +29,12 @@ export interface ProvisionContext {
 export interface WorkerNames {
   sites: string;
   admin: string;
+  /** The bootstrap the Deploy button created. Not in the ledger; Uninstall deletes it too. */
+  installer?: string;
 }
 
 export const DEFAULT_WORKERS: WorkerNames = { sites: "deparked-sites", admin: "deparked-admin" };
+export const INSTALLER_WORKER = "deparked-install";
 
 export function workerNames(ctx: ProvisionContext): WorkerNames {
   return ctx.workers ?? DEFAULT_WORKERS;
