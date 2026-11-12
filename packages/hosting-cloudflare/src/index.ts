@@ -66,6 +66,8 @@ export const SITES_COMPATIBILITY_DATE = "2026-11-01";
  * Requests one `publish` call makes besides the upload batches: start the upload session, upload the Worker
  * with its assets (which deploys it), read the new version id. So a publish is `3 + batches` requests before
  * retries, and a call that returns `done: false` is `1 + maxUploadBatches`. Workers Free allows 50 per request.
+ * A batch is one of Cloudflare's buckets, or a part of one when `maxFilesPerUpload` is smaller: the docs say a
+ * bucket's files "should be uploaded together", and Cloudflare keeps the files it got, so the rest come later.
  */
 export const PUBLISH_FIXED_REQUESTS = 3;
 
@@ -160,12 +162,20 @@ export function createCloudflareHosting(options: CloudflareHostingOptions): Host
       const fileByHash = new Map(input.files.map((file) => [file.hash, file]));
 
       const session = await cloudflare(() => client.workers.createAssetsUploadSession(sites, manifest));
-      const buckets = session.buckets.slice(0, input.maxUploadBatches ?? DEFAULT_MAX_UPLOAD_BATCHES);
+      const perUpload = input.maxFilesPerUpload ?? Number.POSITIVE_INFINITY;
+      const batches = session.buckets.flatMap((bucket) => {
+        const parts: string[][] = [];
+        for (let index = 0; index < bucket.length; index += perUpload)
+          parts.push(bucket.slice(index, index + perUpload));
+        return parts;
+      });
+      const sending = batches.slice(0, input.maxUploadBatches ?? DEFAULT_MAX_UPLOAD_BATCHES);
       let completion = session.buckets.length === 0 ? session.jwt : undefined;
       const uploaded: string[] = [];
-      for (const bucket of buckets) {
+      for (const hashes of sending) {
         const batch: { hash: string; content: Uint8Array; contentType: string }[] = [];
-        for (const hash of bucket) {
+        const paths: string[] = [];
+        for (const hash of hashes) {
           const file = fileByHash.get(hash);
           if (file === undefined) {
             throw new HostingError("failed", "Cloudflare asked for a file that is not part of this publish.");
@@ -175,12 +185,13 @@ export function createCloudflareHosting(options: CloudflareHostingOptions): Host
             throw new HostingError("invalid-input", `Cannot publish ${file.path}: its content is not the size listed.`);
           }
           batch.push({ hash, content, contentType: file.contentType });
-          uploaded.push(file.path);
+          paths.push(file.path);
         }
         completion = (await cloudflare(() => client.workers.uploadAssetsBucket(session.jwt, batch))) ?? completion;
+        uploaded.push(...paths);
       }
 
-      if (buckets.length < session.buckets.length) {
+      if (sending.length < batches.length) {
         const requested = session.buckets.reduce((sum, bucket) => sum + bucket.length, 0);
         return { done: false, uploaded, pending: requested - uploaded.length, requests: client.requestCount - before };
       }
