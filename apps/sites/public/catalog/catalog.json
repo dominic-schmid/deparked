@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "backgrounds": [
+    {
+      "id": "sky",
+      "width": 1672,
+      "height": 941,
+      "color": "#7f9fbf",
+      "placeholder": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAADwAwCdASoYAA0APu1iqk4ppaQiMAgBMB2JagCdMoABO1QDQFEgGy1QAH0LIpVaisMJwMaz6bxqUEd5IlF6YRsl/Jb5nEBoKWT5io9sA90MMjVkGs3bUSPwRiAAAA==",
+      "position": "center 30%",
+      "formats": {
+        "avif": [
+          {
+            "width": 640,
+            "path": "/catalog/backgrounds/sky-640.9ad734854a39.avif",
+            "hash": "9ad734854a39",
+            "bytes": 11046
+          },
+          {
+            "width": 960,
+            "path": "/catalog/backgrounds/sky-960.af72fb594334.avif",
+            "hash": "af72fb594334",
+            "bytes": 19539
+          },
+          {
+            "width": 1280,
+            "path": "/catalog/backgrounds/sky-1280.aed9989ee826.avif",
+            "hash": "aed9989ee826",
+            "bytes": 29823
+          },
+          {
+            "width": 1672,
+            "path": "/catalog/backgrounds/sky-1672.9bc9d8dac11f.avif",
+            "hash": "9bc9d8dac11f",
+            "bytes": 45762
+          }
+        ],
+        "webp": [
+          {
+            "width": 640,
+            "path": "/catalog/backgrounds/sky-640.86246fb06899.webp",
+            "hash": "86246fb06899",
+            "bytes": 13132
+          },
+          {
+            "width": 960,
+            "path": "/catalog/backgrounds/sky-960.0fa20fd87d6c.webp",
+            "hash": "0fa20fd87d6c",
+            "bytes": 22946
+          },
+          {
+            "width": 1280,
+            "path": "/catalog/backgrounds/sky-1280.059ff8c474a1.webp",
+            "hash": "059ff8c474a1",
+            "bytes": 33638
+          },
+          {
+            "width": 1672,
+            "path": "/catalog/backgrounds/sky-1672.47efaf7f1e4b.webp",
+            "hash": "47efaf7f1e4b",
+            "bytes": 49486
+          }
+        ]
+      }
+    }
+  ],
+  "fonts": [
+    {
+      "id": "archivo-condensed",
+      "family": "Archivo",
+      "style": "normal",
+      "weight": "800",
+      "stretch": "62%",
+      "license": "OFL-1.1",
+      "files": [
+        {
+          "subset": "latin",
+          "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
+          "path": "/catalog/fonts/archivo-condensed-latin.a922013fb542.woff2",
+          "hash": "a922013fb542",
+          "bytes": 12664
+        },
+        {
+          "subset": "latin-ext",
+          "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF",
+          "path": "/catalog/fonts/archivo-condensed-latin-ext.4ed94479109d.woff2",
+          "hash": "4ed94479109d",
+          "bytes": 10784
+        }
+      ]
+    },
+    {
+      "id": "archivo",
+      "family": "Archivo",
+      "style": "normal",
+      "weight": "400 700",
+      "stretch": "100%",
+      "license": "OFL-1.1",
+      "files": [
+        {
+          "subset": "latin",
+          "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
+          "path": "/catalog/fonts/archivo-latin.e19a759cff0c.woff2",
+          "hash": "e19a759cff0c",
+          "bytes": 28748
+        },
+        {
+          "subset": "latin-ext",
+          "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF",
+          "path": "/catalog/fonts/archivo-latin-ext.f6419dfdf2bc.woff2",
+          "hash": "f6419dfdf2bc",
+          "bytes": 25788
+        }
+      ]
+    },
+    {
+      "id": "newsreader",
+      "family": "Newsreader",
+      "style": "normal",
+      "weight": "400",
+      "license": "OFL-1.1",
+      "files": [
+        {
+          "subset": "latin",
+          "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
+          "path": "/catalog/fonts/newsreader-latin.b2905872e9ec.woff2",
+          "hash": "b2905872e9ec",
+          "bytes": 49172
+        },
+        {
+          "subset": "latin-ext",
+          "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF",
+          "path": "/catalog/fonts/newsreader-latin-ext.1a443bd0f76c.woff2",
+          "hash": "1a443bd0f76c",
+          "bytes": 29696
+        }
+      ]
+    },
+    {
+      "id": "newsreader-italic",
+      "family": "Newsreader",
+      "style": "italic",
+      "weight": "400",
+      "license": "OFL-1.1",
+      "files": [
+        {
+          "subset": "latin",
+          "unicodeRange": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
+          "path": "/catalog/fonts/newsreader-italic-latin.202e7e06e5e4.woff2",
+          "hash": "202e7e06e5e4",
+          "bytes": 54600
+        },
+        {
+          "subset": "latin-ext",
+          "unicodeRange": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF",
+          "path": "/catalog/fonts/newsreader-italic-latin-ext.ee31451ffb45.woff2",
+          "hash": "ee31451ffb45",
+          "bytes": 32804
+        }
+      ]
+    }
+  ],
+  "gradients": [
+    {
+      "id": "dawn",
+      "name": "Dawn",
+      "color": "#7f9fbf",
+      "css": "linear-gradient(180deg, #5f86b3 0%, #7f9fbf 38%, #c9d3d0 72%, #f1d9c4 100%)"
+    },
+    {
+      "id": "meadow",
+      "name": "Meadow",
+      "color": "#4d6138",
+      "css": "linear-gradient(165deg, #7f9fbf 0%, #8aa38f 42%, #4d6138 78%, #2c3a1a 100%)"
+    },
+    {
+      "id": "ember",
+      "name": "Ember",
+      "color": "#b5573a",
+      "css": "radial-gradient(120% 90% at 20% 0%, #ffd2c2 0%, #ffb39b 28%, #b5573a 68%, #4a1d10 100%)"
+    },
+    {
+      "id": "dusk",
+      "name": "Dusk",
+      "color": "#1d2614",
+      "css": "linear-gradient(200deg, #3d5878 0%, #2a3a44 45%, #1d2614 100%)"
+    }
+  ],
+  "islands": {
+    "sky": {
+      "path": "/catalog/islands/sky.f4f1f3d98bf3.js",
+      "hash": "f4f1f3d98bf3",
+      "bytes": 228936
+    }
+  }
+}

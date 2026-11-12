@@ -1,0 +1,16 @@
+/* The page a domain shows between being added and its first publish. System fonts: it has no catalog to draw on. */
+@import "tailwindcss" source(none);
+@source "./";
+@source not "./styles.generated.ts";
+
+@theme {
+  --color-sky: #7f9fbf;
+  --color-ink: #1d2614;
+}
+
+@layer base {
+  ::selection {
+    background: #fff;
+    color: #2c3a1a;
+  }
+}
