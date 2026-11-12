@@ -41,10 +41,13 @@ export function splitStatements(sql: string): string[] {
   return statements;
 }
 
-export const migrations: readonly Migration[] = migrationFiles.map(({ name, sql }) => {
+/** Throws for a name that could break out of the bookkeeping statement. */
+export function toMigration(name: string, sql: string): Migration {
   if (!/^[\w.-]+$/.test(name)) throw new Error(`Migration name ${JSON.stringify(name)} must be a plain file name`);
   return { name, sql, statements: splitStatements(sql) };
-});
+}
+
+export const migrations: readonly Migration[] = migrationFiles.map(({ name, sql }) => toMigration(name, sql));
 
 export function d1Runner(d1: D1Database): SqlRunner {
   return async (statements) => {
@@ -53,11 +56,15 @@ export function d1Runner(d1: D1Database): SqlRunner {
   };
 }
 
-export async function applyMigrations(run: SqlRunner): Promise<MigrationResult> {
+/** `list` defaults to the migrations bundled with this code; an install passes the ones its release ships. */
+export async function applyMigrations(
+  run: SqlRunner,
+  list: readonly Migration[] = migrations,
+): Promise<MigrationResult> {
   const [, rows = []] = await run([CREATE_BOOKKEEPING, `SELECT name FROM "d1_migrations"`]);
   const done = new Set(rows.map((row) => row.name));
   const result: MigrationResult = { applied: [], skipped: [] };
-  for (const migration of migrations) {
+  for (const migration of list) {
     if (done.has(migration.name)) {
       result.skipped.push(migration.name);
       continue;

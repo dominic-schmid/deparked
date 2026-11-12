@@ -6,7 +6,34 @@ export {
   type ProvisionContext,
   type WorkerNames,
 } from "./context";
+export {
+  adminUrl,
+  DATABASE_NAME,
+  type HubOptions,
+  hubInstalled,
+  issueSetupSecret,
+  planInstallHub,
+  planUninstall,
+  SETUP_SECRET_TTL_MS,
+  UNINSTALL_LEAVES,
+} from "./hub";
 export { type DomainInspection, inspectDomain } from "./inspect";
+export {
+  PACKS,
+  type PackName,
+  packFileName,
+  parseRelease,
+  RELEASE_FORMAT,
+  type Release,
+  ReleaseError,
+  type ReleaseFile,
+  type ReleaseSource,
+  releaseFromUrl,
+  sha256Hex,
+  unpack,
+  type VerifiedFile,
+  versionAtLeast,
+} from "./release";
 export {
   BUSY_MESSAGE,
   type DryRunReport,

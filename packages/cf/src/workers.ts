@@ -352,6 +352,22 @@ export function workersApi(http: Http) {
       );
     },
 
+    /**
+     * Deletes the Worker with its versions, secrets and routes (`force`: also when routes still point at it).
+     * A Worker that is already gone counts as deleted. 1 request.
+     */
+    async deleteScript(scriptName: string): Promise<void> {
+      await http.requestOrNull(
+        {
+          call: `delete Worker ${scriptName}`,
+          method: "DELETE",
+          path: script(scriptName),
+          query: { force: true },
+        },
+        z.unknown(),
+      );
+    },
+
     /** Null when the Worker doesn't exist. */
     getSettings(scriptName: string): Promise<WorkerSettings | null> {
       return http.requestOrNull(

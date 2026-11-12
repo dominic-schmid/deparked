@@ -48,7 +48,8 @@ export type {
   Ruleset,
   RulesetPhase,
 } from "./rulesets";
-export type { PermissionReport, TokenStatus } from "./tokens";
+export type { PermissionReport, TokenPermission, TokenStatus } from "./tokens";
+export { PROBE_PERMISSION_LABELS, TOKEN_PERMISSIONS, tokenTemplateUrl } from "./tokens";
 export type { SiteverifyResult, TurnstileMode, TurnstileWidget, TurnstileWidgetWithSecret } from "./turnstile";
 export { TURNSTILE_MAX_HOSTNAMES, TURNSTILE_SITEVERIFY_URL, verifyTurnstile } from "./turnstile";
 export type {

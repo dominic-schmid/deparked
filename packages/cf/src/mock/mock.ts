@@ -16,6 +16,14 @@ export type MockPermission =
   | "rulesets"
   | "email_routing";
 
+/** The part of a D1 binding `attachDatabase` uses. */
+export interface MockD1 {
+  prepare(sql: string): {
+    bind(...values: unknown[]): { all(): Promise<{ results: unknown[] }> };
+    all(): Promise<{ results: unknown[] }>;
+  };
+}
+
 export interface MockZone {
   id: string;
   name: string;
@@ -134,6 +142,8 @@ export interface MockAnalyticsRow {
 export interface MockState {
   accountId: string;
   accountName: string;
+  /** Further accounts the token can see. API calls for them answer 404, like an account without access. */
+  otherAccounts: { id: string; name: string }[];
   token: string;
   tokenKind: "user" | "account";
   workersSubdomain: string | null;
@@ -235,6 +245,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
   const state: MockState = {
     accountId: seed.accountId ?? "mock-account",
     accountName: seed.accountName ?? "Mock account",
+    otherAccounts: [],
     token: seed.token ?? "mock-api-token",
     tokenKind: seed.tokenKind ?? "user",
     workersSubdomain: seed.workersSubdomain === undefined ? "mock" : seed.workersSubdomain,
@@ -257,6 +268,8 @@ export function createMockCloudflare(seed: MockSeed = {}) {
   const failures: (Required<Pick<MockFailure, "route" | "status">> & MockFailure & { seen: number })[] = [];
   const denied = new Set<MockPermission>();
   const sqlite = new Map<string, DatabaseSync>();
+  /** Databases served by a D1 binding instead of the mock's own SQLite: the API and the binding see one database. */
+  const attached = new Map<string, MockD1>();
   /** Upload tokens: a session still waiting for files, or a completion token. */
   const uploads = new Map<string, { manifest: MockVersion["manifest"]; pending: Set<string>; complete: boolean }>();
   let counter = 0;
@@ -281,6 +294,22 @@ export function createMockCloudflare(seed: MockSeed = {}) {
   function liveVersion(worker: MockScript): MockVersion | undefined {
     const versionId = worker.deployments.at(-1)?.versionId;
     return worker.versions.find((version) => version.id === versionId);
+  }
+
+  async function attachedSql(id: string, sql: string, params: SQLInputValue[]) {
+    const d1 = attached.get(id);
+    if (d1 === undefined) return undefined;
+    const results = [];
+    try {
+      for (const statement of splitStatements(sql)) {
+        const prepared = d1.prepare(statement);
+        const { results: rows } = await (params.length === 0 ? prepared : prepared.bind(...params)).all();
+        results.push({ success: true, results: rows, meta: {} });
+      }
+    } catch (error) {
+      throw new MockError(400, 7500, error instanceof Error ? error.message : "SQL error");
+    }
+    return results;
   }
 
   function database(id: string): DatabaseSync {
@@ -465,6 +494,15 @@ export function createMockCloudflare(seed: MockSeed = {}) {
           if (state.tokenKind !== "account") throw new MockError(401, 1000, "Invalid API Token");
           return { result: verifyResult() };
         },
+      },
+      {
+        id: "accounts.list",
+        method: "GET",
+        pattern: "/accounts",
+        handle: () => ({
+          result: [{ id: state.accountId, name: state.accountName, type: "standard" }, ...state.otherAccounts],
+          paginate: true,
+        }),
       },
       {
         id: "accounts.get",
@@ -823,6 +861,17 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        id: "workers.deleteScript",
+        method: "DELETE",
+        pattern: worker,
+        permission: "workers",
+        handle: (context) => {
+          const found = script(context);
+          state.scripts.delete(found.name);
+          return { result: null };
+        },
+      },
+      {
         id: "workers.getSettings",
         method: "GET",
         pattern: `${worker}/settings`,
@@ -867,13 +916,12 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         method: "POST",
         pattern: `${account}/d1/database/:database/query`,
         permission: "d1",
-        handle: (context) => ({
-          result: runSql(
-            context.params.database ?? "",
-            text(context.json.sql, "sql"),
-            (context.json.params ?? []) as SQLInputValue[],
-          ),
-        }),
+        handle: async (context) => {
+          const id = context.params.database ?? "";
+          const sql = text(context.json.sql, "sql");
+          const params = (context.json.params ?? []) as SQLInputValue[];
+          return { result: (await attachedSql(id, sql, params)) ?? runSql(id, sql, params) };
+        },
       },
       {
         id: "turnstile.list",
@@ -1204,6 +1252,16 @@ export function createMockCloudflare(seed: MockSeed = {}) {
     addDatabase(name: string): string {
       const created = { uuid: nextId("d1"), name };
       state.databases.push(created);
+      return created.uuid;
+    },
+    /**
+     * Add a database whose API queries run on `d1`, a real or local D1 binding, as the Deploy button's database
+     * is both the installer's binding and reachable through the API. Returns its id.
+     */
+    attachDatabase(name: string, d1: MockD1): string {
+      const created = { uuid: nextId("d1"), name };
+      state.databases.push(created);
+      attached.set(created.uuid, d1);
       return created.uuid;
     },
     /** Run SQL on a mock database directly, as a Worker's D1 binding would. */

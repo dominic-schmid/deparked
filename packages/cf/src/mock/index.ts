@@ -4,6 +4,7 @@ export type {
   MockBinding,
   MockCall,
   MockCloudflare,
+  MockD1,
   MockDnsRecord,
   MockFailure,
   MockPermission,

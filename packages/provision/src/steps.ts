@@ -35,8 +35,9 @@ export interface Step {
 }
 
 export interface Plan {
-  kind: "attach" | "turn-off" | "remove";
-  host: string;
+  kind: "attach" | "turn-off" | "remove" | "install" | "uninstall";
+  /** Null for a plan of the whole hub (install, uninstall). */
+  host: string | null;
   ctx: ProvisionContext;
   steps: readonly Step[];
 }
@@ -76,6 +77,14 @@ export interface StepReport {
  */
 export class StepBlockedError extends Error {
   override readonly name = "StepBlockedError";
+}
+
+/**
+ * A failure that is not Cloudflare's but should reach the owner as a `failed` report with its message (a release
+ * file that does not match its checksum). Retrying repeats the step.
+ */
+export class StepFailedError extends Error {
+  override readonly name: string = "StepFailedError";
 }
 
 /** How long a step may hold the provisioning lock. A step makes at most a few dozen requests. */
@@ -149,7 +158,7 @@ export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Pr
       return report("ran", result);
     } catch (error) {
       if (error instanceof StepBlockedError) return report("blocked", { message: error.message });
-      if (!(error instanceof CloudflareApiError)) throw error;
+      if (!(error instanceof CloudflareApiError) && !(error instanceof StepFailedError)) throw error;
       return report("failed", { message: error.message });
     }
   });
@@ -158,7 +167,7 @@ export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Pr
 
 export interface DryRunReport {
   kind: Plan["kind"];
-  host: string;
+  host: string | null;
   steps: ({ id: string; title: string } & StepCheck)[];
   /** True when every step is done: a second run right after a finished one must say this. */
   nothingToDo: boolean;
