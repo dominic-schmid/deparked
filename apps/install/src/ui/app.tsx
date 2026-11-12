@@ -188,14 +188,12 @@ function formatDate(epoch: number): string {
 
 function NoRelease() {
   return (
-    <>
-      <ScreenTitle title="Nothing to install yet">
-        <p>
-          This installer was built before the first Deparked release. Update your copy of the installer from the
-          Deparked repository (sync your fork on GitHub, Cloudflare redeploys it), then open this page again.
-        </p>
-      </ScreenTitle>
-    </>
+    <ScreenTitle title="Nothing to install yet">
+      <p>
+        This installer was built before the first Deparked release. Update your copy of the installer from the Deparked
+        repository (sync your fork on GitHub, Cloudflare redeploys it), then open this page again.
+      </p>
+    </ScreenTitle>
   );
 }
 

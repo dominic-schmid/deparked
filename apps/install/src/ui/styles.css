@@ -66,7 +66,4 @@
   .spin {
     animation-duration: 2.4s;
   }
-  * {
-    transition-duration: 0ms !important;
-  }
 }
