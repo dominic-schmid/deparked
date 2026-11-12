@@ -10,7 +10,7 @@ import {
 } from "@deparked/cf/mock";
 import { applyMigrations, d1Runner } from "@deparked/db";
 import { getPlatformProxy } from "wrangler";
-import { ROOT, TMP } from "./paths";
+import { LOGS, ROOT, TMP } from "./paths";
 import { type LocalWorker, startWorker } from "./processes";
 import { startHostProxy } from "./proxy";
 import { startReleaseServer } from "./release";
@@ -56,6 +56,11 @@ export interface Stack {
   hostUrl(host: string, path?: string): string;
   /** Puts a file into the sites Worker (`sites/example.com/index.html`) and waits until it is served. */
   writeSiteFile(path: string, body: string | Uint8Array): Promise<void>;
+  /**
+   * The emails the admin sent through its `send_email` binding since the last `reset()`, as raw MIME. Local workerd
+   * writes each to a file and logs its path; the mock Cloudflare never sees them.
+   */
+  sentMail(): string[];
   /** A fresh mock with the seed, an empty database (schema kept) and no written site files. */
   reset(): Promise<void>;
   stop(): Promise<void>;
@@ -176,9 +181,22 @@ export async function startStack(): Promise<Stack> {
       throw new Error(`the sites Worker did not pick up the change to ${path} within 15 s`);
     };
 
+    const mailFiles = () =>
+      ["admin", "admin-domains"].flatMap((name) => {
+        const log = resolve(LOGS, `${name}.log`);
+        return existsSync(log)
+          ? [...readFileSync(log, "utf8").matchAll(/^Email: (\S+\.eml)$/gm)].map((m) => m[1] ?? "")
+          : [];
+      });
+    let mailSeen = new Set<string>();
+
     return {
       mock,
       d1,
+      sentMail: () =>
+        mailFiles()
+          .filter((file) => !mailSeen.has(file))
+          .map((file) => readFileSync(file, "utf8")),
       urls: {
         admin: admin.url,
         install: install.url,
@@ -203,6 +221,7 @@ export async function startStack(): Promise<Stack> {
         );
       },
       async reset() {
+        mailSeen = new Set(mailFiles());
         current = createMockCloudflare(SEED);
         attach(current);
         const tables = await d1

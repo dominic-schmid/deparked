@@ -2,12 +2,14 @@ import { env } from "cloudflare:workers";
 import { createDb } from "@deparked/db";
 import { type HostingAdapter, HostingError } from "@deparked/hosting";
 import { createServerFn } from "@tanstack/react-start";
+import { hostSchema } from "./domains";
 import { getHosting } from "./hosting";
 import {
   addNotifyAddress,
   loadNotifyAddresses,
   type NotifyResult,
   notifyEmailSchema,
+  pickNotifyAddress,
   refreshNotifyAddresses,
   removeNotifyAddress,
   resendNotifyAddress,
@@ -58,3 +60,10 @@ export const checkNotify = createServerFn({ method: "POST" }).handler(async () =
   await requireSession();
   return withHosting((hosting) => refreshNotifyAddresses(createDb(env.DB), hosting, { now: Date.now() }));
 });
+
+export const pickNotify = createServerFn({ method: "POST" })
+  .validator(notifyEmailSchema.extend({ host: hostSchema }))
+  .handler(async ({ data }) => {
+    await requireSession();
+    return pickNotifyAddress(createDb(env.DB), { host: data.host, email: data.email, now: Date.now() });
+  });

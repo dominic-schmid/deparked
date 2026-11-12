@@ -1,5 +1,6 @@
 import {
   deleteNotifyAddress,
+  getDomain,
   getNotifyAddress,
   insertNotifyAddress,
   listNotifyAddresses,
@@ -12,6 +13,7 @@ import { describe, expect, test } from "vitest";
 import {
   addNotifyAddress,
   notifyEmailSchema,
+  pickNotifyAddress,
   refreshNotifyAddresses,
   removeNotifyAddress,
   resendNotifyAddress,
@@ -223,5 +225,27 @@ describe("check now", () => {
     await hosting.notifyAddresses.remove(verified?.cfAddressId ?? "");
     await refreshNotifyAddresses(db, hosting, { now: NOW + 20 });
     expect(await getNotifyAddress(db, SECOND)).toMatchObject({ verifiedAt: null, cfAddressId: null });
+  });
+});
+
+describe("pick for a domain", () => {
+  test("sends a domain's offers to a verified address", async () => {
+    const { db } = await setup();
+    await insertNotifyAddress(db, { email: SECOND, verifiedAt: NOW, now: NOW });
+
+    const result = await pickNotifyAddress(db, { host: HOST, email: SECOND, now: NOW + 1 });
+
+    expect(result).toEqual({ ok: true, message: `Offers for ${HOST} go to ${SECOND}.` });
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe(SECOND);
+  });
+
+  test("refuses a pending or unknown address and an unknown domain, changing nothing", async () => {
+    const { db } = await setup();
+    await insertNotifyAddress(db, { email: SECOND, now: NOW });
+
+    expect((await pickNotifyAddress(db, { host: HOST, email: SECOND, now: NOW })).ok).toBe(false);
+    expect((await pickNotifyAddress(db, { host: HOST, email: "nobody@example.com", now: NOW })).ok).toBe(false);
+    expect((await pickNotifyAddress(db, { host: "b.example", email: NOTIFY, now: NOW })).ok).toBe(false);
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe(NOTIFY);
   });
 });

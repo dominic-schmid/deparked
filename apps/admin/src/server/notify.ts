@@ -1,12 +1,14 @@
 import {
   type Db,
   deleteNotifyAddress,
+  getDomain,
   getNotifyAddress,
   hitRateLimit,
   insertNotifyAddress,
   listDomains,
   listNotifyAddresses,
   type NotifyAddress,
+  updateDomain,
   updateNotifyAddress,
 } from "@deparked/db";
 import { type NotifyAddress as HostAddress, type HostingAdapter, HostingError } from "@deparked/hosting";
@@ -192,4 +194,20 @@ export async function refreshNotifyAddresses(
   } catch (error) {
     return failed(error);
   }
+}
+
+/** Where a domain's offers are emailed. Only a verified address: Cloudflare delivers to no other. */
+export async function pickNotifyAddress(
+  db: Db,
+  input: { host: string; email: string; now: number },
+): Promise<NotifyResult> {
+  const address = await getNotifyAddress(db, input.email);
+  if (address === undefined) return { ok: false, message: `${input.email} is not on your list of addresses.` };
+  if (address.verifiedAt === null) {
+    return { ok: false, message: `${address.email} is not verified yet: open the link in Cloudflare's email first.` };
+  }
+  if ((await getDomain(db, input.host)) === undefined)
+    return { ok: false, message: `${input.host} is not managed here.` };
+  await updateDomain(db, { host: input.host, patch: { notifyEmail: address.email }, now: input.now });
+  return { ok: true, message: `Offers for ${input.host} go to ${address.email}.` };
 }
