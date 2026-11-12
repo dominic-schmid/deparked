@@ -8,22 +8,34 @@
   },
   "scripts": {
     "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "typecheck": "pnpm -r typecheck && tsc --noEmit -p apps/install",
+    "typecheck": "pnpm -r typecheck && tsc --noEmit -p apps/install && tsc --noEmit -p e2e && tsc --noEmit -p tests/lander",
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "vitest run && node --test scripts/hooks/guard.test.ts",
     "build:install": "node scripts/build-install.ts",
     "check:install-fresh": "pnpm build:install && test -z \"$(git status --porcelain -- apps/install/dist)\"",
-    "dry-run": "pnpm --filter @deparked/admin build && pnpm -r deploy:dry-run"
+    "dry-run": "pnpm --filter @deparked/admin build && pnpm -r deploy:dry-run",
+    "build:templates": "pnpm --filter @deparked/templates build",
+    "check:templates-fresh": "pnpm build:templates && test -z \"$(git status --porcelain -- packages/templates/src apps/sites/public/catalog)\"",
+    "test:layout": "playwright test --config tests/lander",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "test:e2e:real": "playwright test --config e2e/playwright.real.config.ts --pass-with-no-tests"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.7",
+    "@cloudflare/workers-types": "5.20261110.1",
+    "@deparked/cf": "workspace:*",
+    "@deparked/config": "workspace:*",
+    "@deparked/db": "workspace:*",
+    "@deparked/templates": "workspace:*",
     "@playwright/test": "1.63.0",
     "@tanstack/intent": "0.5.6",
     "@types/node": "^22.18.0",
+    "@types/react": "^19.3.0",
     "esbuild": "0.28.2",
     "typescript": "7.0.2",
-    "vitest": "5.1.0"
+    "vitest": "5.1.0",
+    "wrangler": "4.160.1"
   },
   "intent": {
     "skills": [
