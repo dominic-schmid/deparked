@@ -86,7 +86,7 @@ export async function fetchLatestRelease(
     return { ok: false, message: UNREADABLE };
   }
   const version = parsed.tag_name.replace(/^v/, "");
-  if (!VERSION.test(version)) return { ok: false, message: UNREADABLE };
+  if (version.length > 64 || !VERSION.test(version)) return { ok: false, message: UNREADABLE };
   const manifest = parsed.assets.find((asset) => asset.name === "release.json");
   if (manifest === undefined) return { ok: false, message: `Deparked ${version} has no release.json.` };
   let sha256 = /^sha256:([0-9a-f]{64})$/.exec(manifest.digest ?? "")?.[1] ?? null;

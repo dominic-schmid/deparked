@@ -44,6 +44,9 @@ export const Route = createFileRoute("/admin/_shell/settings/updates")({
   errorComponent: PageError,
 });
 
+/** Buttons that name a version: a long pre-release name wraps instead of running off a phone screen. */
+const VERSION_BUTTON = "h-auto min-h-9 py-2 whitespace-normal text-left [overflow-wrap:anywhere]";
+
 const DATABASE_NOTE =
   "Database changes only go forward. If you roll back later, the database stays as the newer version left it; Deparked's database changes only add, so the earlier version keeps working with it. Your offers and settings stay either way.";
 
@@ -198,7 +201,7 @@ function ChangeProgress(props: {
     if (result.status === "failed" && typeof result.at === "string") mark(result.at, "failed");
     setOutcome(result);
     setRunning(false);
-    if (result.status === "done") await router.invalidate();
+    await router.invalidate();
   }, [finish, initialRows, mark, onEvent, publishStep, router, start, step, version, view.running]);
 
   const once = useRef(false);
@@ -276,7 +279,7 @@ function ChangeProgress(props: {
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void go()}>{outcome === null ? "Continue" : "Retry"}</Button>
             {props.rollbackTo !== null ? (
-              <Button variant="outline" onClick={props.onRollback}>
+              <Button className={VERSION_BUTTON} variant="outline" onClick={props.onRollback}>
                 Roll back to {props.rollbackTo.version}
               </Button>
             ) : null}
@@ -396,7 +399,7 @@ function UpdateAvailable(props: {
                   </Label>
                 </div>
                 <div>
-                  <Button onClick={() => void onInstall()} aria-disabled={busy}>
+                  <Button className={VERSION_BUTTON} onClick={() => void onInstall()} aria-disabled={busy}>
                     {busy ? "Starting…" : `Install Deparked ${latest.version}`}
                   </Button>
                 </div>
@@ -506,6 +509,11 @@ function UpdatesPage() {
     view.running === unfinished.pin.version &&
     status.installed?.version === unfinished.pin.version;
 
+  // An update started on this page made the installed release the rollback target; the loaded view predates it.
+  const installedPin =
+    status.installed?.sha256 == null ? null : { version: status.installed.version, sha256: status.installed.sha256 };
+  const rollbackTo = started?.kind === "update" ? installedPin : status.rollbackTo;
+
   async function onCheck() {
     setChecking(true);
     try {
@@ -569,7 +577,7 @@ function UpdatesPage() {
           view={view}
           change={change}
           autoStart={started !== null || resume}
-          rollbackTo={change.kind === "update" ? status.rollbackTo : null}
+          rollbackTo={change.kind === "update" ? rollbackTo : null}
           onRollback={() => setRollbackOpen(true)}
         />
       ) : view.available && latest !== null && status.installed !== null ? (
@@ -589,7 +597,7 @@ function UpdatesPage() {
           <CardContent className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">{DATABASE_NOTE}</p>
             <div>
-              <Button variant="outline" onClick={() => setRollbackOpen(true)}>
+              <Button className={VERSION_BUTTON} variant="outline" onClick={() => setRollbackOpen(true)}>
                 Roll back to {status.rollbackTo.version}
               </Button>
             </div>
@@ -597,11 +605,11 @@ function UpdatesPage() {
         </Card>
       ) : null}
 
-      {status.rollbackTo !== null && status.installed !== null ? (
+      {rollbackTo !== null && status.installed !== null ? (
         <RollbackDialog
           open={rollbackOpen}
           onOpenChange={setRollbackOpen}
-          target={status.rollbackTo}
+          target={rollbackTo}
           installed={status.installed.version}
           onStarted={onStarted}
         />

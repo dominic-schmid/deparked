@@ -14,7 +14,10 @@ import { type LatestRelease, type LatestResult, UPSTREAM_REPOSITORY } from "./la
 export const LATEST_TTL_MS = 60 * 60_000;
 
 export const pinSchema = z.object({
-  version: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, "Not a release version."),
+  version: z
+    .string()
+    .max(64)
+    .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, "Not a release version."),
   sha256: z
     .string()
     .trim()

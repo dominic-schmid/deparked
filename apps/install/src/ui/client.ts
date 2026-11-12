@@ -42,3 +42,4 @@ export async function getStatus(): Promise<Status | null> {
 export const checkToken = (input: CheckRequest) => post<CheckResponse>("/api/check", input);
 export const runStep = (input: StepRequest) => post<StepResponse>("/api/step", input);
 export const finishInstall = (input: FinishRequest) => post<FinishResponse>("/api/finish", input);
+export const rollbackStep = (input: StepRequest) => post<StepResponse>("/api/rollback", input);

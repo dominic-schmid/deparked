@@ -14,6 +14,7 @@ import {
 } from "@deparked/db";
 import {
   adminUrl,
+  beginRollback,
   checkTokenPermissions,
   DATABASE_NAME,
   dryRun,
@@ -25,6 +26,7 @@ import {
   ReleaseError,
   releaseFromUrl,
   runNextStep,
+  runReleaseStep,
   sha256Hex,
   versionAtLeast,
 } from "@deparked/provision";
@@ -252,6 +254,41 @@ export async function step(env: Env, input: StepRequest, clientIp: string): Prom
         lastError: failed ? report.message : null,
       });
     }
+    return {
+      ok: true,
+      report: {
+        step: report.step,
+        outcome: report.outcome,
+        message: report.message,
+        effects: report.effects,
+        finished: report.finished,
+        next: report.state.next,
+      },
+    };
+  } catch (error) {
+    return answer(error);
+  }
+}
+
+/**
+ * Recovery for an update whose new admin does not work: rolls the hub back to the release installed before it,
+ * one step per request, as the admin's own Roll back does. The admin publishes every page again once it answers.
+ */
+export async function rollback(env: Env, input: StepRequest, clientIp: string): Promise<StepResponse> {
+  try {
+    const session = await openSession(env, { token: input.token, accountId: input.accountId, clientIp });
+    if (input.next === 0) {
+      const started = await beginRollback(session.ctx);
+      if (!started.ok) return fail("release", started.message);
+    }
+    const report = await runReleaseStep(
+      session.ctx,
+      {
+        token: input.token,
+        release: (pin) => releaseFromUrl({ baseUrl: releaseBaseUrl(env, pin), pinnedSha256: pin.sha256 }),
+      },
+      { next: input.next },
+    );
     return {
       ok: true,
       report: {

@@ -1,6 +1,9 @@
+import { createCloudflareClient } from "@deparked/cf";
 import { createDb, insertDomain, insertTurnstileWidget, setDomainStatus } from "@deparked/db";
+import { beginUpdate, releaseFromUrl, runReleaseStep } from "../../packages/provision/src/index";
 import {
   expect,
+  TEST_ACCOUNT_ID,
   TEST_RELEASE,
   TEST_RELEASE_NEXT,
   TEST_TOKEN,
@@ -96,4 +99,55 @@ test("updates from one release to the next from Settings, republishes every page
   await page.reload();
   await expect(page.getByRole("heading", { name: `Update available: Deparked ${TEST_RELEASE_NEXT}` })).toBeVisible();
   await expect(page.getByRole("button", { name: /Roll back/ })).toHaveCount(0);
+});
+
+test("an update whose admin does not work is rolled back from the installer, then finished in the admin", async ({
+  page,
+  urls,
+  mock,
+  db,
+  login,
+  releases,
+}) => {
+  test.setTimeout(120_000);
+  await page.goto(urls.install);
+  await page.getByLabel("API token").fill(TEST_TOKEN);
+  await page.getByRole("button", { name: "Check the token" }).click();
+  await page.getByRole("button", { name: "Install Deparked" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Deparked is installed" })).toBeVisible({ timeout: 20_000 });
+
+  // The admin installs B through its steps; then B's admin is assumed dead, so the owner goes to the installer.
+  const cf = createCloudflareClient({ token: TEST_TOKEN, accountId: TEST_ACCOUNT_ID, baseUrl: urls.cloudflareApi });
+  const ctx = { cf, db: createDb(db.d1), now: Date.now };
+  const pin = { version: TEST_RELEASE_NEXT, sha256: releases[TEST_RELEASE_NEXT] ?? "" };
+  expect(await beginUpdate(ctx, pin)).toMatchObject({ ok: true });
+  const options = {
+    token: TEST_TOKEN,
+    release: (target: typeof pin) =>
+      releaseFromUrl({ baseUrl: `${urls.release}/v${target.version}`, pinnedSha256: target.sha256 }),
+  };
+  let state = { next: 0 };
+  for (;;) {
+    const report = await runReleaseStep(ctx, options, state);
+    expect(report.outcome).not.toBe("failed");
+    state = report.state;
+    if (report.finished) break;
+  }
+  const release = () =>
+    mock.liveBindings("deparked-admin").find((binding) => binding.name === "DEPARKED_RELEASE")?.text;
+  expect(release()).toBe(TEST_RELEASE_NEXT);
+
+  await page.goto(urls.install);
+  await page.getByLabel("API token").fill(TEST_TOKEN);
+  await page.getByRole("button", { name: "Roll back the last update" }).click();
+  await expect(page.getByText("The earlier version is installed again.")).toBeVisible({ timeout: 30_000 });
+  expect(release()).toBe(TEST_RELEASE);
+
+  // The admin carries on: every page published again, and the rollback finished.
+  await login();
+  await page.goto(`${urls.admin}/admin/settings/updates`);
+  await expect(page.getByRole("heading", { name: `Rolling back to Deparked ${TEST_RELEASE}` })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText(`Deparked ${TEST_RELEASE} is installed`)).toBeVisible({ timeout: 60_000 });
+  expect(await db.sql("SELECT change_finished_at IS NOT NULL AS done FROM release_state")).toEqual([{ done: 1 }]);
 });
