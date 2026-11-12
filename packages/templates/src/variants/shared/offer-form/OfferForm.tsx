@@ -24,7 +24,11 @@ export type OfferFormProps = {
   sentence: SentencePart[];
   finePrint: string;
   marketplaceUrl?: string;
+  /** The bot check's colours: the page's own, or `auto` for a page that follows the visitor's colour scheme. */
+  turnstileTheme: TurnstileTheme;
 };
+
+export type TurnstileTheme = "light" | "dark" | "auto";
 
 type Turnstile = {
   render(container: HTMLElement, options: Record<string, unknown>): string;
@@ -66,6 +70,7 @@ export function OfferForm({
   sentence,
   finePrint,
   marketplaceUrl,
+  turnstileTheme,
 }: OfferFormProps) {
   const [hydrated, setHydrated] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>(NO_ERRORS);
@@ -132,7 +137,7 @@ export function OfferForm({
       box.classList.remove("passed");
       state.widgetId ||= api.render(box, {
         sitekey,
-        theme: "dark",
+        theme: turnstileTheme,
         appearance: "interaction-only",
         execution: "execute",
         callback: (token: string) => {

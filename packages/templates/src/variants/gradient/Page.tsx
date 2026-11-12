@@ -53,6 +53,7 @@ export function Page({ config, host, gradient, sitekey, offerEndpoint }: PagePro
           sentence: sentenceParts(config.sentence, host),
           finePrint: fillDomain(config.escrowLine, host),
           ...(config.marketplaceUrl ? { marketplaceUrl: config.marketplaceUrl } : {}),
+          turnstileTheme: tone,
         }}
       />
     </div>

@@ -48,6 +48,7 @@ export function Page({ config, host, background, sitekey, offerEndpoint }: PageP
           sentence: sentenceParts(config.sentence, host),
           finePrint: fillDomain(config.escrowLine, host),
           ...(config.marketplaceUrl ? { marketplaceUrl: config.marketplaceUrl } : {}),
+          turnstileTheme: "dark",
         }}
       />
     </>

@@ -46,6 +46,19 @@ describe("render", () => {
     }
   });
 
+  it("gives the bot check the page's own colours", () => {
+    const theme = (change: Partial<Config>) =>
+      /&quot;turnstileTheme&quot;:&quot;(\w+)&quot;/.exec(
+        render({ ...defaultConfig(), ...change }, "example.com", options)["index.html"],
+      )?.[1];
+    expect(theme({ variant: "sky" })).toBe("dark");
+    expect(theme({ variant: "gradient", background: "dusk" })).toBe("dark");
+    expect(theme({ variant: "gradient", background: "dawn" })).toBe("light");
+    expect(theme({ variant: "editorial" })).toBe("auto");
+    expect(theme({ variant: "mono" })).toBe("auto");
+    expect(theme({ variant: "split" })).toBe("dark");
+  });
+
   it("sets Editorial in paper and ink, following the visitor's colour scheme, with no photo", () => {
     const html = render({ ...defaultConfig(), variant: "editorial" }, "example.com", options)["index.html"];
     expect(html).toContain('<meta name="color-scheme" content="light dark"/>');
