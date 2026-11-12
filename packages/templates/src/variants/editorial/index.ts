@@ -15,4 +15,6 @@ export const editorial: VariantDefinition = {
   darkColor: "#15130f",
   colorScheme: "light dark",
   contrast: "#1a1714",
+  onAccent: { ink: "#1a1714", paper: "#f4efe6" },
+  accentMarksOn: { light: "#f4efe6", dark: "#15130f" },
 };

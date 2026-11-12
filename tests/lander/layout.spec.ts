@@ -62,6 +62,17 @@ for (const variant of Object.keys(variants) as (keyof typeof variants)[]) {
       for (const size of VIEWPORTS) {
         await page.setViewportSize({ width: size[0], height: size[1] });
         await check("filled in, with an error", size);
+        // the full stop after a long address stays on the address's line, not on one of its own
+        const orphan = await page.locator('input[name="email"]').evaluate((input) => {
+          const tail = input.parentElement?.querySelector(".tail");
+          if (!tail) return "";
+          const field = input.getBoundingClientRect();
+          const stop = tail.getBoundingClientRect();
+          return stop.top < field.bottom && stop.bottom > field.top
+            ? ""
+            : `"${tail.textContent}" wrapped below the email`;
+        });
+        if (orphan) faults.push(`${size.join("x")} filled in: ${orphan}`);
       }
 
       // and the thank-you that repeats the name, the amount and the address

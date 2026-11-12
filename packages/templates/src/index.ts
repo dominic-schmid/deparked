@@ -6,6 +6,7 @@ export type {
   CatalogImage,
   CatalogIsland,
 } from "./catalog";
+export { contrastOn, contrastRatio, READABLE, readableOn } from "./contrast";
 export {
   currencyName,
   currencySymbol,

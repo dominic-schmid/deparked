@@ -49,6 +49,7 @@ export function Page({ config, host, sitekey, offerEndpoint }: PageProps) {
             sentence: sentenceParts(config.sentence, host),
             finePrint: fillDomain(config.escrowLine, host),
             ...(config.marketplaceUrl ? { marketplaceUrl: config.marketplaceUrl } : {}),
+            turnstileTheme: "auto",
           }}
         />
       </section>

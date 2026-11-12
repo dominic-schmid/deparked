@@ -18,12 +18,27 @@
   --ease-swift: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/*
+ * If the brand font cannot load, the wordmark falls back to a common system face scaled (size-adjust) to the brand
+ * font's widths, measured over domain names; it was fitted to the page with those widths and would clip otherwise.
+ */
+@font-face {
+  font-family: "Newsreader Italic Fallback";
+  src:
+    local("Times New Roman Italic"), local("TimesNewRomanPS-ItalicMT"), local("Liberation Serif Italic"),
+    local("LiberationSerif-Italic"), local("Tinos Italic"), local("Times Italic");
+  size-adjust: 98%;
+  font-display: swap;
+  font-style: italic;
+}
+
 @layer base {
   :root {
     --panel: var(--accent, #1f2918);
     --on: var(--accent-contrast, #f2ede1);
     --soft: color-mix(in srgb, var(--on) 72%, transparent);
     --line: color-mix(in srgb, var(--on) 30%, transparent);
+    --invalid: #ffa58c;
     --edge: clamp(20px, 3.4vw, 64px);
   }
   * {
@@ -48,6 +63,11 @@
     background: var(--on);
     color: var(--panel);
   }
+  /* a pale accent panel carries ink: light controls, and an error mark that reads on it */
+  :root:has(.panel[data-tone="light"]) {
+    --invalid: #a3260b;
+    color-scheme: light;
+  }
 }
 
 @layer components {
@@ -69,7 +89,7 @@
     object-fit: cover;
     background-size: cover;
     background-repeat: no-repeat;
-    animation: settle 1.6s var(--ease-swift) both;
+    animation: settle 1.2s var(--ease-swift) both;
   }
 
   .panel {
@@ -97,7 +117,10 @@
   .mark {
     align-self: end;
     padding-top: clamp(32px, 8svh, 96px);
-    font: italic 400 min(var(--fit), 260px, 30svh) / 0.95 var(--font-serif);
+    font:
+      italic 400 min(var(--fit), 260px, 30svh) / 0.95 Newsreader,
+      "Newsreader Italic Fallback",
+      var(--font-serif);
     letter-spacing: -0.015em;
     padding-bottom: 0.12em;
     white-space: nowrap;
@@ -127,12 +150,6 @@
     text-wrap: pretty;
     overflow-wrap: break-word;
   }
-  .slot {
-    position: relative;
-    display: inline-block;
-    vertical-align: baseline;
-    max-width: 100%;
-  }
   .slot input {
     font: italic 400 1.12em / 1.2 var(--font-serif);
     color: var(--on);
@@ -143,8 +160,6 @@
     padding: 0 0.1em 0.02em;
     outline: none;
     field-sizing: content;
-    min-width: 4ch;
-    max-width: 100%;
     touch-action: manipulation;
     transition: border-color 0.15s ease-out;
   }
@@ -160,17 +175,11 @@
     outline-offset: 3px;
   }
   .slot input[aria-invalid="true"] {
-    border-bottom: 2px solid #ffa58c;
+    border-bottom: 2px solid var(--invalid);
   }
+  /* room for the focus ring between the currency and the blank */
   .slot input[name="amount"] {
-    min-width: 5ch;
-    margin-left: 0.1em;
-  }
-  .slot input[name="name"] {
-    min-width: 7ch;
-  }
-  .slot input[name="email"] {
-    min-width: 12ch;
+    margin-left: 0.3em;
   }
 
   .row {
@@ -246,6 +255,15 @@
     }
   }
 
+  /* no JavaScript: a note where the button would be */
+  .nojs {
+    padding: 12px 16px;
+    font-size: clamp(14px, 0.85vw, 17px);
+    line-height: 1.45;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+
   /* one solid note for whatever is wrong; it takes the fine print's place in the row */
   .tag {
     flex: 0 1 auto;
@@ -286,8 +304,8 @@
   }
 
   [data-enter] {
-    animation: enter 0.9s var(--ease-swift) both;
-    animation-delay: calc(var(--i, 0) * 120ms + 160ms);
+    animation: enter 0.38s var(--ease-swift) both;
+    animation-delay: calc(var(--i, 0) * 60ms + 80ms);
   }
 
   /* upright screens: the photo is a band across the top, the panel below it */
@@ -333,7 +351,7 @@
 
 @keyframes settle {
   from {
-    scale: 1.06;
+    scale: 1.04;
   }
 }
 @keyframes pop {
@@ -347,7 +365,6 @@
    brings it into focus and place instead of fading it in from invisible */
 @keyframes enter {
   from {
-    filter: blur(4px);
-    translate: 0 14px;
+    translate: 0 12px;
   }
 }

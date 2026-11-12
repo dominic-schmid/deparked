@@ -14,4 +14,5 @@ export const split: VariantDefinition = {
   color: "#1f2918",
   contrast: "#f2ede1",
   colorScheme: "dark",
+  onAccent: { ink: "#1f2918", paper: "#f2ede1" },
 };

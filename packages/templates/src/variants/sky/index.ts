@@ -17,4 +17,5 @@ export const sky: VariantDefinition = {
   backgroundSizes: coverSizes,
   color: "#7f9fbf",
   contrast: "#ffffff",
+  onAccent: { ink: "#1d2614", paper: "#ffffff" },
 };

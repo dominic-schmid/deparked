@@ -12,4 +12,6 @@ export const mono: VariantDefinition = {
   darkColor: "#0f0f0e",
   colorScheme: "light dark",
   contrast: "#121211",
+  onAccent: { ink: "#121211", paper: "#f4f4f1" },
+  accentMarksOn: { light: "#f4f4f1", dark: "#0f0f0e" },
 };

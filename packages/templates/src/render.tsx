@@ -2,9 +2,11 @@ import { type Config, fillDomain } from "@deparked/config";
 import type { CSSProperties } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Catalog, CatalogFont } from "./catalog";
+import { contrastOn, luminance, readableOn } from "./contrast";
 import { OFFER_ENDPOINT } from "./offer";
 import { faviconHref, jsonForScript, robotsTxt, sitemapXml, siteOrigin } from "./site";
 import { resolveVariant } from "./variants";
+import type { VariantDefinition } from "./variants/types";
 
 /** The files of one domain, by their path under `/sites/<host>/`. */
 export type SiteFiles = { "index.html": string; "robots.txt": string; "sitemap.xml": string };
@@ -48,10 +50,16 @@ export function render(config: Config, host: string, options: RenderOptions): Si
   const origin = siteOrigin(host);
   const title = fillDomain(config.seo.title, host);
   const description = fillDomain(config.seo.description, host);
-  const color = hexColor(config.accent?.primary, "accent.primary") ?? gradient?.color ?? variant.color;
+  const accent = hexColor(config.accent?.primary, "accent.primary");
+  const accentContrast =
+    hexColor(config.accent?.contrast, "accent.contrast") ?? (accent && contrastOn(accent, variant.onAccent));
+  const color = accent ?? gradient?.color ?? variant.color;
   // a light gradient carries ink, not the variant's white, in the favicon too
-  const contrast =
-    hexColor(config.accent?.contrast, "accent.contrast") ?? (gradient?.tone === "light" ? "#1c2116" : variant.contrast);
+  const contrast = accentContrast ?? (gradient?.tone === "light" ? "#1c2116" : variant.contrast);
+  const tone = luminance(accentContrast ?? contrastOn(color, variant.onAccent)) < 0.5 ? "light" : "dark";
+  // a variant that commits to one scheme commits to its flat colour's, so a pale accent gets light controls
+  const scheme =
+    variant.colorScheme === "light dark" ? variant.colorScheme : variant.colorScheme ? tone : gradient?.tone;
   const shareImage = background?.formats.webp.find((image) => image.width >= 1200) ?? background?.formats.webp.at(-1);
   // WebPage, not Product/Offer: an Offer needs a real price, and the minimum is a quiet filter, not an asking price.
   const jsonLd = {
@@ -65,7 +73,7 @@ export function render(config: Config, host: string, options: RenderOptions): Si
   };
 
   const html = renderToStaticMarkup(
-    <html lang="en" style={accentStyle(config)}>
+    <html lang="en" style={accentStyle(accent, accentContrast, variant.accentMarksOn)}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
@@ -86,9 +94,7 @@ export function render(config: Config, host: string, options: RenderOptions): Si
         {variant.darkColor && !config.accent?.primary && (
           <meta name="theme-color" media="(prefers-color-scheme: dark)" content={variant.darkColor} />
         )}
-        {(variant.colorScheme ?? gradient?.tone) && (
-          <meta name="color-scheme" content={variant.colorScheme ?? gradient?.tone} />
-        )}
+        {scheme && <meta name="color-scheme" content={scheme} />}
         <link rel="icon" href={faviconHref(host, color, contrast)} />
         {background && variant.backgroundSizes && (
           <link
@@ -122,6 +128,7 @@ export function render(config: Config, host: string, options: RenderOptions): Si
           gradient={gradient}
           sitekey={sitekey}
           offerEndpoint={offerEndpoint}
+          tone={tone}
         />
         {beaconToken && <script defer src={BEACON_SCRIPT} data-cf-beacon={JSON.stringify({ token: beaconToken })} />}
       </body>
@@ -146,12 +153,21 @@ function hexColor(value: string | undefined, field: string): string | undefined 
   return value;
 }
 
-/** An accent override reaches the variant's CSS as custom properties; the schema has already limited it to hex. */
-function accentStyle({ accent }: Config): CSSProperties | undefined {
-  if (!accent?.primary && !accent?.contrast) return undefined;
+/**
+ * An accent override reaches the variant's CSS as custom properties: the colour, the text colour on it, and the
+ * colour shaded until it reads as a mark on the page's own background(s).
+ */
+function accentStyle(
+  accent: string | undefined,
+  contrast: string | undefined,
+  marksOn: VariantDefinition["accentMarksOn"],
+): CSSProperties | undefined {
+  if (!accent && !contrast) return undefined;
   return {
-    ...(accent.primary ? { "--accent": accent.primary } : {}),
-    ...(accent.contrast ? { "--accent-contrast": accent.contrast } : {}),
+    ...(accent ? { "--accent": accent } : {}),
+    ...(contrast ? { "--accent-contrast": contrast } : {}),
+    ...(accent && marksOn ? { "--accent-mark": readableOn(accent, marksOn.light) } : {}),
+    ...(accent && marksOn?.dark ? { "--accent-mark-dark": readableOn(accent, marksOn.dark) } : {}),
   } as CSSProperties;
 }
 

@@ -1,10 +1,19 @@
 import type { Currency, SentencePart, SentenceSlot } from "@deparked/config";
-import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   currencyName,
   currencySymbol,
+  editAmount,
   formatAmount,
-  groupDigits,
+  minOfferMessage,
   OFFER_ERROR_REASONS,
   OFFER_FIELDS,
   OFFER_LIMITS,
@@ -24,7 +33,11 @@ export type OfferFormProps = {
   sentence: SentencePart[];
   finePrint: string;
   marketplaceUrl?: string;
+  /** The bot check's colours: the page's own, or `auto` for a page that follows the visitor's colour scheme. */
+  turnstileTheme: TurnstileTheme;
 };
+
+export type TurnstileTheme = "light" | "dark" | "auto";
 
 type Turnstile = {
   render(container: HTMLElement, options: Record<string, unknown>): string;
@@ -66,6 +79,7 @@ export function OfferForm({
   sentence,
   finePrint,
   marketplaceUrl,
+  turnstileTheme,
 }: OfferFormProps) {
   const [hydrated, setHydrated] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>(NO_ERRORS);
@@ -76,9 +90,16 @@ export function OfferForm({
   const inputs = useRef<Partial<Record<SentenceSlot, HTMLInputElement>>>({});
   const tagRef = useRef<HTMLParagraphElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const sentRef = useRef<HTMLDivElement>(null);
+  const lastAmount = useRef("");
   const turnstile = useRef({ token: "", widgetId: "", settle: (_result: string | Error) => {} });
 
   useEffect(() => setHydrated(true), []);
+
+  // The thank-you replaces the form: focus moves to it, so a screen reader reads it and the keyboard is not lost.
+  useEffect(() => {
+    if (sent) sentRef.current?.focus();
+  }, [sent]);
 
   // Replay the tag's entrance for every new message, also when the text is the same as the last one.
   useLayoutEffect(() => {
@@ -95,17 +116,58 @@ export function OfferForm({
     element.classList.add("shake");
   }
 
-  const amountDigits = () =>
-    (inputs.current.amount?.value ?? "").replace(/\D/g, "").slice(0, OFFER_LIMITS.amountDigits);
+  const amountDigits = () => (inputs.current.amount?.value ?? "").replace(/\D/g, "");
 
-  function onInput(slot: SentenceSlot) {
-    const input = inputs.current.amount;
-    if (slot === "amount" && input) {
-      const digits = amountDigits();
-      input.value = digits ? groupDigits(Number(digits)) : "";
+  /** What is wrong with a blank as it stands, or "" when nothing is. */
+  function problem(slot: SentenceSlot): string {
+    const input = inputs.current[slot];
+    const value = input?.value.trim() ?? "";
+    if (slot === "amount") {
+      const amount = Number(amountDigits());
+      return !amount ? "Add an amount" : amount < minOffer ? minOfferMessage(minOffer, currency) : "";
     }
-    setErrors((current) => (current[slot] ? { ...current, [slot]: "" } : current));
-    setTag((current) => (current?.key === slot ? null : current));
+    if (slot === "name") return value ? "" : "Add your name";
+    return value && input?.checkValidity() ? "" : "Add an email we can reply to";
+  }
+
+  function showProblem(slot: SentenceSlot, message: string) {
+    setErrors((current) => (current[slot] === message ? current : { ...current, [slot]: message }));
+    setTag((current) => (message ? { key: slot, message } : current?.key === slot ? null : current));
+  }
+
+  function onInput(slot: SentenceSlot, event: FormEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    if (slot === "amount") {
+      const edit = (event.nativeEvent as InputEvent).inputType ?? "";
+      const next = editAmount(input.value, input.selectionStart ?? input.value.length, lastAmount.current, edit);
+      input.value = next.value;
+      input.setSelectionRange(next.caret, next.caret);
+      lastAmount.current = next.value;
+    }
+    // a blank in error is checked again as it is typed in, so the message goes as soon as it is fixed
+    if (errors[slot]) showProblem(slot, problem(slot));
+  }
+
+  // An empty blank is as wide as its placeholder. Held at that width (in em, so it follows the type's size), it
+  // grows from there as it is typed into instead of snapping narrower at the first character.
+  function holdPlaceholderWidth(input: HTMLInputElement) {
+    if (input.value || input.style.minWidth) return;
+    const em = input.getBoundingClientRect().width / Number.parseFloat(getComputedStyle(input).fontSize);
+    input.style.minWidth = `min(${em.toFixed(3)}em, 100cqi - 1.2em)`;
+  }
+
+  // A blank is judged when it is left, not while it is being typed in, and only once there is something in it.
+  function onBlur(slot: SentenceSlot) {
+    if (inputs.current[slot]?.value.trim()) showProblem(slot, problem(slot));
+  }
+
+  // Enter in a blank moves on to the next one, the way the phone keyboard's "Next" key says; in the last, it sends.
+  function onKeyDown(slot: SentenceSlot, event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    const next = slots[slots.indexOf(slot) + 1];
+    if (!next) return;
+    event.preventDefault();
+    inputs.current[next]?.focus();
   }
 
   // Cloudflare's check runs only when Send is pressed; its box appears only if Cloudflare needs a click,
@@ -132,7 +194,7 @@ export function OfferForm({
       box.classList.remove("passed");
       state.widgetId ||= api.render(box, {
         sitekey,
-        theme: "dark",
+        theme: turnstileTheme,
         appearance: "interaction-only",
         execution: "execute",
         callback: (token: string) => {
@@ -168,17 +230,9 @@ export function OfferForm({
     const name = nameInput.value.trim();
     const email = emailInput.value.trim();
 
-    const found: FieldErrors = {
-      amount: !amount
-        ? "Add an amount"
-        : amount < minOffer
-          ? `Offers start at ${formatAmount(minOffer, currency)}`
-          : "",
-      name: name ? "" : "Add your name",
-      email: email && emailInput.checkValidity() ? "" : "Add an email we can reply to",
-    };
+    const found: FieldErrors = { amount: problem("amount"), name: problem("name"), email: problem("email") };
     setErrors(found);
-    const first = sentence.flatMap((part) => (part.type === "slot" && found[part.slot] ? [part.slot] : []))[0];
+    const first = slots.find((slot) => found[slot]);
     if (first) {
       setTag({ key: first, message: found[first] });
       const input = inputs.current[first];
@@ -220,7 +274,10 @@ export function OfferForm({
       if (field) {
         setErrors((current) => ({ ...current, [field]: message }));
         const input = inputs.current[field];
-        if (input) shake(input);
+        if (input) {
+          shake(input);
+          input.focus();
+        }
       }
       setTag({ key: field ?? "form", message });
       state.token = "";
@@ -230,14 +287,16 @@ export function OfferForm({
     }
   }
 
+  const slots = sentence.flatMap((part) => (part.type === "slot" ? [part.slot] : []));
   const staticErrors = offerErrorMessages(minOffer, currency);
+  const busy = status !== "idle";
   const marketplaceHost = marketplaceUrl?.startsWith("https://") ? hostOf(marketplaceUrl) : "";
 
   return (
     <>
       <form method="post" action={endpoint} noValidate={hydrated} hidden={sent !== null} onSubmit={onSubmit}>
         <p className="say">
-          {sentence.map((part, index) =>
+          {glue(sentence).map((part, index) =>
             part.type === "text" ? (
               // biome-ignore lint/suspicious/noArrayIndexKey: the runs of one sentence, in order; a run can repeat
               <span key={index} dir="auto">
@@ -245,6 +304,9 @@ export function OfferForm({
               </span>
             ) : (
               <span className="slot" key={part.slot}>
+                {/* an empty label around the blank: tapping near it, above or below, still lands in it */}
+                {/* biome-ignore lint/a11y/noLabelWithoutControl: a tap target with no text; the input's name is the label below */}
+                <label className="hit" htmlFor={part.slot} aria-hidden="true" />
                 {part.slot === "amount" && currencySymbol(currency)}
                 <label className="sr-only" htmlFor={part.slot}>
                   {part.slot === "amount" ? `Offer in ${currencyName(currency)}` : SLOT_LABELS[part.slot]}
@@ -254,14 +316,20 @@ export function OfferForm({
                   id={part.slot}
                   name={OFFER_FIELDS[part.slot]}
                   required
+                  size={SLOT_INPUTS[part.slot].placeholder.length}
+                  enterKeyHint={part.slot === slots.at(-1) ? "send" : "next"}
                   aria-invalid={errors[part.slot] ? "true" : undefined}
                   aria-describedby={`e-${part.slot}`}
                   ref={(element) => {
                     if (element) inputs.current[part.slot] = element;
                   }}
-                  onInput={() => onInput(part.slot)}
+                  onInput={(event) => onInput(part.slot, event)}
+                  onFocus={(event) => holdPlaceholderWidth(event.currentTarget)}
+                  onBlur={() => onBlur(part.slot)}
+                  onKeyDown={(event) => onKeyDown(part.slot, event)}
                   onAnimationEnd={(event) => event.currentTarget.classList.remove("shake")}
                 />
+                {part.tail}
                 <span className="sr-only" id={`e-${part.slot}`}>
                   {errors[part.slot]}
                 </span>
@@ -291,8 +359,12 @@ export function OfferForm({
             {tag?.message}
           </p>
           <div className="cf-turnstile" ref={boxRef} />
-          <button className="send" type="submit" disabled={status !== "idle"}>
-            <span>{status === "idle" ? "Send offer" : status === "checking" ? "Checking…" : "Sending…"}</span>
+          {/* aria-disabled, not disabled: the button keeps focus while the offer is on its way */}
+          <button className="send" type="submit" aria-disabled={busy || undefined}>
+            {/* every label takes the same cell, so the button keeps its width as the label changes */}
+            <span className="send-text" data-alt={busy ? "Send offer" : "Sending…"}>
+              <span>{status === "idle" ? "Send offer" : status === "checking" ? "Checking…" : "Sending…"}</span>
+            </span>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
                 d="M3 8h10m0 0-4-4m4 4-4 4"
@@ -303,19 +375,38 @@ export function OfferForm({
               />
             </svg>
           </button>
+          <span className="sr-only" role="status">
+            {status === "checking" ? "Checking you're not a bot…" : status === "sending" ? "Sending your offer…" : ""}
+          </span>
+          <noscript>
+            <p className="nojs" dir="auto">
+              {"Offers need JavaScript for the spam check. "}
+              {marketplaceHost ? (
+                <>
+                  {"Turn it on and reload, or make your offer on "}
+                  <a href={marketplaceUrl} rel="noopener noreferrer">
+                    {marketplaceHost}
+                  </a>
+                  .
+                </>
+              ) : (
+                "Turn it on and reload this page to send yours."
+              )}
+            </p>
+          </noscript>
         </div>
       </form>
       <div className="sent" id={OFFER_SENT_FRAGMENT}>
         <h2>Thanks. Your offer is with the owner.</h2>
-        <p>The reply goes to the email you gave.</p>
+        <p>Next, the owner reads it. Any reply goes to the email you gave.</p>
       </div>
-      <div className="sent" hidden={sent === null} aria-live="polite">
+      <div className="sent" hidden={sent === null} tabIndex={-1} ref={sentRef}>
         {sent && (
           <>
             <h2>
               Thanks, {sent.name}. Your {formatAmount(sent.amount, currency)} offer is with the owner.
             </h2>
-            <p>The reply goes to {sent.email}.</p>
+            <p>Next, the owner reads it. Any reply goes to {sent.email}.</p>
           </>
         )}
       </div>
@@ -325,7 +416,13 @@ export function OfferForm({
 
 const SLOT_INPUTS = {
   amount: { inputMode: "numeric", autoComplete: "off", placeholder: "your price", pattern: "[0-9][0-9.,' ]*" },
-  name: { autoComplete: "name", maxLength: OFFER_LIMITS.name, placeholder: "your name", spellCheck: false },
+  name: {
+    autoComplete: "name",
+    autoCapitalize: "words",
+    maxLength: OFFER_LIMITS.name,
+    placeholder: "your name",
+    spellCheck: false,
+  },
   email: {
     type: "email",
     autoComplete: "email",
@@ -334,6 +431,26 @@ const SLOT_INPUTS = {
     spellCheck: false,
   },
 } as const;
+
+type GluedPart = { type: "text"; text: string } | { type: "slot"; slot: SentenceSlot; tail: ReactNode };
+
+/** Punctuation right after a blank stays with it, so a full blank never leaves a lone full stop on the next line. */
+function glue(sentence: SentencePart[]): GluedPart[] {
+  const parts: GluedPart[] = [];
+  for (const part of sentence) {
+    const last = parts.at(-1);
+    if (part.type === "text" && last?.type === "slot") {
+      const tail = /^[.,;:!?)\]}»”’…،؛؟。、]+/u.exec(part.text)?.[0] ?? "";
+      if (tail) {
+        last.tail = <span className="tail">{tail}</span>;
+        if (part.text.length > tail.length) parts.push({ type: "text", text: part.text.slice(tail.length) });
+        continue;
+      }
+    }
+    parts.push(part.type === "slot" ? { ...part, tail: null } : part);
+  }
+  return parts;
+}
 
 function hostOf(url: string): string {
   try {

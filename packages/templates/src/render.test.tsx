@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { type Config, defaultConfig, LIMITS, parseConfig, VARIANTS } from "@deparked/config";
 import { describe, expect, it } from "vitest";
-import { type RenderOptions, render, renderPlaceholder, variants } from "./index";
+import { contrastRatio, type RenderOptions, render, renderPlaceholder, variants } from "./index";
 import { catalog } from "./release-catalog";
 
 const PUBLIC = new URL("../../../apps/sites/public", import.meta.url).pathname;
@@ -44,6 +44,19 @@ describe("render", () => {
       expect(page(background)).not.toContain("<picture");
       expect(page(background)).not.toContain("og:image");
     }
+  });
+
+  it("gives the bot check the page's own colours", () => {
+    const theme = (change: Partial<Config>) =>
+      /&quot;turnstileTheme&quot;:&quot;(\w+)&quot;/.exec(
+        render({ ...defaultConfig(), ...change }, "example.com", options)["index.html"],
+      )?.[1];
+    expect(theme({ variant: "sky" })).toBe("dark");
+    expect(theme({ variant: "gradient", background: "dusk" })).toBe("dark");
+    expect(theme({ variant: "gradient", background: "dawn" })).toBe("light");
+    expect(theme({ variant: "editorial" })).toBe("auto");
+    expect(theme({ variant: "mono" })).toBe("auto");
+    expect(theme({ variant: "split" })).toBe("dark");
   });
 
   it("sets Editorial in paper and ink, following the visitor's colour scheme, with no photo", () => {
@@ -139,6 +152,53 @@ describe("render", () => {
     expect(html).toMatch(
       /<a href="https:\/\/www\.example\.org\/listing\/1" rel="noopener noreferrer">Also listed on example\.org<\/a>/,
     );
+  });
+
+  it("derives a readable contrast for an accent that comes without one", () => {
+    const page = (variant: Config["variant"], primary: string) =>
+      render({ ...defaultConfig(), variant, accent: { primary } }, "example.com", options)["index.html"];
+    expect(page("gradient", "#fff3b0")).toContain("--accent-contrast:#1c2116");
+    expect(page("gradient", "#1d3557")).toContain("--accent-contrast:#ffffff");
+    expect(page("split", "#fff3b0")).toContain("--accent-contrast:#1f2918");
+    expect(page("split", "#fff3b0")).toContain('<meta name="color-scheme" content="light"/>');
+    expect(page("split", "#fff3b0")).toContain("&quot;turnstileTheme&quot;:&quot;light&quot;");
+    // the favicon's letter follows the same rule
+    expect(page("mono", "#fff3b0")).toContain(encodeURIComponent("#121211"));
+    // an explicit contrast is the owner's call
+    expect(
+      render(
+        { ...defaultConfig(), variant: "gradient", accent: { primary: "#fff3b0", contrast: "#ffffff" } },
+        "example.com",
+        options,
+      )["index.html"],
+    ).toContain("--accent-contrast:#ffffff");
+  });
+
+  it("shades the accent until it reads where it is set as a label or a mark", () => {
+    const html = render(
+      { ...defaultConfig(), variant: "editorial", accent: { primary: "#ffd166" } },
+      "example.com",
+      options,
+    )["index.html"];
+    const light = /--accent-mark:(#[0-9a-f]{6})/.exec(html)?.[1] ?? "";
+    const dark = /--accent-mark-dark:(#[0-9a-f]{6})/.exec(html)?.[1] ?? "";
+    expect(contrastRatio(light, "#f4efe6")).toBeGreaterThanOrEqual(4.5);
+    expect(dark).toBe("#ffd166");
+    expect(
+      render({ ...defaultConfig(), accent: { primary: "#ffd166" } }, "example.com", options)["index.html"],
+    ).not.toContain("--accent-mark");
+  });
+
+  it("puts readable type on Sky's flat colour when there is no photo", () => {
+    const flat = (accent?: string) =>
+      render(
+        { ...defaultConfig(), background: "gone", ...(accent ? { accent: { primary: accent } } : {}) },
+        "example.com",
+        options,
+      )["index.html"];
+    expect(flat()).toContain('data-flat="light"');
+    expect(flat("#112233")).toContain('data-flat="dark"');
+    expect(render(defaultConfig(), "example.com", options)["index.html"]).not.toContain('data-flat="');
   });
 
   it("falls back to a flat colour when the background is not in the catalog", () => {
