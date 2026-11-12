@@ -83,10 +83,55 @@ export const groupDigits = (amount: number): string => String(amount).replace(/\
 export const formatAmount = (amount: number, currency: Currency): string =>
   `${currencySymbol(currency)}${groupDigits(amount)}`;
 
+/** The amount blank's message when an offer is under the minimum: the floor, formatted, and what to do. */
+export const minOfferMessage = (minOffer: number, currency: Currency): string =>
+  `Offers start at ${formatAmount(minOffer, currency)}. Raise yours to send it`;
+
+/** How the amount blank was just changed: `InputEvent.inputType`, as far as formatting cares. */
+export type AmountEdit = "insertFromPaste" | "deleteContentBackward" | "deleteContentForward" | string;
+
+/**
+ * Formats the amount blank as it is typed: digits only, grouped in thousands, at most `OFFER_LIMITS.amountDigits`,
+ * with the caret kept after the same digit it followed. Deleting a group separator deletes the digit beside it, so
+ * Backspace never gets stuck on a comma. A pasted price drops its cents (`1.500,00` and `1,500.00` are 1500).
+ */
+export function editAmount(
+  value: string,
+  caret: number,
+  previous: string,
+  edit: AmountEdit,
+): { value: string; caret: number } {
+  let text = value;
+  let at = caret;
+  const digitsOf = (part: string) => part.replace(/\D/g, "");
+  if (edit === "insertFromPaste") {
+    text = text.replace(/[.,]\d{1,2}\s*$/, "");
+    at = Math.min(at, text.length);
+  } else if (digitsOf(text) === digitsOf(previous) && text.length < previous.length) {
+    // only a separator went: take the digit next to it instead
+    if (edit === "deleteContentBackward" && at > 0) {
+      text = text.slice(0, at - 1) + text.slice(at);
+      at -= 1;
+    } else if (edit === "deleteContentForward") {
+      text = text.slice(0, at) + text.slice(at + 1);
+    }
+  }
+  const before = digitsOf(text.slice(0, at)).replace(/^0+/, "").length;
+  const digits = digitsOf(text)
+    .replace(/^0+(?=\d)/, "")
+    .slice(0, OFFER_LIMITS.amountDigits);
+  const formatted = digits ? groupDigits(Number(digits)) : "";
+  let position = 0;
+  for (let seen = 0; position < formatted.length && seen < Math.min(before, digits.length); position++) {
+    if (/\d/.test(formatted[position] ?? "")) seen++;
+  }
+  return { value: formatted, caret: position };
+}
+
 /** The messages the static page shows after a no-JavaScript submission, by redirect reason. */
 export function offerErrorMessages(minOffer: number, currency: Currency): Record<OfferErrorReason, string> {
   return {
-    amount: minOffer > 0 ? `Offers start at ${formatAmount(minOffer, currency)}` : "Add an amount",
+    amount: minOffer > 0 ? minOfferMessage(minOffer, currency) : "Add an amount",
     name: "Add your name",
     email: "Add an email we can reply to",
     check: "Offers need JavaScript for the spam check. Turn it on and send again",

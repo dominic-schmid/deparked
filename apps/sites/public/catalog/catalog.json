@@ -222,29 +222,29 @@
   ],
   "islands": {
     "editorial": {
-      "path": "/catalog/islands/editorial.30be8c4a756e.js",
-      "hash": "30be8c4a756e",
-      "bytes": 229296
+      "path": "/catalog/islands/editorial.9f2e2adb1c3d.js",
+      "hash": "9f2e2adb1c3d",
+      "bytes": 231611
     },
     "gradient": {
-      "path": "/catalog/islands/gradient.30be8c4a756e.js",
-      "hash": "30be8c4a756e",
-      "bytes": 229296
+      "path": "/catalog/islands/gradient.9f2e2adb1c3d.js",
+      "hash": "9f2e2adb1c3d",
+      "bytes": 231611
     },
     "mono": {
-      "path": "/catalog/islands/mono.30be8c4a756e.js",
-      "hash": "30be8c4a756e",
-      "bytes": 229296
+      "path": "/catalog/islands/mono.9f2e2adb1c3d.js",
+      "hash": "9f2e2adb1c3d",
+      "bytes": 231611
     },
     "sky": {
-      "path": "/catalog/islands/sky.30be8c4a756e.js",
-      "hash": "30be8c4a756e",
-      "bytes": 229296
+      "path": "/catalog/islands/sky.9f2e2adb1c3d.js",
+      "hash": "9f2e2adb1c3d",
+      "bytes": 231611
     },
     "split": {
-      "path": "/catalog/islands/split.30be8c4a756e.js",
-      "hash": "30be8c4a756e",
-      "bytes": 229296
+      "path": "/catalog/islands/split.9f2e2adb1c3d.js",
+      "hash": "9f2e2adb1c3d",
+      "bytes": 231611
     }
   }
 }

@@ -46,7 +46,7 @@ for (const variant of Object.keys(variants) as (keyof typeof variants)[]) {
       const offers = await open(page, page1(variant));
       await fillOffer(page, "999");
       await send(page).click();
-      await expect(page.getByRole("alert")).toHaveText("Offers start at €1,000");
+      await expect(page.getByRole("alert")).toHaveText("Offers start at €1,000. Raise yours to send it");
       await expect(amount(page)).toHaveAttribute("aria-invalid", "true");
       await expect(amount(page)).toBeFocused();
       expect(offers).toHaveLength(0);
@@ -55,6 +55,96 @@ for (const variant of Object.keys(variants) as (keyof typeof variants)[]) {
       await expect(page.getByRole("alert")).toBeHidden();
       await expect(amount(page)).not.toHaveAttribute("aria-invalid", "true");
       await expect(amount(page)).toHaveValue("9,999");
+    });
+
+    test("judges a blank when it is left, not while it is typed in", async ({ page }) => {
+      await open(page, page1(variant));
+      await amount(page).pressSequentially("50");
+      await expect(page.getByRole("alert")).toBeHidden();
+      await name(page).focus();
+      await expect(page.getByRole("alert")).toHaveText("Offers start at €1,000. Raise yours to send it");
+      await expect(amount(page)).toHaveAttribute("aria-invalid", "true");
+      // an empty blank that is only passed through says nothing
+      await email(page).focus();
+      await amount(page).focus();
+      await expect(name(page)).not.toHaveAttribute("aria-invalid", "true");
+    });
+
+    test("groups the amount as it is typed without moving the caret", async ({ page }) => {
+      await open(page, page1(variant));
+      await amount(page).pressSequentially("1500");
+      await expect(amount(page)).toHaveValue("1,500");
+      // caret after the 1: typing 2 gives 12,500 with the caret still after the 2
+      await amount(page).evaluate((input: HTMLInputElement) => input.setSelectionRange(1, 1));
+      await amount(page).press("2");
+      await expect(amount(page)).toHaveValue("12,500");
+      expect(await amount(page).evaluate((input: HTMLInputElement) => input.selectionStart)).toBe(2);
+      // Backspace right after a comma takes the digit before it
+      await amount(page).evaluate((input: HTMLInputElement) => input.setSelectionRange(3, 3));
+      await amount(page).press("Backspace");
+      await expect(amount(page)).toHaveValue("1,500");
+    });
+
+    test("keeps a blank as wide as its placeholder when the first character goes in", async ({ page }) => {
+      await open(page, page1(variant));
+      await expect(page.locator("form")).toHaveAttribute("novalidate", "");
+      for (const field of [amount(page), name(page), email(page)]) {
+        const empty = (await field.boundingBox())?.width ?? 0;
+        await field.pressSequentially("1");
+        expect((await field.boundingBox())?.width).toBeCloseTo(empty, 0);
+      }
+    });
+
+    test("moves to the next blank on Enter and sends from the last", async ({ page }) => {
+      const offers = await open(page, page1(variant));
+      await amount(page).fill("1500");
+      await amount(page).press("Enter");
+      await expect(name(page)).toBeFocused();
+      await name(page).fill("Ada Example");
+      await name(page).press("Enter");
+      await expect(email(page)).toBeFocused();
+      await expect(email(page)).toHaveAttribute("enterkeyhint", "send");
+      await email(page).fill("ada@example.com");
+      await email(page).press("Enter");
+      await expect(page.locator("form")).toBeHidden();
+      expect(offers).toHaveLength(1);
+    });
+
+    test("keeps the button's width while the offer is on its way", async ({ page }) => {
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await serve(page, page1(variant));
+      await page.route("**/api/offer", async (route) => {
+        await held;
+        await route.fulfill({ status: 200, body: '{"ok":true}' });
+      });
+      await page.goto(`${ORIGIN}/`);
+      await fillOffer(page);
+      const before = await send(page).boundingBox();
+      await send(page).click();
+      await expect(send(page)).toHaveAttribute("aria-disabled", "true");
+      await expect(send(page)).toHaveText("Sending…");
+      const during = await send(page).boundingBox();
+      expect(during?.width).toBeCloseTo(before?.width ?? 0, 0);
+      release();
+      await expect(page.locator("form")).toBeHidden();
+    });
+
+    // The target is a full line of the sentence tall (28-90px across the variants): at least the 24px WCAG 2.5.8 asks for.
+    test("takes a tap above or below a blank as a tap in it", async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await open(page, page1(variant));
+      for (const field of [amount(page), name(page), email(page)]) {
+        const box = await field.boundingBox();
+        if (!box) throw new Error("no box");
+        const middle = box.x + box.width / 2;
+        for (const y of [box.y + box.height / 2 - 12, box.y + box.height / 2 + 12]) {
+          await page.mouse.click(middle, y);
+          await expect(field).toBeFocused();
+        }
+      }
     });
 
     test("names the first missing field and clears the message as it is filled", async ({ page }) => {
@@ -80,7 +170,9 @@ for (const variant of Object.keys(variants) as (keyof typeof variants)[]) {
       await expect(page.getByRole("heading", { level: 2 })).toHaveText(
         "Thanks, Ada Example. Your €12,500 offer is with the owner.",
       );
-      await expect(page.getByText("The reply goes to ada@example.com.")).toBeVisible();
+      await expect(page.getByText("Next, the owner reads it. Any reply goes to ada@example.com.")).toBeVisible();
+      // focus moves to the thank-you, so it is read out and the keyboard is not stranded on a hidden form
+      await expect(page.locator(".sent:not([id])")).toBeFocused();
       await expect(page.locator("form")).toBeHidden();
       expect(offers).toHaveLength(1);
       expect(offers[0]?.headers()["content-type"]).toBe("application/json");
@@ -107,6 +199,7 @@ for (const variant of Object.keys(variants) as (keyof typeof variants)[]) {
       await send(page).click();
       await expect(page.getByRole("alert")).toHaveText("Enter an email address we can reply to.");
       await expect(email(page)).toHaveAttribute("aria-invalid", "true");
+      await expect(email(page)).toBeFocused();
       await expect(send(page)).toBeEnabled();
       await expect(send(page)).toHaveText("Send offer");
       await send(page).click();

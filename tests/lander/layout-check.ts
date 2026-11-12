@@ -81,9 +81,11 @@ export function findLayoutFaults(): string[] {
   // a field too narrow for what was typed into it (the page's fields grow with their content)
   for (const control of controls) {
     if (control instanceof HTMLInputElement && control.value && control.scrollWidth > control.clientWidth + TOLERANCE) {
+      // it may scroll once its blank (the input with the currency and the punctuation around it) fills the line
+      const blank = control.parentElement;
       const fullWidth =
-        control.getBoundingClientRect().width >=
-        (control.parentElement?.getBoundingClientRect().width ?? 0) - TOLERANCE;
+        control.getBoundingClientRect().width >= (blank?.getBoundingClientRect().width ?? 0) - TOLERANCE ||
+        (blank?.getBoundingClientRect().width ?? 0) >= (blank?.parentElement?.clientWidth ?? 0) - TOLERANCE;
       if (!fullWidth) faults.push(`clipped field: ${label(control)} holds "${control.value}"`);
     }
   }

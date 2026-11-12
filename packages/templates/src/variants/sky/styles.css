@@ -138,12 +138,6 @@
     text-wrap: pretty;
     overflow-wrap: break-word;
   }
-  .slot {
-    position: relative;
-    display: inline-block;
-    vertical-align: baseline;
-    max-width: 100%;
-  }
   .slot input {
     font: italic 400 1em / 1 var(--font-serif);
     color: inherit;
@@ -155,8 +149,6 @@
     padding: 0 0.1em 0.04em;
     outline: none;
     field-sizing: content;
-    min-width: 4ch;
-    max-width: 100%;
     touch-action: manipulation;
     transition: border-color 0.15s ease-out;
   }
@@ -166,19 +158,13 @@
   }
   .slot input:focus {
     border-color: currentColor;
+    box-shadow: 0 1.5px currentColor;
   }
   .slot input[aria-invalid="true"] {
     border-bottom: 2px solid var(--color-warn);
   }
   .slot input[name="amount"] {
-    min-width: 5ch;
     margin-left: 0.12em;
-  }
-  .slot input[name="name"] {
-    min-width: 7ch;
-  }
-  .slot input[name="email"] {
-    min-width: 12ch;
   }
 
   .row {

@@ -174,12 +174,6 @@
     max-width: 27em;
     font-size: clamp(22px, 2.4vw, 42px);
   }
-  .slot {
-    position: relative;
-    display: inline-block;
-    vertical-align: baseline;
-    max-width: 100%;
-  }
   /* a filled blank: a tint of the type colour, underlined, that brightens while it is being written in */
   .slot input {
     font: 600 1em / 1.15 var(--font-sans);
@@ -191,8 +185,6 @@
     padding: 0 0.22em;
     outline: none;
     field-sizing: content;
-    min-width: 4ch;
-    max-width: 100%;
     touch-action: manipulation;
     transition-property: background-color, box-shadow;
     transition-duration: 0.18s;
@@ -211,14 +203,7 @@
     box-shadow: 0 0 0 2px var(--invalid);
   }
   .slot input[name="amount"] {
-    min-width: 5ch;
     margin-left: 0.1em;
-  }
-  .slot input[name="name"] {
-    min-width: 7ch;
-  }
-  .slot input[name="email"] {
-    min-width: 12ch;
   }
 
   /* the terms, then the one action under them; an error takes the terms' place */
