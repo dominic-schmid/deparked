@@ -65,6 +65,13 @@ describe("accounts, zones, DNS and routes", () => {
     expect((await client.zones.list()).map((zone) => zone.name)).toEqual(["example.com", "example.org"]);
     expect(await client.zones.list({ name: "example.org" })).toMatchObject([{ id: "zone-2" }]);
     expect(await client.zones.get("zone-2")).toMatchObject({ name: "example.org" });
+    const before = client.requestCount;
+    expect(await client.zones.page({ contains: "org", page: 1, perPage: 1 })).toMatchObject({
+      zones: [{ name: "example.org" }],
+      totalPages: 1,
+    });
+    expect((await client.zones.page({ page: 2, perPage: 1 })).zones.map((zone) => zone.name)).toEqual(["example.org"]);
+    expect(client.requestCount - before).toBe(2);
     await expect(client.zones.get("nope")).rejects.toThrow("read zone failed: 404");
   });
 

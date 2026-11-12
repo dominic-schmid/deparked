@@ -162,9 +162,19 @@ importers:
       '@deparked/cf':
         specifier: workspace:*
         version: link:../cf
+      '@deparked/db':
+        specifier: workspace:*
+        version: link:../db
       '@deparked/hosting':
         specifier: workspace:*
         version: link:../hosting
+      '@deparked/provision':
+        specifier: workspace:*
+        version: link:../provision
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20261110.1
+        version: 5.20261110.1
 
   packages/provision:
     dependencies:

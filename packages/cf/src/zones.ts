@@ -57,6 +57,29 @@ export function zonesApi(http: Http) {
         page,
       );
     },
+    /**
+     * One page of the account's zones, by name, for a picker. `contains` keeps names that contain the text.
+     * Exactly one request.
+     */
+    async page(input: {
+      contains?: string;
+      page: number;
+      perPage: number;
+    }): Promise<{ zones: Zone[]; totalPages: number }> {
+      const query: Record<string, string | number> = {
+        "account.id": http.accountId,
+        order: "name",
+        direction: "asc",
+        page: input.page,
+        per_page: input.perPage,
+      };
+      if (input.contains !== undefined && input.contains !== "") query.name = `contains:${input.contains}`;
+      const { result, totalPages } = await http.envelope(
+        { call: "list zones", method: "GET", path: "/zones", query },
+        z.array(zoneSchema),
+      );
+      return { zones: result, totalPages: totalPages ?? (result.length < input.perPage ? input.page : input.page + 1) };
+    },
     get(zoneId: string): Promise<Zone> {
       return http.request({ call: "read zone", method: "GET", path: `/zones/${segment(zoneId)}` }, zoneSchema);
     },

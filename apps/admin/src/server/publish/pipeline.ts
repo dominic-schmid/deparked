@@ -26,7 +26,7 @@ import {
 } from "@deparked/db";
 import { contentHash, type HostingAdapter, HostingError, type PublishFile } from "@deparked/hosting";
 import type { Catalog } from "@deparked/templates";
-import { buildHost, type FailureReason, type HostBuild, PublishFailure } from "./files";
+import { type BuildSource, buildHost, type FailureReason, type HostBuild, PublishFailure } from "./files";
 import type { FetchReleaseFile } from "./release";
 
 /** Everything a publish needs. Built per request by the server functions; tests pass fakes. */
@@ -77,6 +77,11 @@ export type StartKind =
   | "draft"
   /** A new domain's first page: the placeholder (or its live design again, when it has one). */
   | "placeholder"
+  /**
+   * The attach's own placeholder publish, made while the domain is still off and nothing points at it. Not
+   * offered to the browser: only `placeholderPublisher` starts it.
+   */
+  | "attach"
   /** Take the files of a domain that is turned off or removed out of the pages Worker. */
   | "remove"
   /** Render every domain again, after an update or an emergency rollback. */
@@ -118,6 +123,7 @@ export type StepResult =
 const KIND: Record<StartKind, DeploymentKind> = {
   draft: "publish",
   placeholder: "install",
+  attach: "install",
   remove: "update",
   "republish-all": "update",
 };
@@ -129,6 +135,8 @@ const LOCK_LOST = "This publish took too long and another one took over. Publish
 const LIVE_NOT_RECORDED =
   "The new pages went live, but another publish took over before they were recorded here. Publish again so this admin matches what visitors see.";
 
+const NOTHING_LEFT =
+  "Taken down. No other page is published, so the pages Worker keeps its last version, which no domain points at any more.";
 const NO_UPLOAD =
   "The upload stopped without sending a file, so this publish stopped instead of trying again forever. Nothing was changed; publish again.";
 
@@ -228,7 +236,7 @@ export async function startPublish(
   if (kind === "remove" && !gone) {
     return { ok: false, reason: "invalid", message: `Turn ${host} off before its pages are taken down.` };
   }
-  if (kind !== "remove" && gone) {
+  if (kind !== "remove" && kind !== "attach" && gone) {
     return { ok: false, reason: "invalid", message: `${host} is turned off. Turn it on before publishing.` };
   }
   if (kind === "draft" && (await getConfig(ctx.db, host)) === undefined) {
@@ -237,7 +245,7 @@ export async function startPublish(
   return begin(ctx, { kind: KIND[kind], host });
 }
 
-type Plan = { hosts: { host: string; source: "draft" | "live" }[]; remaining: number };
+type Plan = { hosts: { host: string; source: BuildSource }[]; remaining: number };
 
 const isOff = (status: string) => status === "off" || status === "removed";
 
@@ -267,9 +275,10 @@ async function plan(ctx: PublishContext, deployment: Deployment, rows: readonly 
   if (deployment.kind === "update" && !off) {
     throw new PublishFailure("invalid", `${host} was turned on again, so its pages were not taken down.`);
   }
-  if (deployment.kind !== "update" && off) {
+  if (deployment.kind === "publish" && off) {
     throw new PublishFailure("invalid", `${host} was turned off while it was being published. Nothing was published.`);
   }
+  if (deployment.kind === "install") return { hosts: [{ host, source: "attach" }], remaining: 0 };
   return { hosts: [{ host, source: deployment.kind === "publish" ? "draft" : "live" }], remaining: 0 };
 }
 
@@ -332,6 +341,20 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
 
       const kept = rows.filter((row) => row.host === null || !builds.has(row.host));
       const fresh = [...builds.values()].flatMap((build) => build.files);
+      if (kept.length + fresh.length === 0 && deployment.kind === "update" && deployment.host !== null) {
+        // The host refuses an empty version, so the last domain's removal only clears the manifest. No route sends
+        // visitors to the pages Worker any more, so what its last version still holds is not served on any domain.
+        const cleared = await commitPublish(db, {
+          deploymentId,
+          versionId: null,
+          hosts: [...builds.values()].map(({ host }) => ({ host, files: [] })),
+          release: ctx.release,
+          finish: true,
+          now: ctx.now(),
+        });
+        if (!cleared) return await fail(ctx, deploymentId, new PublishFailure("lock-lost", LOCK_LOST), progress);
+        return { status: "done", progress, message: NOTHING_LEFT, versionId: null };
+      }
       const keptByPath = new Map(kept.map((row) => [row.path, row]));
       const freshByPath = new Map(fresh.map((file) => [file.path, file]));
 

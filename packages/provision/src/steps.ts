@@ -68,6 +68,8 @@ export interface StepReport {
   state: PlanState;
   finished: boolean;
   next?: "publish-placeholder";
+  /** `failed` only: the HTTP status of the Cloudflare error that failed the step (0 when no answer came). */
+  errorStatus?: number;
 }
 
 /**
@@ -124,7 +126,7 @@ export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Pr
   const before = plan.ctx.cf.requestCount;
   const report = (
     outcome: StepReport["outcome"],
-    fields: { message?: string; effects?: Effect[]; next?: "publish-placeholder" } = {},
+    fields: { message?: string; effects?: Effect[]; next?: "publish-placeholder"; errorStatus?: number } = {},
   ): StepReport => {
     const moved = outcome === "ran" || outcome === "already-done";
     const nextState = moved ? { next: state.next + 1 } : state;
@@ -137,6 +139,7 @@ export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Pr
       state: nextState,
       finished: nextState.next === total,
       ...(fields.next === undefined ? {} : { next: fields.next }),
+      ...(fields.errorStatus === undefined ? {} : { errorStatus: fields.errorStatus }),
     };
   };
 
@@ -150,7 +153,7 @@ export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Pr
     } catch (error) {
       if (error instanceof StepBlockedError) return report("blocked", { message: error.message });
       if (!(error instanceof CloudflareApiError)) throw error;
-      return report("failed", { message: error.message });
+      return report("failed", { message: error.message, errorStatus: error.status });
     }
   });
   return locked.status === "ran" ? locked.value : report("busy", { message: BUSY_MESSAGE });

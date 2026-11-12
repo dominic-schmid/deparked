@@ -1,10 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ComingSoon } from "../../../components/page";
+import { createFileRoute, getRouteApi } from "@tanstack/react-router";
+import { DomainActions } from "../../../components/domain-actions";
+
+const domainRoute = getRouteApi("/admin/_shell/d/$host");
 
 export const Route = createFileRoute("/admin/_shell/d/$host/settings")({
-  component: () => (
-    <ComingSoon title="Domain settings">
-      Choosing the notify address, turning the domain off and on again, and removing it arrive in a later release.
-    </ComingSoon>
-  ),
+  component: DomainSettings,
 });
+
+function DomainSettings() {
+  const { domain } = domainRoute.useLoaderData();
+  return <DomainActions host={domain.host} status={domain.status} hasPages={domain.hasPages} />;
+}

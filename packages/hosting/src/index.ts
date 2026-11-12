@@ -289,3 +289,17 @@ export function assertPublishFiles(files: readonly PublishFile[]): void {
     seen.add(file.path);
   }
 }
+
+export type {
+  AccountDomain,
+  AccountDomainPage,
+  DomainPreview,
+  DomainSetup,
+  MailState,
+  SetupChange,
+  SetupConfirmation,
+  SetupConfirmations,
+  SetupEffect,
+  SetupState,
+  SetupStepReport,
+} from "./setup";

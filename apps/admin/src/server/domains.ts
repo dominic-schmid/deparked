@@ -6,6 +6,7 @@ import {
   listDomains,
   listNotifyAddresses,
   listPublishedAt,
+  listSiteFilesByHost,
   offerStatsForHosts,
 } from "@deparked/db";
 import { z } from "zod";
@@ -69,6 +70,8 @@ export async function loadOverview(db: Db): Promise<DomainOverview[]> {
 
 export type DomainDetail = DomainSummary & {
   publishedAt: number | null;
+  /** True while the publish manifest still lists pages of the domain: on, or a turn off that stopped half-way. */
+  hasPages: boolean;
   notifyEmail: string | null;
   notifyVerified: boolean;
 };
@@ -77,11 +80,16 @@ export type DomainDetail = DomainSummary & {
 export async function loadDomain(db: Db, host: string): Promise<DomainDetail | null> {
   const domain = await getDomain(db, host);
   if (domain === undefined || domain.status === "removed") return null;
-  const [verified, config] = await Promise.all([verifiedEmails(db), getConfig(db, host)]);
+  const [verified, config, pages] = await Promise.all([
+    verifiedEmails(db),
+    getConfig(db, host),
+    listSiteFilesByHost(db, host),
+  ]);
   return {
     host: domain.host,
     status: displayStatus(domain, verified),
     publishedAt: config?.publishedAt ?? null,
+    hasPages: pages.length > 0,
     notifyEmail: domain.notifyEmail,
     notifyVerified: domain.notifyEmail !== null && verified.has(domain.notifyEmail),
   };

@@ -1,27 +1,21 @@
-import { Button } from "@deparked/ui/button";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ComingSoon, PageHeader } from "../../../components/page";
+import { createFileRoute } from "@tanstack/react-router";
+import { AddDomainFlow } from "../../../components/add-domain";
+import { PageHeader } from "../../../components/page";
 
 export const Route = createFileRoute("/admin/_shell/add")({
+  validateSearch: (search): { host?: string | undefined } => ({
+    host: typeof search.host === "string" && search.host !== "" ? search.host.slice(0, 253) : undefined,
+  }),
   head: () => ({ meta: [{ title: "Add domain · Deparked" }] }),
   component: AddDomainPage,
 });
 
 function AddDomainPage() {
+  const { host } = Route.useSearch();
   return (
     <>
       <PageHeader title="Add domain" />
-      <ComingSoon
-        title="Arrives soon"
-        action={
-          <Button asChild variant="outline">
-            <Link to="/admin">Back to all domains</Link>
-          </Button>
-        }
-      >
-        Here you will pick one of the domains in your Cloudflare account, see what it serves today, and let Deparked set
-        up its for-sale page. This screen is not built yet.
-      </ComingSoon>
+      <AddDomainFlow host={host} />
     </>
   );
 }

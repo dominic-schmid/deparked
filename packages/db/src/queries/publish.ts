@@ -248,7 +248,8 @@ export async function commitPublish(
   db: Db,
   input: {
     deploymentId: number;
-    versionId: string;
+    /** Null when nothing was deployed: a removal that left no file to publish. */
+    versionId: string | null;
     hosts: readonly PublishedHost[];
     release: string | null;
     finish: boolean;

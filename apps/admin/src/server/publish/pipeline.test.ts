@@ -713,6 +713,24 @@ describe("republish all", () => {
 });
 
 describe("placeholder and removal", () => {
+  it("taking down the only domain of an install without catalog rows clears the manifest and finishes", async () => {
+    await replaceSiteFiles(db, { host: null, files: [], now: time });
+    await addDomain(A);
+    await publish(A);
+    const versions = hosting.versions.length;
+    await setDomainStatus(db, { host: A, status: "off", now: time });
+
+    const steps = await run(await start({ host: A, kind: "remove" }));
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({ status: "done", versionId: null });
+    expect(steps[0]?.message).toContain("no domain points at");
+    expect(await listSiteFiles(db)).toEqual([]);
+    expect(hosting.versions).toHaveLength(versions);
+    expect(await getPublishLock(db)).toBeUndefined();
+    expect(await startPublish(ctx, { host: A, kind: "remove" })).toMatchObject({ ok: true });
+  });
+
   it("a new domain gets the placeholder and stays a placeholder until its first publish", async () => {
     await addDomain(A, null);
 
@@ -747,6 +765,25 @@ describe("placeholder and removal", () => {
     expect(await startPublish(ctx, { host: A, kind: "draft" })).toMatchObject({ ok: false, reason: "invalid" });
     await expectInSync();
   });
+  it("an attach publishes the page while the domain is still off: the placeholder, or its live design again", async () => {
+    await addDomain(A, null);
+    await setDomainStatus(db, { host: A, status: "off", now: time });
+    expect(await startPublish(ctx, { host: A, kind: "placeholder" })).toMatchObject({ ok: false, reason: "invalid" });
+    expect((await run(await start({ host: A, kind: "attach" }))).at(-1)?.status).toBe("done");
+    expect(await listSiteFilesByHost(db, A)).toHaveLength(3);
+    expect((await getDomain(db, A))?.status).toBe("off");
+
+    await addDomain(B);
+    await publish(B);
+    const live = (await listSiteFilesByHost(db, B)).find((file) => file.path.endsWith("index.html"))?.hash;
+    await setDomainStatus(db, { host: B, status: "off", now: time });
+    await run(await start({ host: B, kind: "remove" }));
+    expect(await listSiteFilesByHost(db, B)).toEqual([]);
+    await run(await start({ host: B, kind: "attach" }));
+    expect((await listSiteFilesByHost(db, B)).find((file) => file.path.endsWith("index.html"))?.hash).toBe(live);
+    await expectInSync();
+  });
+
   it("a removal finds the domain turned on again: fails instead of publishing it", async () => {
     await addDomain(A);
     await publish(A);
