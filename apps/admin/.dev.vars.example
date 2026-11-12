@@ -1,0 +1,3 @@
+# Copy to .dev.vars (git-ignored) for local dev. Dummy value: never put a real key in this file.
+# In production the installer generates SESSION_KEY and stores it as a secret on deparked-admin.
+SESSION_KEY=local-dev-only-session-key-not-a-secret-0000
