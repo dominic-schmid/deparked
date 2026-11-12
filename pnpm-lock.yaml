@@ -112,7 +112,14 @@ importers:
 
   packages/hosting: {}
 
-  packages/hosting-cloudflare: {}
+  packages/hosting-cloudflare:
+    dependencies:
+      '@deparked/cf':
+        specifier: workspace:*
+        version: link:../cf
+      '@deparked/hosting':
+        specifier: workspace:*
+        version: link:../hosting
 
   packages/provision: {}
 

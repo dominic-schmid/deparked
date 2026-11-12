@@ -9,5 +9,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@deparked/cf": "workspace:*",
+    "@deparked/hosting": "workspace:*"
   }
 }
