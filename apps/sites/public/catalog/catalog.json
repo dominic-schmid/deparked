@@ -164,29 +164,50 @@
     {
       "id": "dawn",
       "name": "Dawn",
-      "color": "#7f9fbf",
-      "css": "linear-gradient(180deg, #5f86b3 0%, #7f9fbf 38%, #c9d3d0 72%, #f1d9c4 100%)"
+      "color": "#e9dfd8",
+      "tone": "light",
+      "css": "radial-gradient(90% 70% at 8% 0%, #fbd6b8 0%, rgb(251 214 184 / 0) 62%), radial-gradient(80% 80% at 96% 12%, #b4cbe6 0%, rgb(180 203 230 / 0) 66%), radial-gradient(110% 80% at 70% 112%, #f2bd9c 0%, rgb(242 189 156 / 0) 62%), linear-gradient(172deg, #dfe7ee 0%, #eee3da 52%, #f3d9c6 100%)"
+    },
+    {
+      "id": "tide",
+      "name": "Tide",
+      "color": "#c3d9d3",
+      "tone": "light",
+      "css": "radial-gradient(80% 70% at 88% 6%, #eef4e6 0%, rgb(238 244 230 / 0) 60%), radial-gradient(90% 90% at 4% 96%, #98c1bb 0%, rgb(152 193 187 / 0) 66%), radial-gradient(70% 60% at 30% 20%, #d5e6e8 0%, rgb(213 230 232 / 0) 60%), linear-gradient(160deg, #cfe2de 0%, #b9d4cf 52%, #d8e5d1 100%)"
     },
     {
       "id": "meadow",
       "name": "Meadow",
-      "color": "#4d6138",
-      "css": "linear-gradient(165deg, #7f9fbf 0%, #8aa38f 42%, #4d6138 78%, #2c3a1a 100%)"
+      "color": "#2f4021",
+      "tone": "dark",
+      "css": "radial-gradient(70% 60% at 12% 10%, #5a7442 0%, rgb(90 116 66 / 0) 62%), radial-gradient(80% 70% at 94% 88%, #35506a 0%, rgb(53 80 106 / 0) 66%), linear-gradient(165deg, #3c4f2c 0%, #2a3a1d 55%, #1b2612 100%)"
     },
     {
       "id": "ember",
       "name": "Ember",
-      "color": "#b5573a",
-      "css": "radial-gradient(120% 90% at 20% 0%, #ffd2c2 0%, #ffb39b 28%, #b5573a 68%, #4a1d10 100%)"
+      "color": "#4a190d",
+      "tone": "dark",
+      "css": "radial-gradient(75% 65% at 88% 6%, #b4532f 0%, rgb(180 83 47 / 0) 62%), radial-gradient(70% 70% at 0% 100%, #7c2914 0%, rgb(124 41 20 / 0) 62%), radial-gradient(60% 50% at 30% 30%, #5e1f0f 0%, rgb(94 31 15 / 0) 70%), linear-gradient(200deg, #6b2412 0%, #3d150b 60%, #22100a 100%)"
     },
     {
       "id": "dusk",
       "name": "Dusk",
-      "color": "#1d2614",
-      "css": "linear-gradient(200deg, #3d5878 0%, #2a3a44 45%, #1d2614 100%)"
+      "color": "#1b2430",
+      "tone": "dark",
+      "css": "radial-gradient(95% 60% at 50% 118%, #a9643c 0%, rgb(169 100 60 / 0) 64%), radial-gradient(80% 70% at 6% 0%, #46658c 0%, rgb(70 101 140 / 0) 64%), radial-gradient(60% 50% at 96% 30%, #2c4258 0%, rgb(44 66 88 / 0) 70%), linear-gradient(180deg, #1c2838 0%, #18202b 55%, #241a17 100%)"
     }
   ],
   "islands": {
+    "editorial": {
+      "path": "/catalog/islands/editorial.f4f1f3d98bf3.js",
+      "hash": "f4f1f3d98bf3",
+      "bytes": 228936
+    },
+    "gradient": {
+      "path": "/catalog/islands/gradient.f4f1f3d98bf3.js",
+      "hash": "f4f1f3d98bf3",
+      "bytes": 228936
+    },
     "sky": {
       "path": "/catalog/islands/sky.f4f1f3d98bf3.js",
       "hash": "f4f1f3d98bf3",

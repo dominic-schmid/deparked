@@ -1,4 +1,6 @@
 import type { Variant } from "@deparked/config";
+import { editorial } from "./editorial";
+import { gradient } from "./gradient";
 import { sky } from "./sky";
 import type { VariantDefinition } from "./types";
 
@@ -8,6 +10,8 @@ import type { VariantDefinition } from "./types";
  */
 export const variants: Partial<Record<Variant, VariantDefinition>> & { sky: VariantDefinition } = {
   sky,
+  gradient,
+  editorial,
 };
 
 export function resolveVariant(variant: Variant): { id: Variant; definition: VariantDefinition } {

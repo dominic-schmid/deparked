@@ -47,7 +47,8 @@ export function fitWordmark(headline: string, face: Face, { spanCqi, minOneLineC
 function widthOf(text: string, { advances, kerning, letterSpacing }: Face): number {
   let units = 0;
   for (let index = 0; index < text.length; index++) {
-    units += (advances[text.charCodeAt(index) - 32] ?? 0) + (kerning[text.slice(index, index + 2)] ?? 0) + letterSpacing;
+    units +=
+      (advances[text.charCodeAt(index) - 32] ?? 0) + (kerning[text.slice(index, index + 2)] ?? 0) + letterSpacing;
   }
   return units / 1000;
 }
@@ -56,12 +57,7 @@ function widthOf(text: string, { advances, kerning, letterSpacing }: Face): numb
  * Splits text into `count` lines with the narrowest possible widest line. With `natural`, only at the places a
  * reader expects; it gives up (`undefined`) when those leave one line much wider than an even split would.
  */
-function balance(
-  text: string,
-  count: number,
-  natural: boolean,
-  width: (text: string) => number,
-): string[] | undefined {
+function balance(text: string, count: number, natural: boolean, width: (text: string) => number): string[] | undefined {
   const breaks = [];
   for (let index = 1; index < text.length; index++) {
     const before = text[index - 1];

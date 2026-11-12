@@ -2,7 +2,13 @@ import { fitWordmark, type WordmarkFit } from "../shared/wordmark/fit";
 
 // Advance widths of U+0020..U+007E in the catalog's Archivo at weight 700, in thousandths of an em.
 // Measured once from the subset file with canvas `measureText`; re-measure if the font changes.
-const ADVANCES = [196, 301, 456, 600, 556, 973, 764, 253, 364, 364, 407, 641, 307, 333, 307, 300, 595, 596, 596, 596, 597, 595, 596, 596, 596, 595, 335, 335, 641, 641, 641, 613, 1001, 724, 722, 733, 739, 683, 622, 802, 754, 301, 603, 725, 591, 872, 754, 793, 681, 793, 730, 679, 641, 748, 694, 964, 706, 699, 653, 350, 300, 350, 641, 518, 228, 580, 608, 573, 608, 584, 325, 607, 602, 267, 264, 570, 267, 891, 602, 613, 608, 608, 380, 556, 342, 601, 547, 798, 572, 547, 519, 393, 253, 393, 641];
+const ADVANCES = [
+  196, 301, 456, 600, 556, 973, 764, 253, 364, 364, 407, 641, 307, 333, 307, 300, 595, 596, 596, 596, 597, 595, 596,
+  596, 596, 595, 335, 335, 641, 641, 641, 613, 1001, 724, 722, 733, 739, 683, 622, 802, 754, 301, 603, 725, 591, 872,
+  754, 793, 681, 793, 730, 679, 641, 748, 694, 964, 706, 699, 653, 350, 300, 350, 641, 518, 228, 580, 608, 573, 608,
+  584, 325, 607, 602, 267, 264, 570, 267, 891, 602, 613, 608, 608, 380, 556, 342, 601, 547, 798, 572, 547, 519, 393,
+  253, 393, 641,
+];
 // Kerning between the characters of a hostname (a-z, 0-9, dot, hyphen), same units, same measurement.
 const KERNING: Record<string, number> = {
   "77": -10,
@@ -92,4 +98,5 @@ const KERNING: Record<string, number> = {
 const FACE = { advances: ADVANCES, kerning: KERNING, letterSpacing: -40 };
 
 /** Sizes Gradient's wordmark so the headline spans the foot of the page at every width. */
-export const fitMark = (headline: string): WordmarkFit => fitWordmark(headline, FACE, { spanCqi: 98, minOneLineCqi: 9.5, maxCqi: 30 });
+export const fitMark = (headline: string): WordmarkFit =>
+  fitWordmark(headline, FACE, { spanCqi: 98, minOneLineCqi: 9.5, maxCqi: 30 });

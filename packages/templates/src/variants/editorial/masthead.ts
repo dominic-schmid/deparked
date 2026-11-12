@@ -2,7 +2,13 @@ import { fitWordmark, type WordmarkFit } from "../shared/wordmark/fit";
 
 // Advance widths of U+0020..U+007E in the catalog's Newsreader at weight 400, optical size 72, in thousandths of an em.
 // Measured once from the subset file with canvas `measureText`; re-measure if the font changes.
-const ADVANCES = [232, 254, 340, 600, 600, 802, 755, 184, 275, 275, 391, 575, 235, 328, 233, 393, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 267, 276, 575, 575, 575, 480, 901, 727, 657, 709, 774, 671, 612, 767, 825, 350, 399, 758, 618, 1024, 779, 800, 633, 800, 697, 561, 721, 789, 707, 1016, 729, 695, 650, 292, 392, 292, 575, 410, 500, 509, 582, 472, 595, 493, 356, 509, 589, 277, 253, 569, 270, 881, 596, 569, 595, 580, 400, 419, 362, 577, 566, 790, 560, 555, 472, 292, 227, 292, 575];
+const ADVANCES = [
+  232, 254, 340, 600, 600, 802, 755, 184, 275, 275, 391, 575, 235, 328, 233, 393, 600, 600, 600, 600, 600, 600, 600,
+  600, 600, 600, 267, 276, 575, 575, 575, 480, 901, 727, 657, 709, 774, 671, 612, 767, 825, 350, 399, 758, 618, 1024,
+  779, 800, 633, 800, 697, 561, 721, 789, 707, 1016, 729, 695, 650, 292, 392, 292, 575, 410, 500, 509, 582, 472, 595,
+  493, 356, 509, 589, 277, 253, 569, 270, 881, 596, 569, 595, 580, 400, 419, 362, 577, 566, 790, 560, 555, 472, 292,
+  227, 292, 575,
+];
 // Kerning between the characters of a hostname (a-z, 0-9, dot, hyphen), same units, same measurement.
 const KERNING: Record<string, number> = {
   ac: -7,
@@ -239,4 +245,5 @@ const KERNING: Record<string, number> = {
 const FACE = { advances: ADVANCES, kerning: KERNING, letterSpacing: -30 };
 
 /** Sizes Editorial's masthead so the headline spans the measure at every width. */
-export const fitMasthead = (headline: string): WordmarkFit => fitWordmark(headline, FACE, { spanCqi: 97, minOneLineCqi: 9, maxCqi: 26 });
+export const fitMasthead = (headline: string): WordmarkFit =>
+  fitWordmark(headline, FACE, { spanCqi: 97, minOneLineCqi: 9, maxCqi: 26 });
