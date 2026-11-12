@@ -70,9 +70,10 @@ export function createReleaseFileFetcher(options: {
     }
     let response: Response;
     try {
-      response = await fetchFile(`${options.baseUrl}${path}`, { redirect: "error" });
+      // workerd rejects `redirect: "error"`; with "manual" a redirect is a 3xx, refused below like any non-200.
+      response = await fetchFile(`${options.baseUrl}${path}`, { redirect: "manual" });
     } catch {
-      throw new PublishFailure("hosting", `Could not download ${path} from the release (no answer, or a redirect).`);
+      throw new PublishFailure("hosting", `Could not download ${path} from the release (no answer).`);
     }
     if (!response.ok) {
       throw new PublishFailure("hosting", `Could not download ${path} from the release (status ${response.status}).`);
