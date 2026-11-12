@@ -7,6 +7,11 @@ export function getConfig(db: Db, host: string): Promise<Config | undefined> {
   return db.select().from(config).where(eq(config.host, host)).get();
 }
 
+/** When each host was last published (null: never). A full read of `config` on purpose: one row per domain. */
+export function listPublishedAt(db: Db): Promise<{ host: string; publishedAt: number | null }[]> {
+  return db.select({ host: config.host, publishedAt: config.publishedAt }).from(config);
+}
+
 export async function saveDraft(
   db: Db,
   input: { host: string; json: string; schemaVersion: number; now: number },

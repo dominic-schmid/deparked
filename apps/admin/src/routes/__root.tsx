@@ -16,7 +16,8 @@ export const Route = createRootRoute({
 
 function RootDocument() {
   return (
-    <html lang="en">
+    // The theme script of the logged-in shell may put `.dark` or `.light` on <html> before React hydrates it.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
