@@ -105,9 +105,9 @@ describe("render", () => {
     );
   });
 
-  it("self-hosts its fonts, preloads the first paint's and swaps the rest in", () => {
+  it("self-hosts its fonts and preloads the ones the first viewport needs", () => {
     const html = render(defaultConfig(), "example.com", options)["index.html"];
-    expect(html.match(/<link rel="preload" as="font"/g)).toHaveLength(2);
+    expect(html.match(/<link rel="preload" as="font"/g)).toHaveLength(4);
     expect(html.match(/@font-face/g)?.length).toBeGreaterThan(0);
     expect(html.match(/@font-face/g)?.length).toBe(html.match(/font-display:swap/g)?.length);
     expect(html).not.toMatch(/fonts\.(googleapis|gstatic)/);
