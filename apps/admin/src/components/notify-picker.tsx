@@ -59,7 +59,7 @@ export function NotifyPicker(props: { host: string; current: string | null; addr
           <Field>
             <FieldLabel htmlFor={id}>Send offers to</FieldLabel>
             <Select value={props.current ?? undefined} onValueChange={onPick} disabled={busy}>
-              <SelectTrigger id={id} className="w-full max-w-sm">
+              <SelectTrigger id={id} className="w-full max-w-sm" title={props.current ?? undefined}>
                 <SelectValue placeholder="Pick an address" />
               </SelectTrigger>
               <SelectContent>

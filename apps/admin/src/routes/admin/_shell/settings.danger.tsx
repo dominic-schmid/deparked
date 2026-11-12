@@ -240,11 +240,14 @@ function DangerZone() {
                 <div>
                   <h4 className="text-muted-foreground">Stays</h4>
                   <ul className="mt-1 list-disc pl-5 marker:text-muted-foreground/60">
-                    {described.value.keeps.map((keep) => (
-                      <li key={keep} className="[overflow-wrap:anywhere]">
-                        {capitalize(keep)}
-                      </li>
-                    ))}
+                    {/* The database gets its own box below, with how to delete it. */}
+                    {described.value.keeps
+                      .filter((keep) => !keep.startsWith("the database"))
+                      .map((keep) => (
+                        <li key={keep} className="[overflow-wrap:anywhere]">
+                          {capitalize(keep)}
+                        </li>
+                      ))}
                   </ul>
                 </div>
                 <div className="rounded-lg border p-3">

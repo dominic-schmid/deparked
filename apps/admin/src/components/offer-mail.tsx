@@ -33,11 +33,9 @@ function FixLink({ host, mail, ...rest }: { host: string; mail: Problem; classNa
 export function OfferMailNotice({ host, mail }: { host: string; mail: OfferMail }) {
   if (mail.state === "ok") return null;
   return (
-    <Alert className="mb-6 border-amber-500/40 bg-amber-50/60 dark:bg-amber-950/20">
+    <Alert role="note" className="mb-6 border-amber-500/40 bg-amber-50/60 dark:bg-amber-950/20">
       <MailWarning aria-hidden="true" className="text-amber-700 dark:text-amber-400" />
-      <AlertTitle className="line-clamp-none [overflow-wrap:anywhere]">
-        Offers for {host} are saved in the inbox but not emailed yet
-      </AlertTitle>
+      <AlertTitle>Offers for {host} are saved in the inbox but not emailed yet</AlertTitle>
       <AlertDescription>
         <p className="[overflow-wrap:anywhere]">{REASON[mail.state](mail)}</p>
         <Button asChild variant="outline" size="sm" className="mt-2">

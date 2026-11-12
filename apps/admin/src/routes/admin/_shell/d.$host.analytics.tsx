@@ -183,13 +183,16 @@ function NotSetUp({ host, reason }: { host: string; reason: NoSiteReason }) {
         </CardTitle>
         <CardDescription>{copy.text}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Button asChild variant="outline">
-          <Link to="/admin/add" search={{ host }}>
-            {reason === "missing" ? "Set up visit counting" : reason === "adding" ? "Continue adding" : "Turn on…"}
-          </Link>
-        </Button>
-      </CardContent>
+      {/* Adding or turning on is offered by the domain's own notice and Settings; only a missing site is fixed here. */}
+      {reason === "missing" ? (
+        <CardContent>
+          <Button asChild variant="outline">
+            <Link to="/admin/add" search={{ host }}>
+              Set up visit counting
+            </Link>
+          </Button>
+        </CardContent>
+      ) : null}
     </Card>
   );
 }

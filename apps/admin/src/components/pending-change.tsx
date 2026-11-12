@@ -67,9 +67,9 @@ export function PendingChangeNotice({ host, pending }: { host: string; pending: 
     unclear: `A change to ${host} stopped half-way`,
   }[pending];
   return (
-    <Alert className="mb-6">
+    <Alert role="note" className="mb-6">
       <CircleDashed aria-hidden="true" />
-      <AlertTitle className="line-clamp-none [overflow-wrap:anywhere]">{title}</AlertTitle>
+      <AlertTitle>{title}</AlertTitle>
       <AlertDescription>{body}</AlertDescription>
     </Alert>
   );

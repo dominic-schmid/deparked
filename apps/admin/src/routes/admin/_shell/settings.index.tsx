@@ -197,12 +197,12 @@ function AddressRow(props: {
             <>
               <span>
                 Waiting since <RelativeTime time={address.createdAt} now={now} />
+                {address.lastResentAt === null ? null : (
+                  <>
+                    , email sent <RelativeTime time={address.lastResentAt} now={now} />
+                  </>
+                )}
               </span>
-              {address.lastResentAt === null ? null : (
-                <span>
-                  · Email sent <RelativeTime time={address.lastResentAt} now={now} />
-                </span>
-              )}
             </>
           )}
         </p>
