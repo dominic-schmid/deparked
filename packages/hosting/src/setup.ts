@@ -140,7 +140,35 @@ export interface TokenHealth {
 
 export type ReplaceTokenResult = { ok: true; health: TokenHealth } | { ok: false; message: string };
 
-/** The hub as a whole: its token, and Uninstall. */
+/** A release by its pin: the version and the SHA-256 of its release.json. */
+export interface ReleasePin {
+  version: string;
+  sha256: string;
+}
+
+/** An update to a newer release, or a rollback to the one installed before the last update. */
+export interface ReleaseChange {
+  kind: "update" | "rollback";
+  pin: ReleasePin;
+  startedAt: number;
+  finished: boolean;
+}
+
+export interface ReleaseStatus {
+  /** Null before the install. `sha256` is null for an install that did not record its pin. */
+  installed: { version: string; sha256: string | null } | null;
+  /** The change last started, finished or not. */
+  change: ReleaseChange | null;
+  /**
+   * What Roll back installs, or null when there is nothing to go back to. `possible` is false (with the reason in
+   * plain words) when the earlier release cannot run on the database as it is now, or its checksum is unknown.
+   */
+  rollback: { pin: ReleasePin; possible: boolean; reason: string } | null;
+}
+
+export type ReleaseChangeResult = { ok: true; change: ReleaseChange } | { ok: false; message: string };
+
+/** The hub as a whole: its token, Update and Rollback, and Uninstall. */
 export interface HubSetup {
   /** False when the host refuses the stored token. One request; for the shell's banner. */
   tokenAccepted(): Promise<boolean>;
@@ -155,4 +183,32 @@ export interface HubSetup {
   describeUninstall(): Promise<{ steps: { id: string; title: string }[]; effects: SetupEffect[]; keeps: string[] }>;
   /** Looks at exactly one step of Uninstall: runs it when needed. One call per request. */
   uninstallStep(state: SetupState): Promise<SetupStepReport>;
+  /** The installed release, the running change and the rollback target. Reads the hub's own records only. */
+  releaseStatus(): Promise<ReleaseStatus>;
+  /**
+   * What updating to `pin` changes, step by step, without changing anything. Checks release.json against the pin
+   * and refuses a version that is not newer than the installed one.
+   */
+  previewUpdate(pin: ReleasePin): Promise<
+    | {
+        ok: true;
+        steps: { id: string; title: string; status: "done" | "needed" | "blocked"; effects: SetupEffect[] }[];
+        /** Whether this update could be rolled back afterwards, and why not. */
+        rollback: { possible: boolean; reason: string };
+      }
+    | { ok: false; message: string }
+  >;
+  /** Starts the update to `pin`, which the owner confirmed. Starting the same one again resumes it. */
+  startUpdate(pin: ReleasePin): Promise<ReleaseChangeResult>;
+  /** Starts going back to `releaseStatus().rollback`. The only way to install an older version. */
+  startRollback(): Promise<ReleaseChangeResult>;
+  /** The titles of an update's or rollback's steps, in order. No request. */
+  releaseStepTitles(): { id: string; title: string }[];
+  /**
+   * Looks at exactly one step of the running change, `expected`: runs it when needed. One call per request; a step
+   * runs only once every step before it is done, and nothing runs when another change has replaced `expected`.
+   */
+  releaseStep(state: SetupState, expected: Pick<ReleaseChange, "kind" | "pin">): Promise<SetupStepReport>;
+  /** Marks the running change finished once its release is installed. */
+  finishRelease(): Promise<ReleaseChangeResult>;
 }

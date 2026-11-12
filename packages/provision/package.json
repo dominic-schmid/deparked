@@ -13,6 +13,7 @@
   "dependencies": {
     "@deparked/cf": "workspace:*",
     "@deparked/db": "workspace:*",
+    "@deparked/hosting": "workspace:*",
     "zod": "^4.6.7"
   },
   "devDependencies": {

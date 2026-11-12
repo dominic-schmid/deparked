@@ -62,6 +62,12 @@ export async function buildFakeRelease(version = "1.0.0", files = FAKE_FILES) {
     format: RELEASE_FORMAT,
     version,
     minInstallerVersion: "0.1.0",
+    schema:
+      files
+        .filter((file) => file.pack === "migrations")
+        .map((file) => file.path)
+        .sort()
+        .at(-1) ?? "",
     catalogFilesUrl: "https://files.example.com/release",
     tokenPermissions: [{ key: "workers_scripts", type: "edit" }],
     packs,

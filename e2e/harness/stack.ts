@@ -34,6 +34,8 @@ const SEED: MockSeed = { accountId: TEST_ACCOUNT_ID, accountName: "E2E account",
 
 /** The version of the release the harness builds and the installer installs. */
 export const TEST_RELEASE = "0.0.1-e2e";
+/** A second release built from the same checkout, for updates: `setLatestRelease(TEST_RELEASE_NEXT)` offers it. */
+export const TEST_RELEASE_NEXT = "0.0.2-e2e";
 
 export interface Stack {
   /** Drives the mock Cloudflare the Workers talk to. A stable handle: it survives `reset()`. */
@@ -49,9 +51,16 @@ export interface Stack {
     /** `baseUrl` for `createCloudflareClient`. */
     cloudflareApi: string;
     siteverify: string;
-    /** Serves the built release (`/v<version>/<file>`) and the catalog files it names (`/files/catalog/…`). */
+    /**
+     * Serves the built releases (`/v<version>/<file>`), the newest as GitHub's API names it (`/latest`) and the
+     * catalog files they name (`/files/catalog/…`).
+     */
     release: string;
   };
+  /** The SHA-256 of each built release's release.json, by version. */
+  releases: Record<string, string>;
+  /** What the admin finds as the newest release. None until a test sets one; `reset()` clears it. */
+  setLatestRelease(version: string | null): void;
   /** `http://<host>.localhost:<port><path>`: the managed domain as a visitor's browser sees it, through the proxy. */
   hostUrl(host: string, path?: string): string;
   /** Puts a file into the sites Worker (`sites/example.com/index.html`) and waits until it is served. */
@@ -102,20 +111,19 @@ export async function startStack(): Promise<Stack> {
     const releaseDir = resolve(dir, "release");
     const releaseServer = await startReleaseServer({ dir: releaseDir, files: resolve(ROOT, "apps/sites/public") });
     stops.push(() => releaseServer.close());
-    execFileSync(
-      process.execPath,
-      [
-        "scripts/build-release.ts",
-        "--version",
-        TEST_RELEASE,
-        "--out",
-        releaseDir,
-        "--files-url",
-        `${releaseServer.url}/files`,
-      ],
-      { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] },
-    );
-    const releaseSha256 = readFileSync(resolve(releaseDir, "release.json.sha256"), "utf8").split(" ")[0] ?? "";
+    const releases: Record<string, string> = {};
+    for (const version of [TEST_RELEASE, TEST_RELEASE_NEXT]) {
+      const out = resolve(releaseDir, version);
+      execFileSync(
+        process.execPath,
+        ["scripts/build-release.ts", "--version", version, "--out", out, "--files-url", `${releaseServer.url}/files`],
+        { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] },
+      );
+      releases[version] = readFileSync(resolve(out, "release.json.sha256"), "utf8").split(" ")[0] ?? "";
+    }
+    const releaseSha256 = releases[TEST_RELEASE] ?? "";
+    const setLatestRelease = (version: string | null) =>
+      releaseServer.setLatest(version === null ? null : { version, sha256: releases[version] ?? "" });
 
     cpSync(resolve(ROOT, "apps/sites/public"), assets, { recursive: true });
     const written = new Set<string>();
@@ -125,6 +133,9 @@ export async function startStack(): Promise<Stack> {
       ...vars,
       // What the installer stores for the admin: the release's `catalogFilesUrl`.
       RELEASE_FILES_URL: `${releaseServer.url}/files`,
+      // Where Update looks for the newest release and downloads it: the release server, as GitHub.
+      RELEASE_LATEST_URL: `${releaseServer.url}/latest`,
+      RELEASE_DOWNLOAD_URL: releaseServer.url,
       SESSION_KEY: TEST_SESSION_KEY,
       CF_API_TOKEN: TEST_TOKEN,
       CF_ACCOUNT_ID: TEST_ACCOUNT_ID,
@@ -193,6 +204,8 @@ export async function startStack(): Promise<Stack> {
     return {
       mock,
       d1,
+      releases,
+      setLatestRelease,
       sentMail: () =>
         mailFiles()
           .filter((file) => !mailSeen.has(file))
@@ -221,6 +234,7 @@ export async function startStack(): Promise<Stack> {
         );
       },
       async reset() {
+        setLatestRelease(null);
         mailSeen = new Set(mailFiles());
         current = createMockCloudflare(SEED);
         attach(current);

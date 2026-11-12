@@ -18,6 +18,7 @@ const TABLES = [
   "offers",
   "publish_lock",
   "rate_limits",
+  "release_state",
   "site_files",
   "turnstile_widgets",
   "workspace",
@@ -66,7 +67,7 @@ test("splitStatements drops comments, breakpoints and trailing semicolons", () =
   expect(splitStatements(sql)).toEqual(["CREATE TABLE a (x)", "CREATE INDEX b ON a (x)"]);
 });
 
-test("the migrations create exactly the 13 tables", async () => {
+test("the migrations create exactly the 14 tables", async () => {
   const test = createTestD1();
   await applyMigrations(d1Runner(test.d1));
   const tables = dumpSchema(test)

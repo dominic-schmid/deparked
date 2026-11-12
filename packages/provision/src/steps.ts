@@ -35,7 +35,7 @@ export interface Step {
 }
 
 export interface Plan {
-  kind: "attach" | "turn-off" | "remove" | "install" | "uninstall";
+  kind: "attach" | "turn-off" | "remove" | "install" | "uninstall" | "update" | "rollback";
   /** Null for a plan of the whole hub (install, uninstall). */
   host: string | null;
   ctx: ProvisionContext;
@@ -122,7 +122,18 @@ export async function withProvisionLock<T>(
  * repeat of the same call. Only a Cloudflare API failure becomes `failed`; any other error is thrown. The step
  * runs under the provisioning lock (`withProvisionLock`): while another step holds it the answer is `busy`.
  */
-export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Promise<StepReport> {
+export interface StepHooks {
+  /** Runs first, inside the lock: a message refuses the step as `blocked` before anything is looked at. */
+  guard?: () => Promise<string | null>;
+  /** Runs inside the lock once the step is done (ran or already done), with the index of the next step. */
+  moved?: (next: number) => Promise<void>;
+}
+
+export async function runNextStep(
+  plan: Plan,
+  state: PlanState = PLAN_START,
+  hooks: StepHooks = {},
+): Promise<StepReport> {
   const total = plan.steps.length;
   if (!Number.isInteger(state.next) || state.next < 0 || state.next > total) {
     throw new RangeError(`This plan has no step ${state.next}`);
@@ -154,10 +165,16 @@ export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Pr
 
   const locked = await withProvisionLock(plan.ctx, async () => {
     try {
+      const refusal = (await hooks.guard?.()) ?? null;
+      if (refusal !== null) return report("blocked", { message: refusal });
       const check = await step.check(plan.ctx);
       if (check.status === "blocked") return report("blocked", { message: check.reason });
-      if (check.status === "done") return report("already-done", { effects: check.effects });
+      if (check.status === "done") {
+        await hooks.moved?.(state.next + 1);
+        return report("already-done", { effects: check.effects });
+      }
       const result = await step.run(plan.ctx);
+      await hooks.moved?.(state.next + 1);
       return report("ran", result);
     } catch (error) {
       if (error instanceof StepBlockedError) return report("blocked", { message: error.message });
