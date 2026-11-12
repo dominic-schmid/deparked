@@ -317,9 +317,11 @@
     overflow-wrap: break-word;
   }
 
+  /* wrappr.app's entrance, header, wordmark, sentence, each rising into focus: shorter, and without its fade,
+     so the wordmark and the sentence are painted from the first frame */
   [data-enter] {
-    animation: enter 0.9s var(--ease-swift) both;
-    animation-delay: calc(var(--i, 0) * 120ms);
+    animation: enter 0.4s var(--ease-swift) both;
+    animation-delay: calc(var(--i, 0) * 70ms);
   }
 
   /* short landscape phones: cap by height so the sentence still fits on screen */
@@ -354,7 +356,7 @@
    brings it into focus and place instead of fading it in from invisible */
 @keyframes enter {
   from {
-    translate: 0 18px;
+    translate: 0 14px;
     filter: blur(6px);
   }
 }

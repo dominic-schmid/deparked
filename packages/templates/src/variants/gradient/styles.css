@@ -95,7 +95,7 @@
     inset: 0;
     z-index: -2;
     background: #1b2430;
-    animation: settle 2.4s var(--ease-swift) both;
+    animation: settle 0.9s var(--ease-swift) both;
   }
   .page::after {
     content: "";
@@ -356,9 +356,10 @@
     overflow-wrap: anywhere;
   }
 
+  /* the type rises with the field: the sentence first, the domain last, like a signature */
   [data-enter] {
-    animation: enter 1s var(--ease-swift) both;
-    animation-delay: calc(0.25s + var(--i, 0) * 110ms);
+    animation: enter 0.38s var(--ease-swift) both;
+    animation-delay: calc(60ms + var(--i, 0) * 60ms);
   }
 
   /* short landscape phones: cap by height so the sentence and the domain both fit */
@@ -387,8 +388,8 @@
 @keyframes settle {
   from {
     opacity: 0.01;
-    scale: 1.18;
-    translate: 4% -3%;
+    scale: 1.1;
+    translate: 2% -2%;
   }
 }
 @keyframes pop {
@@ -402,7 +403,7 @@
    brings it into focus and place instead of fading it in from invisible */
 @keyframes enter {
   from {
-    filter: blur(5px);
-    translate: 0 16px;
+    filter: blur(4px);
+    translate: 0 12px;
   }
 }

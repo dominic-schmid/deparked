@@ -75,7 +75,7 @@
     object-fit: cover;
     background-size: cover;
     background-repeat: no-repeat;
-    animation: settle 1.6s var(--ease-swift) both;
+    animation: settle 1.2s var(--ease-swift) both;
   }
 
   .panel {
@@ -301,8 +301,8 @@
   }
 
   [data-enter] {
-    animation: enter 0.9s var(--ease-swift) both;
-    animation-delay: calc(var(--i, 0) * 120ms + 160ms);
+    animation: enter 0.38s var(--ease-swift) both;
+    animation-delay: calc(var(--i, 0) * 60ms + 80ms);
   }
 
   /* upright screens: the photo is a band across the top, the panel below it */
@@ -348,7 +348,7 @@
 
 @keyframes settle {
   from {
-    scale: 1.06;
+    scale: 1.04;
   }
 }
 @keyframes pop {
@@ -363,6 +363,6 @@
 @keyframes enter {
   from {
     filter: blur(4px);
-    translate: 0 14px;
+    translate: 0 12px;
   }
 }
