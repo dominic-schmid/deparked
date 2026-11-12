@@ -126,7 +126,9 @@ export function loadNotifyAddresses(db: Db): Promise<NotifyAddress[]> {
  */
 export async function fillMissingNotifyAddresses(db: Db, now: number): Promise<string[]> {
   const address = defaultNotifyAddress(await listNotifyAddresses(db));
-  return address === null ? [] : assignMissingNotifyEmail(db, { email: address.email, now });
+  if (address === null) return [];
+  // A verified default also takes over from an unverified address that a domain got by default.
+  return assignMissingNotifyEmail(db, { email: address.email, replaceUnverified: address.verifiedAt !== null, now });
 }
 
 /** Has the host send its verification mail, then lists the address as pending. Adding it twice changes nothing. */

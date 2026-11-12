@@ -98,7 +98,7 @@ function OffersCopy(props: {
   if (facts.offers === 0) {
     return <p className="text-muted-foreground">There are no offers to keep a copy of.</p>;
   }
-  const current = facts.exportedAt !== null && facts.exportedAt >= (facts.newestOfferAt ?? 0);
+  const current = facts.exportedAt !== null && facts.exportedAt > (facts.newestOfferAt ?? -1);
   return (
     <div className="flex flex-col gap-3">
       <p className="text-muted-foreground">

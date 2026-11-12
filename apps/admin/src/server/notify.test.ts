@@ -361,6 +361,26 @@ describe("domains without an address get one", () => {
     expect((await getDomain(db, "gone.example"))?.notifyEmail).toBeNull();
   });
 
+  test("a domain on an unverified address moves to the first address verified; a verified pick stays", async () => {
+    const { db } = await bare();
+    const hosting = createFakeHosting({ verifiedAddresses: ["picked@example.com"] });
+    await addNotifyAddress(db, hosting, { email: "typo@example.com", now: NOW });
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe("typo@example.com");
+    await insertDomain(db, { domain: { host: "kept.example", zoneId: "zone-2", status: "live" }, now: NOW });
+    await insertNotifyAddress(db, { email: "picked@example.com", verifiedAt: NOW, now: NOW });
+    await updateDomain(db, { host: "kept.example", patch: { notifyEmail: "picked@example.com" }, now: NOW });
+
+    await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + 1 });
+    hosting.verifyAddress(SECOND);
+    await refreshNotifyAddresses(db, hosting, { now: NOW + 2 });
+
+    // Off the unverified address, onto the most recently verified one.
+    const moved = (await getDomain(db, HOST))?.notifyEmail ?? "";
+    expect(moved).not.toBe("typo@example.com");
+    expect((await getNotifyAddress(db, moved))?.verifiedAt).not.toBeNull();
+    expect((await getDomain(db, "kept.example"))?.notifyEmail).toBe("picked@example.com");
+  });
+
   test("removing a pending address in use moves its domains to the next default", async () => {
     const { db } = await setup();
     const hosting = createFakeHosting({ verifiedAddresses: [NOTIFY] });

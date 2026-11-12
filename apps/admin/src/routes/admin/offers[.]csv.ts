@@ -18,15 +18,17 @@ export const Route = createFileRoute("/admin/offers.csv")({
         });
         if (!filter.success) return new Response("Bad request", { status: 400 });
         const db = createDb(env.DB);
+        // Taken before the read: an offer that arrives while it runs is not in this file, so it is newer.
+        const startedAt = Date.now();
         const data = await exportOffers(db, filter.data);
         // A download of every offer is the copy Uninstall asks for.
         if (filter.data.host === undefined && filter.data.status === undefined && !data.truncated) {
-          await setWorkspaceMark(db, { mark: "offers-exported", now: Date.now() });
+          await setWorkspaceMark(db, { mark: "offers-exported", now: startedAt });
         }
         return new Response(offersCsv(data), {
           headers: {
             "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": `attachment; filename="${exportFilename(filter.data, Date.now())}"`,
+            "Content-Disposition": `attachment; filename="${exportFilename(filter.data, startedAt)}"`,
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
             ...(data.truncated ? { "X-Deparked-Truncated": "1" } : {}),

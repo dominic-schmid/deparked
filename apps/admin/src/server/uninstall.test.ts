@@ -18,10 +18,12 @@ describe("the copy of the offers before Uninstall", () => {
       reason: "Download your offers first, or tick that you need no copy.",
     });
     expect(uninstallCopyGate(facts, true)).toEqual({ ok: true });
-    expect(uninstallCopyGate({ ...facts, exportedAt: NOW }, false)).toEqual({ ok: true });
+    expect(uninstallCopyGate({ ...facts, exportedAt: NOW + 1 }, false)).toEqual({ ok: true });
   });
 
-  test("a download older than the newest offer does not count", () => {
+  test("a download not started after the newest offer does not count", () => {
+    // Started in the same millisecond: the offer may have arrived after the read.
+    expect(uninstallCopyGate({ ...facts, exportedAt: NOW }, false)).toMatchObject({ ok: false });
     expect(uninstallCopyGate({ ...facts, exportedAt: NOW - 1 }, false)).toMatchObject({
       ok: false,
       reason: expect.stringContaining("after your last download"),

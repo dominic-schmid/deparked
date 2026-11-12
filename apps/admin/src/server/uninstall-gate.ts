@@ -17,7 +17,7 @@ export function uninstallCopyGate(
   waived: boolean,
 ): { ok: true } | { ok: false; reason: string } {
   if (facts.offers === 0 || waived) return { ok: true };
-  if (facts.exportedAt !== null && facts.exportedAt >= (facts.newestOfferAt ?? 0)) return { ok: true };
+  if (facts.exportedAt !== null && facts.exportedAt > (facts.newestOfferAt ?? -1)) return { ok: true };
   if (facts.exportedAt !== null) {
     return {
       ok: false,
