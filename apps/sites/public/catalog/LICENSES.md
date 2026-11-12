@@ -12,8 +12,9 @@ Self-hosted subsets, built by `packages/templates/scripts/catalog-fonts.ts` from
 | `archivo` | Archivo | width 100, weights 400 to 700 | SIL Open Font License 1.1 | [`fonts/OFL-archivo.txt`](fonts/OFL-archivo.txt) |
 | `newsreader` | Newsreader, © 2020 The Newsreader Project Authors (<https://github.com/productiontype/Newsreader>) | roman 400, optical sizes 16 to 72 | SIL Open Font License 1.1 | [`fonts/OFL-newsreader.txt`](fonts/OFL-newsreader.txt) |
 | `newsreader-italic` | Newsreader | italic 400, optical sizes 16 to 72 | SIL Open Font License 1.1 | [`fonts/OFL-newsreader.txt`](fonts/OFL-newsreader.txt) |
+| `jetbrains-mono` | JetBrains Mono, © 2020 The JetBrains Mono Project Authors (<https://github.com/JetBrains/JetBrainsMono>) | weights 400 to 700 | SIL Open Font License 1.1 | [`fonts/OFL-jetbrainsmono.txt`](fonts/OFL-jetbrainsmono.txt) |
 
-Neither family declares a Reserved Font Name, so the subsets keep the family names. The licence texts were copied from <https://github.com/google/fonts> (`ofl/archivo/OFL.txt`, `ofl/newsreader/OFL.txt`).
+No family declares a Reserved Font Name, so the subsets keep the family names. The licence texts were copied from <https://github.com/google/fonts> (`ofl/archivo/OFL.txt`, `ofl/newsreader/OFL.txt`, `ofl/jetbrainsmono/OFL.txt`).
 
 ## Backgrounds
 
