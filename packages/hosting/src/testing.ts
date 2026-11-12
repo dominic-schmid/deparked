@@ -220,9 +220,15 @@ export function createFakeHosting(options: FakeHostingOptions = {}) {
       },
       async remove(domainId, routeId) {
         check("routes");
+        const existing = routes.get(domainId) ?? [];
+        const found = existing.find((route) => route.id === routeId);
+        if (found === undefined) throw new HostingError("not-found", "This domain has no such route.");
+        if (found.target === "other") {
+          throw new HostingError("conflict", `The address ${found.pattern} belongs to something else and stays.`);
+        }
         routes.set(
           domainId,
-          (routes.get(domainId) ?? []).filter((route) => route.id !== routeId),
+          existing.filter((route) => route !== found),
         );
       },
     },

@@ -100,7 +100,10 @@ export interface BotCheckInput {
   token: string;
   /** The managed domain the form was served on. A token solved on another hostname is refused. */
   host: string;
-  /** Name of the secret that belongs to this domain's widget (never the secret itself). */
+  /**
+   * Name of the secret that belongs to this domain's widget (never the secret itself). Each adapter accepts
+   * only names of the shape it documents; any other name answers `not-configured` without a lookup.
+   */
   secretRef: string;
   remoteIp?: string;
 }
@@ -184,7 +187,8 @@ export interface NotifyAddresses {
   remove(id: string): Promise<void>;
   /**
    * Sends the verification mail again. Does nothing for a verified address. The returned address may carry
-   * a new `id`: store it.
+   * a new `id`: store it. When this fails halfway the old `id` is dead and the address may be gone: a later
+   * call then fails with `not-found`, and the caller recovers by calling `add` again.
    */
   resend(id: string): Promise<NotifyAddress>;
 }
@@ -211,7 +215,10 @@ export interface HostingRoutes {
    * the pattern is taken by something else: it never replaces a route.
    */
   add(domainId: string, route: { pattern: string; target: RouteTarget }): Promise<HostingRoute>;
-  /** Removing a route that is already gone is not an error. */
+  /**
+   * Removes a route to the pages or the admin. Fails with `conflict` for a route that points at something
+   * else (it is never deleted) and with `not-found` when the domain has no such route.
+   */
   remove(domainId: string, routeId: string): Promise<void>;
 }
 

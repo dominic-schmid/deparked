@@ -46,7 +46,10 @@ export type CloudflareHostingOptions = Connection & {
   adminScriptName?: string;
   /** Without it `sendNotification` fails with a readable error; everything else works. */
   email?: { binding: SendEmailBinding; EmailMessage: EmailMessageConstructor };
-  /** Reads a Turnstile widget secret by the name of the Worker secret that holds it (`(name) => env[name]`). */
+  /**
+   * Reads a Turnstile widget secret by the name of the Worker secret that holds it (`(name) => env[name]`).
+   * Only called for names matching `BOT_CHECK_SECRET_REF`, so a `secretRef` can never read another secret.
+   */
   getSecret(ref: string): string | undefined | Promise<string | undefined>;
   /** Used for the API client (with `token`) and for the Turnstile check. */
   fetch?: FetchLike;
@@ -66,7 +69,20 @@ export const SITES_COMPATIBILITY_DATE = "2026-11-01";
  */
 export const PUBLISH_FIXED_REQUESTS = 3;
 
+/**
+ * The naming rule for Turnstile widget secrets (`turnstile_widgets.secret_name`): `TURNSTILE_SECRET_<id>`.
+ * Provisioning must store them under such a name; `verifyBotCheck` answers `not-configured` for any other.
+ */
+export const BOT_CHECK_SECRET_REF = /^TURNSTILE_SECRET_[A-Za-z0-9_]+$/;
+
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar day, not just the shape: `2026-13-45` and `2026-02-30` are refused. */
+function isDate(value: string): boolean {
+  if (!DATE.test(value)) return false;
+  const time = Date.parse(`${value}T00:00:00Z`);
+  return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === value;
+}
 
 function toHostingError(error: CloudflareApiError): HostingError {
   const options = { cause: error };
@@ -205,6 +221,7 @@ export function createCloudflareHosting(options: CloudflareHostingOptions): Host
 
     async verifyBotCheck(input): Promise<BotCheckResult> {
       if (input.token.trim() === "") return { ok: false, reason: "rejected" };
+      if (!BOT_CHECK_SECRET_REF.test(input.secretRef)) return { ok: false, reason: "not-configured" };
       const secret = await options.getSecret(input.secretRef);
       if (secret === undefined || secret === "") return { ok: false, reason: "not-configured" };
       const result = await cloudflare(() =>
@@ -251,7 +268,7 @@ export function createCloudflareHosting(options: CloudflareHostingOptions): Host
     },
 
     async readAnalytics(query): Promise<AnalyticsReport> {
-      if (!DATE.test(query.from) || !DATE.test(query.to) || query.from > query.to) {
+      if (!isDate(query.from) || !isDate(query.to) || query.from > query.to) {
         throw new HostingError("invalid-input", "The date range for the statistics is not valid.");
       }
       if (query.sites.length === 0) return { visitsByDay: [], referrers: [], countries: [], totalVisits: 0 };
@@ -325,11 +342,12 @@ export function createCloudflareHosting(options: CloudflareHostingOptions): Host
       },
 
       async remove(domainId, routeId) {
-        try {
-          await cloudflare(() => client.zones.deleteRoute(domainId, routeId));
-        } catch (error) {
-          if (!(error instanceof HostingError) || error.code !== "not-found") throw error;
+        const found = (await cloudflare(() => client.zones.listRoutes(domainId))).find((entry) => entry.id === routeId);
+        if (found === undefined) throw new HostingError("not-found", "This domain has no such route.");
+        if (toRoute(found).target === "other") {
+          throw new HostingError("conflict", `The address ${found.pattern} belongs to something else and stays.`);
         }
+        await cloudflare(() => client.zones.deleteRoute(domainId, routeId));
       },
     },
   };

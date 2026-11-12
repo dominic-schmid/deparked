@@ -162,6 +162,9 @@ describe("createFakeHosting", () => {
     const admin = await hosting.routes.add("zone-1", { pattern: "example.com/admin*", target: "admin" });
     expect(await hosting.routes.add("zone-1", { pattern: "example.com/admin*", target: "admin" })).toEqual(admin);
     await hosting.routes.remove("zone-1", admin.id);
+    await expect(hosting.routes.remove("zone-1", admin.id)).rejects.toMatchObject({ code: "not-found" });
+    const [foreign] = await hosting.routes.list("zone-1");
+    await expect(hosting.routes.remove("zone-1", foreign?.id ?? "")).rejects.toMatchObject({ code: "conflict" });
     expect(await hosting.routes.list("zone-1")).toEqual([
       { id: expect.any(String), pattern: "example.com/*", target: "other" },
     ]);

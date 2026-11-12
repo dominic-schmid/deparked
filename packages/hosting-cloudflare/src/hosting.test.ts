@@ -284,6 +284,33 @@ describe("verifyBotCheck", () => {
     expect(await hosting.verifyBotCheck({ ...input, secretRef: "TURNSTILE_SECRET_BAD" })).toEqual(notConfigured);
   });
 
+  it("never looks up a secret whose name is not a widget secret's", async () => {
+    const asked: string[] = [];
+    const { mock, hosting } = setup(
+      {},
+      {
+        getSecret: (ref) => {
+          asked.push(ref);
+          return TURNSTILE_DUMMY_SECRET_PASS;
+        },
+      },
+    );
+    for (const secretRef of [
+      "CF_API_TOKEN",
+      "SESSION_KEY",
+      "TURNSTILE_SECRET_",
+      "turnstile_secret_1",
+      "TURNSTILE_SECRET_1-x",
+      "",
+    ]) {
+      expect(await hosting.verifyBotCheck({ ...input, secretRef })).toEqual({ ok: false, reason: "not-configured" });
+    }
+    expect(asked).toEqual([]);
+    expect(mock.calls).toEqual([]);
+    expect(await hosting.verifyBotCheck(input)).toEqual({ ok: true });
+    expect(asked).toEqual(["TURNSTILE_SECRET_1"]);
+  });
+
   it("throws when the check could not run", async () => {
     const { hosting } = setup(
       {},
@@ -406,6 +433,11 @@ describe("readAnalytics", () => {
       code: "invalid-input",
     });
     await expect(hosting.readAnalytics({ sites, from: "yesterday", to: "2026-11-02" })).rejects.toThrow(HostingError);
+    for (const day of ["2026-13-45", "2026-02-30", "2026-00-10", "2026-11-31"]) {
+      await expect(hosting.readAnalytics({ sites, from: "2026-01-01", to: day })).rejects.toMatchObject({
+        code: "invalid-input",
+      });
+    }
     expect(mock.calls).toEqual([]);
   });
 });
@@ -467,7 +499,7 @@ describe("routes", () => {
     ]);
 
     await hosting.routes.remove(ZONE.id, pages.id);
-    await hosting.routes.remove(ZONE.id, pages.id);
+    await expect(hosting.routes.remove(ZONE.id, pages.id)).rejects.toMatchObject({ code: "not-found" });
     expect(await hosting.routes.list(ZONE.id)).toEqual([
       { id: admin.id, pattern: "example.com/admin*", target: "admin" },
     ]);
@@ -483,5 +515,8 @@ describe("routes", () => {
       code: "conflict",
     });
     expect(mock.callsTo("routes.create")).toEqual([]);
+    await expect(hosting.routes.remove(ZONE.id, "route-existing")).rejects.toMatchObject({ code: "conflict" });
+    expect(mock.callsTo("routes.delete")).toEqual([]);
+    expect(mock.state.routes.get(ZONE.id)).toHaveLength(1);
   });
 });
