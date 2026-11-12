@@ -1,16 +1,47 @@
-import type { Offer, OfferCursor, OfferStatus } from "@deparked/db";
+import type { Offer, OfferCursor, OfferSort, OfferStatus } from "@deparked/db";
 import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
 import { Badge } from "@deparked/ui/badge";
 import { Button } from "@deparked/ui/button";
 import { Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Download, Mail, TriangleAlert } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { getOffers, setOfferStatus } from "../server/offers.functions";
 import { formatMoney, replyHref } from "./format";
 import { RelativeTime } from "./time";
 
 export type OfferFilter = { host?: string | undefined; status?: OfferStatus | undefined };
+/** What a list shows: the filter, and its order (newest first when unset). */
+export type OfferQuery = OfferFilter & { sort?: OfferSort | undefined };
+
+export const SELECT_CLASS =
+  "h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30";
+
+const SORT_LABEL: Record<OfferSort, string> = { newest: "Newest first", highest: "Highest offer first" };
+
+/** The inbox's order. "Newest first" is the default and leaves the URL without `sort`. */
+export function SortSelect(props: { value: OfferSort | undefined; onChange: (sort: OfferSort | undefined) => void }) {
+  const id = useId();
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-medium">
+        Sort
+      </label>
+      <select
+        id={id}
+        value={props.value ?? "newest"}
+        onChange={(event) => props.onChange(event.target.value === "highest" ? "highest" : undefined)}
+        className={SELECT_CLASS}
+      >
+        {(Object.keys(SORT_LABEL) as OfferSort[]).map((sort) => (
+          <option key={sort} value={sort}>
+            {SORT_LABEL[sort]}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 const STATUS_LABEL: Record<OfferStatus, string> = { new: "New", replied: "Replied", ignored: "Ignored" };
 export const STATUS_FILTERS: readonly { status: OfferStatus | undefined; label: string }[] = [
@@ -167,10 +198,10 @@ function OfferCard(props: {
 type Page = { offers: Offer[]; next: OfferCursor | null; now: number };
 
 /**
- * The inbox: offers newest first, with "Load more". Mount it with a `key` made of the filter, so a new filter
- * starts from the loader's first page again.
+ * The inbox: offers in the query's order, with "Load more". Mount it with a `key` made of the query, so a new
+ * filter or order starts from the loader's first page again.
  */
-export function OfferList(props: { first: Page; filter: OfferFilter; showHost: boolean; empty: ReactNode }) {
+export function OfferList(props: { first: Page; filter: OfferQuery; showHost: boolean; empty: ReactNode }) {
   const router = useRouter();
   const loadPage = useServerFn(getOffers);
   const changeStatus = useServerFn(setOfferStatus);
@@ -247,7 +278,7 @@ export function OfferList(props: { first: Page; filter: OfferFilter; showHost: b
             {offers.length === 1 ? "That is the only offer." : `That is all ${offers.length} offers.`}
           </p>
         )}
-        {loadError ? <p className="text-sm text-destructive">Older offers could not be loaded. Try again.</p> : null}
+        {loadError ? <p className="text-sm text-destructive">More offers could not be loaded. Try again.</p> : null}
       </div>
     </>
   );

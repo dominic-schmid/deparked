@@ -87,6 +87,20 @@ test("the owner adds a domain from the Cloudflare account, sees its placeholder 
   expect(zoneBefore()).toEqual(before);
   expect(await db.sql("SELECT status FROM domains WHERE host = ?", HOST)).toEqual([{ status: "off" }]);
   await expect(page.getByRole("link", { name: "Turn on…" })).toHaveAttribute("href", `/admin/add?host=${HOST}`);
+
+  // Turn on again: the same steps as adding, and the page is back.
+  await page.getByRole("link", { name: "Turn on…" }).click();
+  await page.getByRole("button", { name: `Add ${HOST}` }).click();
+  await expect(page.getByRole("heading", { name: `${HOST} is set up` })).toBeVisible({ timeout: 30_000 });
+  expect(await db.sql("SELECT status FROM domains WHERE host = ?", HOST)).toEqual([{ status: "placeholder" }]);
+  expect(mock.state.routes.get(ZONE_ID)?.length).toBeGreaterThan(0);
+  const again = mock.deployedAssets("deparked-sites");
+  expect([...again.keys()]).toEqual(expect.arrayContaining([`/sites/${HOST}/index.html`, FONT]));
+  const returning = await page.context().newPage();
+  for (const [path, file] of again) await writeSiteFile(path.replace(/^\//, ""), file.body);
+  await returning.goto(hostUrl(HOST));
+  await expect(returning.getByRole("heading", { level: 1 })).toContainText(HOST);
+  await returning.close();
 });
 
 test("a change that stopped half-way says which one it was and offers the action that finishes it", async ({

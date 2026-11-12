@@ -91,6 +91,17 @@ describe("buildMimeMessage", () => {
     expect(headers.get("Reply-To")).toBe('"A \\"B\\" \\\\ <x@y.z>" <b@example.org>');
   });
 
+  it("sends hostile markup only as plain text, with no HTML part", () => {
+    const hostile = `"><script>alert(1)</script><img src=x onerror=alert(1)>`;
+    const { headers, text, head } = parse(
+      buildMimeMessage({ ...BASE, replyTo: { email: "b@example.org", name: hostile }, text: hostile }),
+    );
+    expect(headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    expect(head).not.toMatch(/text\/html|multipart/i);
+    expect(text).toBe(hostile);
+    expect(headers.get("Reply-To")).toBe(`"\\"><script>alert(1)</script><img src=x onerror=alert(1)>" <b@example.org>`);
+  });
+
   it("encodes non-ASCII names and subjects as RFC 2047 words of at most 75 characters", () => {
     const name = "Zoë Müller-Łukasiewicz 山田太郎 🙂";
     const subject = `Angebot für example.com: 1.500 € ${"ü🙂".repeat(40)}`;

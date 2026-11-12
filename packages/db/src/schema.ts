@@ -15,6 +15,8 @@ export const INSTALL_STEP_STATUSES = ["pending", "running", "failed", "done"] as
 export const DOMAIN_STATUSES = ["placeholder", "live", "off", "removed", "error"] as const;
 export const EMAIL_ROUTING_STATES = ["none", "enabled", "kept_external"] as const;
 export const OFFER_STATUSES = ["new", "replied", "ignored"] as const;
+/** The inbox's orders: `newest` first (the default) or `highest` amount first. */
+export const OFFER_SORTS = ["newest", "highest"] as const;
 export const EMAIL_STATUSES = ["pending", "sent", "failed"] as const;
 export const DEPLOYMENT_WORKERS = ["sites", "admin"] as const;
 export const DEPLOYMENT_KINDS = ["install", "publish", "update", "rollback"] as const;
@@ -37,6 +39,7 @@ export type InstallStepStatus = (typeof INSTALL_STEP_STATUSES)[number];
 export type DomainStatus = (typeof DOMAIN_STATUSES)[number];
 export type EmailRoutingState = (typeof EMAIL_ROUTING_STATES)[number];
 export type OfferStatus = (typeof OFFER_STATUSES)[number];
+export type OfferSort = (typeof OFFER_SORTS)[number];
 export type EmailStatus = (typeof EMAIL_STATUSES)[number];
 export type DeploymentWorker = (typeof DEPLOYMENT_WORKERS)[number];
 export type DeploymentKind = (typeof DEPLOYMENT_KINDS)[number];
@@ -234,6 +237,9 @@ export const offers = sqliteTable(
     index("offers_host_created_at_idx").on(t.host, t.createdAt),
     index("offers_status_created_at_idx").on(t.status, t.createdAt),
     index("offers_created_at_idx").on(t.createdAt),
+    index("offers_host_amount_minor_idx").on(t.host, t.amountMinor),
+    index("offers_status_amount_minor_idx").on(t.status, t.amountMinor),
+    index("offers_amount_minor_idx").on(t.amountMinor),
   ],
 );
 

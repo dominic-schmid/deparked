@@ -1,16 +1,17 @@
-import { OFFER_STATUSES, type OfferStatus } from "@deparked/db";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { OFFER_SORTS, OFFER_STATUSES, type OfferSort, type OfferStatus } from "@deparked/db";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { oneOf } from "../../../components/messages";
-import { ExportButton, NoOffers, OfferList, STATUS_FILTERS } from "../../../components/offer-list";
+import { ExportButton, NoOffers, OfferList, SortSelect, STATUS_FILTERS } from "../../../components/offer-list";
 import { PageError, PagePending } from "../../../components/page";
 import { getOffers } from "../../../server/offers.functions";
 
 export const Route = createFileRoute("/admin/_shell/d/$host/offers")({
-  validateSearch: (search): { status?: OfferStatus | undefined } => ({
+  validateSearch: (search): { status?: OfferStatus | undefined; sort?: OfferSort | undefined } => ({
     status: oneOf(search.status, OFFER_STATUSES),
+    sort: oneOf(search.sort, OFFER_SORTS),
   }),
   loaderDeps: ({ search }) => search,
-  loader: ({ params, deps }) => getOffers({ data: { host: params.host, status: deps.status } }),
+  loader: ({ params, deps }) => getOffers({ data: { host: params.host, status: deps.status, sort: deps.sort } }),
   component: DomainOffersPage,
   pendingComponent: PagePending,
   errorComponent: PageError,
@@ -21,11 +22,18 @@ const FILTER_LINK =
 
 function DomainOffersPage() {
   const { host } = Route.useParams();
-  const { status } = Route.useSearch();
+  const { status, sort } = Route.useSearch();
   const first = Route.useLoaderData();
+  const navigate = useNavigate({ from: Route.fullPath });
   const filter = { host, status };
   return (
     <>
+      <div className="mb-4 sm:max-w-xs">
+        <SortSelect
+          value={sort}
+          onChange={(next) => void navigate({ search: (previous) => ({ ...previous, sort: next }) })}
+        />
+      </div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Filter by status" className="flex flex-wrap gap-1">
           {STATUS_FILTERS.map((item) => (
@@ -33,7 +41,7 @@ function DomainOffersPage() {
               key={item.label}
               to="/admin/d/$host/offers"
               params={{ host }}
-              search={{ status: item.status }}
+              search={{ status: item.status, sort }}
               activeOptions={{ exact: true, includeSearch: true }}
               className={FILTER_LINK}
             >
@@ -44,9 +52,9 @@ function DomainOffersPage() {
         <ExportButton filter={filter} />
       </div>
       <OfferList
-        key={`${host}|${status ?? ""}`}
+        key={`${host}|${status ?? ""}|${sort ?? ""}`}
         first={first}
-        filter={filter}
+        filter={{ ...filter, sort }}
         showHost={false}
         empty={<NoOffers filtered={status !== undefined} />}
       />
