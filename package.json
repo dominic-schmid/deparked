@@ -19,7 +19,8 @@
     "check:templates-fresh": "pnpm build:templates && test -z \"$(git status --porcelain -- packages/templates/src apps/sites/public/catalog)\"",
     "test:layout": "playwright test --config tests/lander",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
-    "test:e2e:real": "playwright test --config e2e/playwright.real.config.ts --pass-with-no-tests"
+    "test:e2e:real": "playwright test --config e2e/playwright.real.config.ts --pass-with-no-tests",
+    "build:release": "pnpm --filter @deparked/admin build && node scripts/build-release.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.7",
