@@ -1,5 +1,5 @@
 import { createCloudflareClient } from "@deparked/cf";
-import { createDb, insertLedgerEntry } from "@deparked/db";
+import { createDb, insertDomain, insertLedgerEntry, insertOffer } from "@deparked/db";
 import { expect, TEST_ACCOUNT_ID, TEST_TOKEN, test } from "../fixtures";
 
 const NEW_TOKEN = "e2e-dummy-replacement-token-0123456789";
@@ -64,27 +64,52 @@ test("the owner sees the token's state, gets a banner when Cloudflare rejects it
   await expect(banner).toHaveCount(0);
 });
 
-test("uninstall lists what goes and what stays, needs the typed words, and deletes one step at a time", async ({
+test("uninstall counts what exists, needs a copy of the offers and the typed words, then deletes step by step", async ({
   login,
   mock,
   urls,
   db,
 }) => {
   await installedWorkers(urls, db.d1);
+  const data = createDb(db.d1);
+  await insertDomain(data, { domain: { host: "example.com", zoneId: "zone-1" }, now: Date.now() });
+  const buyer = { host: "example.com", currency: "USD", name: "Ada", email: "buyer@example.net", amountMinor: 100 };
+  await insertOffer(data, { offer: buyer, now: Date.now() });
   const page = await login();
   await page.goto(`${urls.admin}/admin/settings/danger`);
   const card = page.getByRole("main");
+  await expect(card).toContainText("This workspace has 1 domain and 1 offer.");
   await expect(card.getByRole("listitem").filter({ hasText: "The Worker deparked-install" })).toBeVisible();
-  await expect(card.getByRole("listitem").filter({ hasText: "The database deparked with your offers" })).toBeVisible();
-  await expect(card.getByRole("link", { name: "Export your offers" })).toHaveAttribute("href", "/admin/offers.csv");
+  await expect(card.getByRole("heading", { name: "The database stays: delete it afterwards" })).toBeVisible();
 
-  await page.getByLabel(/Type “uninstall deparked” to confirm/).fill("uninstall");
-  await page.getByRole("button", { name: "Uninstall" }).click();
+  const confirm = page.getByLabel(/Type “uninstall deparked” to confirm/);
+  const uninstall = page.getByRole("button", { name: "Uninstall Deparked" });
+  await confirm.fill("uninstall deparked");
+  await expect(uninstall).toHaveAttribute("aria-disabled", "true");
+  await expect(card.getByText("Download your offers first, or tick that you need no copy.")).toBeVisible();
+  // The tick alone would do; it is taken back to show the download counts too.
+  await card.getByLabel("I don't need a copy of my offers").check();
+  await expect(uninstall).not.toHaveAttribute("aria-disabled", "true");
+  await card.getByLabel("I don't need a copy of my offers").uncheck();
+  expect(mock.state.scripts.has("deparked-admin")).toBe(true);
+
+  // The download is recorded on the server, so it still counts after a reload.
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    card.getByRole("link", { name: "Download 1 offer (CSV)" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^offers-.*\.csv$/);
+  await expect(card.getByText("Download started")).toBeVisible();
+  await page.reload();
+  await expect(card.getByText(/^Downloaded/)).toBeVisible();
+
+  await confirm.fill("uninstall");
+  await uninstall.click();
   await expect(page.getByText("Type “uninstall deparked” to confirm.")).toBeVisible();
   expect(mock.state.scripts.has("deparked-admin")).toBe(true);
 
-  await page.getByLabel(/Type “uninstall deparked” to confirm/).fill("Uninstall Deparked");
-  await page.getByRole("button", { name: "Uninstall" }).click();
+  await confirm.fill("Uninstall Deparked");
+  await uninstall.click();
   await expect(page.getByText("Deparked is uninstalled.")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("list", { name: "Steps to uninstall Deparked" })).toContainText("Delete the admin panel");
   expect([...mock.state.scripts.keys()]).toEqual([]);
