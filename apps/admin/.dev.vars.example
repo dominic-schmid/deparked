@@ -7,6 +7,3 @@ CF_API_TOKEN=local-dev-no-token
 CF_ACCOUNT_ID=local-dev-no-account
 # Cloudflare's documented Turnstile test secret ("always passes") for widget deparked-1.
 TURNSTILE_SECRET_1=1x0000000000000000000000000000000AA
-# Cloudflare's own endpoints. Tests point these at a mock.
-CLOUDFLARE_API_BASE=https://api.cloudflare.com/client/v4
-TURNSTILE_VERIFY_URL=https://challenges.cloudflare.com/turnstile/v0/siteverify

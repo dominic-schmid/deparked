@@ -64,9 +64,11 @@ Decisions:
 
 ## The offer API
 
-`POST /api/offer` (`src/routes/api/offer.ts`) is public and same-origin only. The logic is `src/server/offer/`
-(pure, unit-tested with the in-memory D1 and the fake hosting adapter); the request and response contract is the
-lander's (`packages/templates` README, "The offer form contract"), mirrored in `fields.ts` and `http.ts`.
+`POST /api/offer` (`src/routes/api/offer.ts`) is public. It sends no CORS headers, so another site's script
+cannot read an answer or send JSON, but a plain cross-site form post does arrive: it is useless without a Turnstile
+token solved on this hostname. The logic is `src/server/offer/` (pure, unit-tested with the in-memory D1 and the
+fake hosting adapter); the request and response contract is the lander's (`packages/templates` README, "The offer
+form contract"), and its field names, limits and redirect fragments are imported from `@deparked/templates`.
 
 - **Request**: JSON or `application/x-www-form-urlencoded`, at most 10 KB, fields `amount`, `name`, `email`,
   `message` (optional), `website` (honeypot), `cf-turnstile-response`. The domain is the request's hostname.
@@ -76,10 +78,20 @@ lander's (`packages/templates` README, "The offer form contract"), mirrored in `
   `not-for-sale` (404: unknown host, `www.`, or any status but `live`) or `unavailable` (503).
 - **Form answer** (no JavaScript): `303` to `/#offer-sent` or `/#offer-error-<amount|name|email|check|rate|failed>`,
   always a fixed path on the same host. A form post has no Turnstile token, so today it always ends in `check`.
-- **Order**: honeypot (answered like a success, nothing stored), host lookup, validation (zod; a typo does not
-  count against the throttle), throttle, Turnstile through the hosting adapter, `insertOffer`, then the email
-  from `offers@<sender host>` with Reply-To the buyer. A failed email, or no verified notify address, leaves the
-  offer stored with `email_status = failed` and a short `email_error`; the buyer still gets a success.
+- **Order**: honeypot, host lookup (one read), validation (zod), empty-token check, Turnstile through the hosting
+  adapter, throttle, `insertOffer`, then the email from `offers@<sender host>` with Reply-To the buyer. Nothing is
+  written to D1 before the bot check has passed, so a junk token costs no write; a throttled request has used up
+  its solved token. A failed email, or no verified notify address, leaves the offer stored with
+  `email_status = failed` and a short `email_error`; the buyer still gets a success.
+- **Honeypot**: a filled `website` field is answered like a success and nothing is stored (the schema has no
+  place for a suspected-bot offer). A browser autofill that fills the hidden field would lose a real offer the
+  same way, so each one logs `offer: honeypot-filled`: a run of those in the Worker's logs with no spam to match
+  is the sign.
+- **Text**: `name` may not hold control characters or invisible format characters (bidi overrides, zero-width
+  space); in `message` the format characters are removed. The zero-width joiner and non-joiner are kept, for
+  emoji and the scripts that need them.
+- **Client address**: taken from `CF-Connecting-IP`. Without it the answer is `unavailable` and D1 is not
+  touched, except on `localhost` and `127.0.0.1`, where local dev shares one counter.
 - **Throttle**: per IP (IPv6 /64, hashed like the login counter), across all domains: 5 per 10 minutes and 20 per
   12 hours (`OFFER_BURST`, `OFFER_SUSTAINED`). Counters older than 24 hours are pruned.
 - **Logs**: fixed codes only (`offer: email-failed`), never a name, email, amount, message or IP.
@@ -97,7 +109,9 @@ between the login and setup screens: their state is decided by the middleware on
 
 The names this Worker reads, and that the E2E harness passes. `src/server/hosting.ts` builds the hosting adapter
 from them, once per request. Local dev loads from `.dev.vars` only the names listed under `secrets.required` in
-`wrangler.jsonc`: a second Turnstile widget's secret has to be added there to be seen locally.
+`wrangler.jsonc`: a second Turnstile widget's secret has to be added there to be seen locally. The two overrides
+are not secrets and are not listed: pass them as variables, the way the E2E harness does
+(`wrangler dev --var TURNSTILE_VERIFY_URL:http://127.0.0.1:<port>/…` on the build).
 
 | Name | What |
 | -- | -- |
@@ -106,5 +120,5 @@ from them, once per request. Local dev loads from `.dev.vars` only the names lis
 | `CF_ACCOUNT_ID` | The Cloudflare account the hub lives in. `workspace.cf_account_id` wins when the caller passes it. |
 | `EMAIL` | `send_email` binding without a fixed destination: offer emails go to verified notify addresses. |
 | `TURNSTILE_SECRET_<n>` | Secret of Turnstile widget `deparked-<n>`. |
-| `CLOUDFLARE_API_BASE` | Override of the Cloudflare API base URL, for the mock API in tests. |
-| `TURNSTILE_VERIFY_URL` | Override of the Turnstile siteverify URL, for tests. |
+| `CLOUDFLARE_API_BASE` | Override of the Cloudflare API base URL, for the mock API in tests. Honoured only when it is `http://127.0.0.1:<port>/…` or `http://localhost:<port>/…`; anything else is ignored. |
+| `TURNSTILE_VERIFY_URL` | Override of the Turnstile siteverify URL, for tests. Same rule. |

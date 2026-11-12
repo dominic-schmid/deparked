@@ -10,8 +10,9 @@ import {
   setOfferEmailStatus,
 } from "@deparked/db";
 import { type HostingAdapter, HostingError } from "@deparked/hosting";
+import type { OfferField } from "@deparked/templates";
 import { RATE_LIMIT_RETENTION_MS, rateLimitKey } from "../auth/account";
-import { type OfferField, type OfferFields, parseOfferFields } from "./fields";
+import { type OfferFields, parseOfferFields } from "./fields";
 import { offerNotification } from "./mail";
 
 /** Per IP (IPv6: per /64), across all domains. Both windows are shorter than `RATE_LIMIT_RETENTION_MS`. */
@@ -112,8 +113,10 @@ async function sendEmail(
  */
 export async function submitOffer(deps: OfferDeps, input: OfferInput): Promise<OfferResult> {
   const { db, now, host } = deps;
-  // A bot that fills the hidden field is told what a person is told, and nothing happens.
+  // A bot that fills the hidden field is told what a person is told, and nothing is stored. The log line is the
+  // only trace, so an owner can tell when a browser's autofill is eating real offers.
   if (input.honeypot !== undefined && input.honeypot !== null && String(input.honeypot).trim() !== "") {
+    logCode("honeypot-filled");
     return { ok: true };
   }
 
@@ -141,10 +144,6 @@ export async function submitOffer(deps: OfferDeps, input: OfferInput): Promise<O
     return { ok: false, code: "unavailable" };
   }
 
-  // From here on a request costs a siteverify call, database writes and an email: count it first.
-  const limited = await throttle(deps);
-  if (limited !== null) return { ok: false, code: "rate-limited", retryAfterMs: limited.retryAfterMs };
-
   let check: Awaited<ReturnType<HostingAdapter["verifyBotCheck"]>>;
   try {
     check = await deps.hosting.verifyBotCheck({
@@ -162,6 +161,10 @@ export async function submitOffer(deps: OfferDeps, input: OfferInput): Promise<O
     logCode("bot-check-not-configured");
     return { ok: false, code: "unavailable" };
   }
+
+  // Counted only once the bot check has passed: a request without a solved challenge writes nothing.
+  const limited = await throttle(deps);
+  if (limited !== null) return { ok: false, code: "rate-limited", retryAfterMs: limited.retryAfterMs };
 
   const offer = await insertOffer(db, {
     offer: {

@@ -9,7 +9,7 @@ import {
   setDomainStatus,
   updateNotifyAddress,
 } from "@deparked/db";
-import { createTestDb, type ExecutedStatement } from "@deparked/db/testing";
+import { createTestDb, type ExecutedStatement, type TestD1 } from "@deparked/db/testing";
 import { HostingError } from "@deparked/hosting";
 import { createFakeHosting } from "@deparked/hosting/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,6 +26,7 @@ type Hosting = ReturnType<typeof createFakeHosting>;
 
 let db: Db;
 let executed: ExecutedStatement[];
+let sqlite: TestD1["sqlite"];
 let hosting: Hosting;
 let now: number;
 let tokens = 0;
@@ -105,7 +106,7 @@ async function expectRefused(response: Response, status: number, code: string, f
 }
 
 beforeEach(async () => {
-  ({ db, executed } = await createTestDb());
+  ({ db, executed, sqlite } = await createTestDb());
   hosting = createFakeHosting({ verifiedAddresses: [NOTIFY] });
   now = NOW;
   await insertNotifyAddress(db, { email: NOTIFY, verifiedAt: NOW, now: NOW });
@@ -239,14 +240,15 @@ describe("POST /api/offer", () => {
   it("reads the host case-insensitively and without the port", async () => {
     const request = new Request("https://EXAMPLE.com:8443/api/offer", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "CF-Connecting-IP": "203.0.113.7" },
       body: JSON.stringify(offer()),
     });
     const response = await handleOffer(request, { db, hosting, sessionKey: SESSION_KEY, now });
     expect(response.status).toBe(200);
   });
 
-  it("answers a filled honeypot like a success and does nothing", async () => {
+  it("answers a filled honeypot like a success, stores nothing and logs only a code", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const json = await postJson(offer({ website: "https://spam.example" }));
     expect(json.status).toBe(200);
     expect(await json.json()).toEqual({ ok: true });
@@ -255,6 +257,36 @@ describe("POST /api/offer", () => {
     expect(await stored()).toEqual([]);
     expect(hosting.sent).toEqual([]);
     expect(requestStatements()).toEqual([]);
+    expect(errors.mock.calls).toEqual([["offer: honeypot-filled"], ["offer: honeypot-filled"]]);
+    errors.mockRestore();
+  });
+
+  it("writes nothing to the database until the bot check has passed", async () => {
+    const junk = OFFER_BURST.max * 3;
+    for (let attempt = 0; attempt < junk; attempt++) {
+      expect((await postJson(offer({ "cf-turnstile-response": `junk-${attempt}` }))).status).toBe(403);
+    }
+    expect((await postJson(offer({ "cf-turnstile-response": token("other.example") }))).status).toBe(403);
+    expect(sqlite.prepare("SELECT count(*) AS rows FROM rate_limits").get()).toEqual({ rows: 0 });
+    expect(requestStatements().every((statement) => /^select/i.test(statement.sql))).toBe(true);
+    expect((await postJson(offer())).status).toBe(200);
+    expect(sqlite.prepare("SELECT count(*) AS rows FROM rate_limits").get()).toEqual({ rows: 2 });
+  });
+
+  it("refuses a request without a client address, except on loopback hosts", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const init = { method: "POST", headers: { "content-type": "application/json" } };
+    const remote = new Request(`https://${HOST}/api/offer`, { ...init, body: JSON.stringify(offer()) });
+    const response = await handleOffer(remote, { db, hosting, sessionKey: SESSION_KEY, now });
+    await expectRefused(response, 503, "unavailable");
+    expect(requestStatements()).toEqual([]);
+    expect(errors.mock.calls).toEqual([["offer: no-client-ip"]]);
+    errors.mockRestore();
+
+    await addDomain("localhost");
+    const body = JSON.stringify(offer({ "cf-turnstile-response": token("localhost") }));
+    const local = new Request("http://localhost:5173/api/offer", { ...init, body });
+    expect((await handleOffer(local, { db, hosting, sessionKey: SESSION_KEY, now })).status).toBe(200);
   });
 
   it("refuses a missing, unknown, reused or wrong-host bot token", async () => {
@@ -297,7 +329,7 @@ describe("POST /api/offer", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       ok: false,
-      error: "Offers start at 500 EUR",
+      error: "Offers start at €500",
       code: "min-offer",
       field: "amount",
     });
@@ -346,6 +378,9 @@ describe("POST /api/offer", () => {
     "Jane\nSubject: hi",
     "Jane Buyer",
     "Jane\u0000",
+    "Jane \u202ereyuB",
+    "Jane\u2066Buyer\u2069",
+    "Jane\u200bBuyer",
     7,
   ])("refuses the name %j", async (name) => {
     await expectRefused(await postJson(offer({ name })), 400, "invalid", "name");
@@ -355,6 +390,14 @@ describe("POST /api/offer", () => {
     await postJson(offer({ name: "  Jane Buyer \n", email: " jane@buyer.example " }));
     expect(await stored()).toMatchObject([{ name: "Jane Buyer", email: "jane@buyer.example" }]);
     expect(hosting.sent[0]?.replyTo).toEqual({ email: "jane@buyer.example", name: "Jane Buyer" });
+  });
+
+  it("keeps joiners in a name and strips invisible format characters from a message", async () => {
+    const family = "\u{1f468}\u200d\u{1f469}\u200d\u{1f467}";
+    await postJson(
+      offer({ name: `Jane ${family} \u2764\ufe0f`, message: `\ufeffHello \u202eolleh\u202c ${family}\u200b!` }),
+    );
+    expect(await stored()).toMatchObject([{ name: `Jane ${family} \u2764\ufe0f`, message: `Hello olleh ${family}!` }]);
   });
 
   it("refuses a message that is too long or holds control characters", async () => {
@@ -375,7 +418,7 @@ describe("POST /api/offer", () => {
     });
     const request = new Request(`https://${HOST}/api/offer`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "CF-Connecting-IP": "203.0.113.7" },
       body: stream,
       duplex: "half",
     } as RequestInit);
@@ -516,7 +559,7 @@ describe("POST /api/offer", () => {
     const broken = { ...hosting, verifyBotCheck: () => Promise.reject(new Error("Jane Buyer jane@buyer.example")) };
     const request = new Request(`https://${HOST}/api/offer`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "CF-Connecting-IP": "203.0.113.7" },
       body: JSON.stringify(offer()),
     });
     const response = await handleOffer(request, { db, hosting: broken, sessionKey: SESSION_KEY, now });

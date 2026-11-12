@@ -22,14 +22,7 @@
   // names listed here from .dev.vars; a missing one is a warning. The installer sets the real values, and one
   // TURNSTILE_SECRET_<n> per widget.
   "secrets": {
-    "required": [
-      "SESSION_KEY",
-      "CF_API_TOKEN",
-      "CF_ACCOUNT_ID",
-      "TURNSTILE_SECRET_1",
-      "CLOUDFLARE_API_BASE",
-      "TURNSTILE_VERIFY_URL"
-    ]
+    "required": ["SESSION_KEY", "CF_API_TOKEN", "CF_ACCOUNT_ID", "TURNSTILE_SECRET_1"]
   },
   // Invocation logs record every request URL. The setup link carries its one-time secret in the query, so they
   // stay off; our own console logs are still collected.

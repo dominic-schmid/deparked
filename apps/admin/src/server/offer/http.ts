@@ -1,8 +1,14 @@
-import { OFFER_FIELDS } from "./fields";
-import { formatAmount } from "./mail";
+import {
+  formatAmount,
+  OFFER_FIELDS,
+  OFFER_SENT_FRAGMENT,
+  type OfferErrorReason,
+  offerErrorFragment,
+} from "@deparked/templates";
 import { type OfferDeps, type OfferFailure, type OfferInput, type OfferResult, submitOffer } from "./submit";
 
 export const MAX_BODY_BYTES = 10 * 1024;
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /** What the route reads from the Worker's environment; the rest of `OfferDeps` comes from the request. */
 export type OfferEnv = Pick<OfferDeps, "db" | "hosting" | "sessionKey" | "now">;
@@ -44,24 +50,21 @@ function message(failure: HttpFailure): string {
   }
 }
 
-/**
- * The fragment of the static page that holds the message for a no-JavaScript submission. Mirrors
- * `OFFER_SENT_FRAGMENT` and `offerErrorFragment` (reasons amount, name, email, check, rate, failed) in
- * `packages/templates/src/offer.ts`.
- */
+function errorReason(failure: HttpFailure): OfferErrorReason {
+  if (failure.code === "min-offer") return "amount";
+  if (failure.code === "invalid" && "field" in failure && failure.field !== undefined) return failure.field;
+  if (failure.code === "bot-check") return "check";
+  if (failure.code === "rate-limited") return "rate";
+  return "failed";
+}
+
+/** The fragment of the static page that holds the message for a no-JavaScript submission. */
 function fragment(result: { ok: true } | HttpFailure): string {
-  if (result.ok) return "offer-sent";
-  if (result.code === "min-offer") return "offer-error-amount";
-  if (result.code === "invalid" && "field" in result && result.field !== undefined) {
-    return `offer-error-${result.field}`;
-  }
-  if (result.code === "bot-check") return "offer-error-check";
-  if (result.code === "rate-limited") return "offer-error-rate";
-  return "offer-error-failed";
+  return result.ok ? OFFER_SENT_FRAGMENT : offerErrorFragment(errorReason(result));
 }
 
 function respond(wantsJson: boolean, result: { ok: true } | HttpFailure): Response {
-  // Same-origin only: no CORS headers, so another site's script can neither send JSON here nor read the answer.
+  // No CORS headers: another site's script cannot read the answer, and its JSON post fails the preflight.
   const headers = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
   if (!result.ok && "status" in result && result.status === 405) headers.set("Allow", "POST");
   if (!result.ok && result.code === "rate-limited") {
@@ -142,16 +145,23 @@ export async function handleOffer(request: Request, env: OfferEnv): Promise<Resp
     honeypot: body[OFFER_FIELDS.honeypot],
     token: body[OFFER_FIELDS.turnstile],
   };
+  const host = new URL(request.url).hostname.toLowerCase();
+  // Cloudflare sets both headers itself and overwrites what a client sends. Without the address every visitor
+  // would share one throttle counter, so that is only accepted in local dev.
+  const ip = request.headers.get("CF-Connecting-IP") ?? (LOOPBACK_HOSTS.has(host) ? "local" : null);
+  if (ip === null) {
+    console.error("offer: no-client-ip");
+    return respond(wantsJson, { ok: false, code: "unavailable" });
+  }
   const country = request.headers.get("CF-IPCountry") ?? "";
   let result: OfferResult;
   try {
     result = await submitOffer(
       {
         ...env,
-        // Cloudflare sets both headers itself and overwrites what a client sends. Absent only in local dev.
-        ip: request.headers.get("CF-Connecting-IP") ?? "local",
+        ip,
         country: /^[A-Z]{2}$/.test(country) && country !== "XX" ? country : undefined,
-        host: new URL(request.url).hostname.toLowerCase(),
+        host,
       },
       input,
     );
