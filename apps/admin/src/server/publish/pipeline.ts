@@ -14,6 +14,7 @@ import {
   getPublishLock,
   insertDeployment,
   latestDeployment,
+  latestLiveChange,
   listConfigHistory,
   listDeployments,
   listDomains,
@@ -42,7 +43,7 @@ export type PublishContext = {
   fetchReleaseFile: FetchReleaseFile;
   /** Hosts rendered per step of "republish all". Default `HOSTS_PER_STEP`. */
   hostsPerStep?: number;
-  /** Upload requests per step. Default `UPLOAD_BATCHES_PER_STEP`. */
+  /** Upload batches per `hosting.publish` call, at most. Default `UPLOAD_BATCHES_PER_STEP`. */
   maxUploadBatches?: number;
 };
 
@@ -56,7 +57,14 @@ export const LOCK_TTL_MS = 5 * 60_000;
  * a fresh process (README "Publish"), so a step renders one and stays near Workers Free's 10 ms.
  */
 export const HOSTS_PER_STEP = 1;
-/** With the three fixed requests and up to `MAX_STALE_ROUNDS` restarted upload sessions, a step stays under 50. */
+/**
+ * Subrequests one step may make: every request to the host, in every round, plus every release download. Workers
+ * Free allows 50; the rest is headroom for the adapter's retries.
+ */
+export const STEP_REQUEST_BUDGET = 40;
+/** Requests one `hosting.publish` call makes besides its upload batches (session, deploy, version id). */
+const PUBLISH_CALL_REQUESTS = 3;
+/** Upload batches per `hosting.publish` call, at most. The step budget usually allows fewer. */
 export const UPLOAD_BATCHES_PER_STEP = 30;
 /** How often one step starts over because another domain's pages turned out to be stale. */
 export const MAX_STALE_ROUNDS = 3;
@@ -76,7 +84,7 @@ export type StartResult =
   | {
       ok: false;
       /** `busy`: another publish holds the lock (`deploymentId` says which). */
-      reason: "busy" | "invalid" | "credentials-rejected" | "hosting";
+      reason: "busy" | FailureReason;
       message: string;
       deploymentId?: number;
     };
@@ -103,10 +111,11 @@ export type StepResult =
       message: string;
     };
 
+/** A removal is an `update` of one host: it renders that host from its live state, which for an off domain is nothing. */
 const KIND: Record<StartKind, DeploymentKind> = {
   draft: "publish",
   placeholder: "install",
-  remove: "publish",
+  remove: "update",
   "republish-all": "update",
 };
 
@@ -114,6 +123,11 @@ const NO_PROGRESS: PublishProgress = { uploaded: 0, pending: 0, remainingHosts: 
 const BUSY = "Another publish is running. Wait for it to finish, then try again.";
 const CRASHED = "This publish stopped before it finished. Nothing was changed; publish again.";
 const LOCK_LOST = "This publish took too long and another one took over. Publish again.";
+const LIVE_NOT_RECORDED =
+  "The new pages went live, but another publish took over before they were recorded here. Publish again so this admin matches what visitors see.";
+
+/** This step has used its request budget; the next step continues. */
+class BudgetSpent extends Error {}
 
 /** Another domain's file was asked for, and rendering it again gives different bytes than the manifest lists. */
 class StaleHost extends Error {
@@ -133,9 +147,22 @@ function toFailure(error: unknown): { reason: FailureReason; message: string } {
   return { reason: "unexpected", message: "The publish failed unexpectedly. Nothing was changed; publish again." };
 }
 
-async function fail(ctx: PublishContext, deploymentId: number, error: unknown, progress = NO_PROGRESS) {
+async function fail(
+  ctx: PublishContext,
+  deploymentId: number,
+  error: unknown,
+  progress = NO_PROGRESS,
+  /** A version the host put live that D1 does not describe: kept, so `getPublishState` reports `outOfSync`. */
+  cfVersionId?: string,
+) {
   const failure = toFailure(error);
-  await finishDeployment(ctx.db, { id: deploymentId, status: "failed", error: failure.message, now: ctx.now() });
+  await finishDeployment(ctx.db, {
+    id: deploymentId,
+    status: "failed",
+    error: failure.message,
+    ...(cfVersionId === undefined ? {} : { cfVersionId }),
+    now: ctx.now(),
+  });
   await releasePublishLock(ctx.db, deploymentId);
   return { status: "failed" as const, ...failure, progress };
 }
@@ -194,7 +221,7 @@ export async function startPublish(
   if (host === undefined || domain === undefined) {
     return { ok: false, reason: "invalid", message: "This domain is not managed here." };
   }
-  const gone = domain.status === "off" || domain.status === "removed";
+  const gone = isOff(domain.status);
   if (kind === "remove" && !gone) {
     return { ok: false, reason: "invalid", message: `Turn ${host} off before its pages are taken down.` };
   }
@@ -209,17 +236,17 @@ export async function startPublish(
 
 type Plan = { hosts: { host: string; source: "draft" | "live" }[]; remaining: number };
 
+const isOff = (status: string) => status === "off" || status === "removed";
+
 async function plan(ctx: PublishContext, deployment: Deployment, rows: readonly SiteFile[]): Promise<Plan> {
-  if (deployment.kind === "update") {
+  if (deployment.kind === "update" && deployment.host === null) {
     const renderedAt = new Map<string, number>();
     for (const row of rows) {
       if (row.host !== null) renderedAt.set(row.host, Math.max(renderedAt.get(row.host) ?? 0, row.updatedAt));
     }
     // A host is finished once its rows are newer than this deployment, so the progress survives between requests.
     const pending = (await listDomains(ctx.db, { includeRemoved: true })).filter((domain) =>
-      domain.status === "off" || domain.status === "removed"
-        ? renderedAt.has(domain.host)
-        : (renderedAt.get(domain.host) ?? -1) < deployment.startedAt,
+      isOff(domain.status) ? renderedAt.has(domain.host) : (renderedAt.get(domain.host) ?? -1) < deployment.startedAt,
     );
     const now = pending.slice(0, ctx.hostsPerStep ?? HOSTS_PER_STEP);
     return {
@@ -227,10 +254,20 @@ async function plan(ctx: PublishContext, deployment: Deployment, rows: readonly 
       remaining: pending.length - now.length,
     };
   }
-  if (deployment.host === null || (deployment.kind !== "publish" && deployment.kind !== "install")) {
+  const { host } = deployment;
+  if (host === null || deployment.kind === "rollback") {
     throw new PublishFailure("invalid", "This publish cannot be continued. Start it again.");
   }
-  return { hosts: [{ host: deployment.host, source: deployment.kind === "publish" ? "draft" : "live" }], remaining: 0 };
+  // The status decides what gets rendered, so it has to be the one this publish was started for.
+  const domain = await getDomain(ctx.db, host);
+  const off = domain === undefined || isOff(domain.status);
+  if (deployment.kind === "update" && !off) {
+    throw new PublishFailure("invalid", `${host} was turned on again, so its pages were not taken down.`);
+  }
+  if (deployment.kind !== "update" && off) {
+    throw new PublishFailure("invalid", `${host} was turned off while it was being published. Nothing was published.`);
+  }
+  return { hosts: [{ host, source: deployment.kind === "publish" ? "draft" : "live" }], remaining: 0 };
 }
 
 const toPublishFile = ({ path, hash, size, contentType }: PublishFile): PublishFile => ({
@@ -273,20 +310,35 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
     const builds = new Map<string, HostBuild>();
     for (const { host, source } of hosts) builds.set(host, await buildHost(ctx, host, source));
     const others = new Map<string, HostBuild>();
+    const running = (message: string): StepResult => ({ status: "running", progress, message });
 
     for (let round = 0; ; round += 1) {
+      const left = STEP_REQUEST_BUDGET - progress.requests;
+      // Half of what is left for upload batches, the other half for release files the host may ask for.
+      const maxUploadBatches = Math.min(
+        ctx.maxUploadBatches ?? UPLOAD_BATCHES_PER_STEP,
+        Math.floor((left - PUBLISH_CALL_REQUESTS) / 2),
+      );
+      if (maxUploadBatches < 1) return running("Uploading: continuing in the next step.");
+      const downloadsAllowed = left - PUBLISH_CALL_REQUESTS - maxUploadBatches;
+      let downloads = 0;
+      let asked = 0;
+
       const kept = rows.filter((row) => row.host === null || !builds.has(row.host));
       const fresh = [...builds.values()].flatMap((build) => build.files);
       const keptByPath = new Map(kept.map((row) => [row.path, row]));
       const freshByPath = new Map(fresh.map((file) => [file.path, file]));
 
       const getContent = async (path: string): Promise<Uint8Array> => {
+        asked += 1;
         const rendered = freshByPath.get(path);
         if (rendered !== undefined) return rendered.content;
         const row = keptByPath.get(path);
         if (row === undefined) throw new PublishFailure("unexpected", `${path} is not part of this publish.`);
         if (row.host === null) {
-          const content = await ctx.fetchReleaseFile(path);
+          if (downloads === downloadsAllowed) throw new BudgetSpent();
+          downloads += 1;
+          const content = await ctx.fetchReleaseFile(path, row.size);
           if (content.length !== row.size || (await contentHash(path, content)) !== row.hash) {
             throw new PublishFailure("hosting", `The release's copy of ${path} is not the file that was installed.`);
           }
@@ -307,10 +359,14 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
           files: [...kept, ...fresh].map(toPublishFile),
           getContent,
           headers: ctx.headers,
-          maxUploadBatches: ctx.maxUploadBatches ?? UPLOAD_BATCHES_PER_STEP,
+          maxUploadBatches,
         });
       } catch (error) {
-        if (!(error instanceof StaleHost)) throw error;
+        if (!(error instanceof StaleHost || error instanceof BudgetSpent)) throw error;
+        // The call stopped inside `getContent`: the session request, and at most one upload batch per file asked
+        // for before this one (every batch asks for at least one).
+        progress.requests += Math.min(1 + maxUploadBatches, asked) + downloads;
+        if (error instanceof BudgetSpent) return running("Uploading: continuing in the next step.");
         if (round === MAX_STALE_ROUNDS) {
           throw new PublishFailure(
             "invalid",
@@ -319,21 +375,16 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
         }
         // The templates changed since that host was published: its pages join this deploy and its rows are replaced.
         builds.set(error.build.host, error.build);
-        // The abandoned upload session was at least one request.
-        progress.requests += 1;
         continue;
       }
-      progress.requests += result.requests;
-      progress.uploaded = result.uploaded.length;
+      progress.requests += result.requests + downloads;
+      progress.uploaded += result.uploaded.length;
       if (!result.done) {
         progress.pending = result.pending;
-        return { status: "running", progress, message: `Uploading: ${result.pending} files to go.` };
+        return running(`Uploading: ${result.pending} files to go.`);
       }
 
-      // The version is live. If the lock is gone, whoever took it publishes the manifest the database describes.
-      if (!(await holdsLock()))
-        return await fail(ctx, deploymentId, new PublishFailure("lock-lost", LOCK_LOST), progress);
-      await commitPublish(db, {
+      const committed = await commitPublish(db, {
         deploymentId,
         versionId: result.versionId,
         hosts: [...builds.values()].map(({ host, files, published, rerendered }) => ({
@@ -346,10 +397,19 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
         finish: remaining === 0,
         now: ctx.now(),
       });
+      if (!committed) {
+        // Another request of this same publish may have recorded it first; then it is simply done.
+        const current = await getDeployment(db, deploymentId);
+        if (current?.status === "done") {
+          return { status: "done", progress, message: "Published.", versionId: current.cfVersionId };
+        }
+        const lost = new PublishFailure("lock-lost", LIVE_NOT_RECORDED);
+        return await fail(ctx, deploymentId, lost, progress, result.versionId);
+      }
       progress.remainingHosts = remaining;
       return remaining === 0
         ? { status: "done", progress, message: "Published.", versionId: result.versionId }
-        : { status: "running", progress, message: `Rebuilding: ${remaining} domains to go.` };
+        : running(`Rebuilding: ${remaining} domains to go.`);
     }
   } catch (error) {
     return fail(ctx, deploymentId, error, progress);
@@ -402,8 +462,12 @@ export async function revertTo(ctx: PublishContext, historyId: number): Promise<
   const entry = await getConfigHistoryEntry(ctx.db, historyId);
   if (entry === undefined) return { ok: false, reason: "invalid", message: "This earlier version no longer exists." };
   const started = await startPublish(ctx, { host: entry.host, kind: "draft" });
-  if (started.ok) {
+  if (!started.ok) return started;
+  try {
     await saveDraft(ctx.db, { host: entry.host, json: entry.json, schemaVersion: entry.schemaVersion, now: ctx.now() });
+  } catch (error) {
+    const failure = await fail(ctx, started.deploymentId, error);
+    return { ok: false, reason: failure.reason, message: failure.message, deploymentId: started.deploymentId };
   }
   return started;
 }
@@ -438,17 +502,20 @@ export type PublishState = {
   lastDeployment: Pick<Deployment, "id" | "kind" | "status" | "error" | "startedAt" | "finishedAt"> | null;
   /** The publish running now, for any domain. */
   lock: { deploymentId: number; expiresAt: number } | null;
-  /** True after an emergency rollback: visitors get an older version than the database describes. */
+  /**
+   * True when visitors get another version than the database describes: after an emergency rollback, or after a
+   * publish whose version went live but could not be recorded. The next publish that finishes clears it.
+   */
   outOfSync: boolean;
 };
 
 export async function getPublishState(input: { db: Db; now: () => number }, host: string): Promise<PublishState> {
   const { db } = input;
-  const [stored, last, lock, lastDone] = await Promise.all([
+  const [stored, last, lock, liveChange] = await Promise.all([
     getConfig(db, host),
     latestDeployment(db, { worker: "sites", host }),
     getPublishLock(db),
-    latestDeployment(db, { worker: "sites", status: "done" }),
+    latestLiveChange(db),
   ]);
   return {
     draftDiffers:
@@ -470,7 +537,7 @@ export async function getPublishState(input: { db: Db; now: () => number }, host
       lock !== undefined && lock.expiresAt > input.now()
         ? { deploymentId: lock.deploymentId, expiresAt: lock.expiresAt }
         : null,
-    outOfSync: lastDone?.kind === "rollback",
+    outOfSync: liveChange !== undefined && (liveChange.kind === "rollback" || liveChange.status === "failed"),
   };
 }
 

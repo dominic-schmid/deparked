@@ -1,6 +1,7 @@
 import { type Config, defaultConfig } from "@deparked/config";
 import {
   acquirePublishLock,
+  config as configTable,
   type Db,
   getConfig,
   getDeployment,
@@ -13,6 +14,7 @@ import {
   listSiteFiles,
   listSiteFilesByHost,
   replaceSiteFiles,
+  saveDraft,
   setDomainStatus,
 } from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
@@ -20,18 +22,20 @@ import { contentHash, HostingError } from "@deparked/hosting";
 import { createFakeHosting, type FakeHosting } from "@deparked/hosting/testing";
 import { catalog } from "@deparked/templates/catalog";
 import { beforeEach, describe, expect, it } from "vitest";
+import { sitePath } from "./files";
 import {
   getPublishState,
   LOCK_TTL_MS,
   type PublishContext,
   revertTo,
   rollbackPublish,
+  STEP_REQUEST_BUDGET,
   type StepResult,
   saveDraftConfig,
   startPublish,
   stepPublish,
 } from "./pipeline";
-import { createReleaseFileFetcher } from "./release";
+import { createReleaseFileFetcher, parseReleaseBaseUrl } from "./release";
 
 const SITEKEY = "1x00000000000000000000AA";
 const A = "a.example";
@@ -144,7 +148,8 @@ describe("publishing a draft", () => {
 
     expect(steps).toHaveLength(1);
     expect(steps[0]).toMatchObject({ status: "done", versionId: hosting.versions[0]?.id });
-    expect(steps[0]?.progress).toMatchObject({ uploaded: 4, pending: 0, requests: 4 });
+    // 3 fixed requests and one upload batch to the host, plus the catalog file downloaded from the release.
+    expect(steps[0]?.progress).toMatchObject({ uploaded: 4, pending: 0, requests: 5 });
     expect(paths(hosting.liveFiles())).toEqual([
       FONT,
       `/sites/${A}/index.html`,
@@ -265,9 +270,88 @@ describe("publishing a draft", () => {
     const steps = await publish(A);
 
     expect(steps.map((step) => step.status)).toEqual(["running", "running", "running", "done"]);
-    expect(steps[0]?.progress).toMatchObject({ uploaded: 1, pending: 3, requests: 2 });
+    expect(steps[0]?.progress).toMatchObject({ uploaded: 1, pending: 3, requests: 3 });
     expect(steps[2]?.progress.pending).toBe(1);
     await expectInSync();
+  });
+
+  it("a first publish that must send many catalog files spreads over steps within the request budget", async () => {
+    hosting = createFakeHosting({ batchSize: 10 });
+    ctx = { ...ctx, hosting };
+    const catalogFiles = [];
+    for (let index = 0; index < 60; index += 1) {
+      const path = `/catalog/img/${index}.avif`;
+      const content = new TextEncoder().encode(`image ${index}`);
+      releaseFiles.set(path, content);
+      catalogFiles.push({
+        path,
+        hash: await contentHash(path, content),
+        size: content.length,
+        contentType: "image/avif",
+      });
+    }
+    const font = await listSiteFilesByHost(db, null);
+    await replaceSiteFiles(db, { host: null, files: [...font, ...catalogFiles], now: time });
+    await addDomain(A);
+    const downloads: number[] = [];
+    const id = await start({ host: A, kind: "draft" });
+
+    const steps: StepResult[] = [];
+    for (let guard = 0; guard < 20 && steps.at(-1)?.status !== "done"; guard += 1) {
+      const before = releaseRequests.length;
+      steps.push(await stepPublish(ctx, id));
+      downloads.push(releaseRequests.length - before);
+      expect(steps.at(-1)?.status).not.toBe("failed");
+    }
+
+    expect(steps.length).toBeGreaterThan(1);
+    expect(steps.at(-1)?.status).toBe("done");
+    for (const [index, step] of steps.entries()) {
+      expect(step.progress.requests).toBeLessThanOrEqual(STEP_REQUEST_BUDGET);
+      expect(downloads[index]).toBeLessThanOrEqual(step.progress.requests);
+    }
+    await expectInSync();
+  });
+
+  it("stores the published config as the draft, so nothing differs right after a publish", async () => {
+    await addDomain(A, null);
+    // A draft as an older admin may have stored it: same config, other formatting.
+    await saveDraft(db, { host: A, json: JSON.stringify(defaultConfig(), null, 2), schemaVersion: 1, now: time });
+
+    await publish(A);
+
+    const stored = await getConfig(db, A);
+    expect(stored?.draftJson).toBe(stored?.liveJson);
+    expect((await getPublishState(ctx, A)).draftDiffers).toBe(false);
+  });
+
+  it("keeps a draft that was saved while the publish ran", async () => {
+    await addDomain(A, { headline: "First {domain}" });
+    const original = hosting.publish;
+    hosting.publish = async (input) => {
+      await draft(A, { headline: "Edited meanwhile {domain}" });
+      return original(input);
+    };
+
+    await publish(A);
+
+    const stored = await getConfig(db, A);
+    expect(stored?.draftJson).toContain("Edited meanwhile");
+    expect(stored?.liveJson).toContain("First");
+    expect((await getPublishState(ctx, A)).draftDiffers).toBe(true);
+  });
+
+  it("a draft publish of a domain turned off meanwhile fails and publishes nothing", async () => {
+    await addDomain(A);
+    const id = await start({ host: A, kind: "draft" });
+    await setDomainStatus(db, { host: A, status: "off", now: time });
+
+    const step = await stepPublish(ctx, id);
+
+    expect(step).toMatchObject({ status: "failed", reason: "invalid" });
+    expect(step.message).toContain("turned off");
+    expect(hosting.versions).toHaveLength(0);
+    expect((await getConfig(db, A))?.liveJson).toBeNull();
   });
 
   it("refuses a draft that is not valid, naming the field", async () => {
@@ -327,27 +411,65 @@ describe("the lock", () => {
     expect((await getPublishLock(db))?.expiresAt).toBeGreaterThan(before + LOCK_TTL_MS - 60_000);
   });
 
-  it("lost while the host was deploying: stops without writing to D1", async () => {
+  it("lost while the host was deploying: records the live version, writes nothing else, reports out of sync", async () => {
     await addDomain(A);
     const id = await start({ host: A, kind: "draft" });
+    let other = 0;
     const original = hosting.publish;
     hosting.publish = async (input) => {
       const result = await original(input);
       // The step outlived the lock and another publish took it.
-      const other = await insertDeployment(db, { worker: "sites", kind: "update", now: time });
+      other = (await insertDeployment(db, { worker: "sites", kind: "update", now: time })).id;
       time += LOCK_TTL_MS + 1;
-      expect(await acquirePublishLock(db, { deploymentId: other.id, ttlMs: LOCK_TTL_MS, now: time })).toBe(true);
+      expect(await acquirePublishLock(db, { deploymentId: other, ttlMs: LOCK_TTL_MS, now: time })).toBe(true);
       return result;
     };
 
     const step = await stepPublish(ctx, id);
 
     expect(step).toMatchObject({ status: "failed", reason: "lock-lost" });
+    expect(step.message).not.toContain("Nothing was changed");
     expect(await listSiteFilesByHost(db, A)).toEqual([]);
     expect((await getConfig(db, A))?.liveJson).toBeNull();
+    expect(await listConfigHistory(db, { host: A })).toEqual([]);
     expect((await getDomain(db, A))?.status).toBe("placeholder");
-    expect((await getDeployment(db, id))?.status).toBe("failed");
-    expect((await getPublishLock(db))?.deploymentId).not.toBe(id);
+    expect(await getDeployment(db, id)).toMatchObject({ status: "failed", cfVersionId: hosting.versions[0]?.id });
+    expect((await getPublishLock(db))?.deploymentId).toBe(other);
+    expect((await getPublishState(ctx, A)).outOfSync).toBe(true);
+
+    hosting.publish = original;
+    time += LOCK_TTL_MS + 1;
+    expect((await publish(A)).at(-1)?.status).toBe("done");
+    expect((await getPublishState(ctx, A)).outOfSync).toBe(false);
+  });
+
+  it("two steps of the same publish at once: one commit, one history row, both answer done", async () => {
+    await addDomain(A);
+    const id = await start({ host: A, kind: "draft" });
+    const original = hosting.publish;
+    let inner: StepResult | undefined;
+    hosting.publish = async (input) => {
+      const result = await original(input);
+      if (inner === undefined) {
+        // A second request for the same deployment runs to the end while this one waits for the host.
+        inner = {
+          status: "running",
+          progress: { uploaded: 0, pending: 0, remainingHosts: 0, requests: 0 },
+          message: "",
+        };
+        inner = await stepPublish(ctx, id);
+      }
+      return result;
+    };
+
+    const outer = await stepPublish(ctx, id);
+
+    expect(inner).toMatchObject({ status: "done" });
+    expect(outer).toMatchObject({ status: "done" });
+    expect(await listConfigHistory(db, { host: A })).toHaveLength(1);
+    expect(await getDeployment(db, id)).toMatchObject({ status: "done" });
+    expect(await getPublishLock(db)).toBeUndefined();
+    await expectInSync();
   });
 
   it("lost before the step: nothing is sent to the host", async () => {
@@ -451,6 +573,43 @@ describe("templates changed since another domain was published", () => {
     expect(await listConfigHistory(db, { host: B })).toHaveLength(1);
   });
 
+  it("a domain whose live design is broken: the failure names it and says what to do", async () => {
+    await addDomain(A);
+    await addDomain(B);
+    await publish(A);
+    await publish(B);
+    await makeStale(B);
+    await db.run(`UPDATE config SET live_json = '{"broken"' WHERE host = '${B}'`);
+    await draft(A, { headline: "New {domain}" });
+
+    const steps = await publish(A);
+
+    expect(steps.at(-1)).toMatchObject({ status: "failed", reason: "invalid" });
+    expect(steps.at(-1)?.message).toContain(B);
+    expect(steps.at(-1)?.message).toContain("turn it off");
+
+    const all = await run(await start({ kind: "republish-all" }));
+    expect(all.at(-1)).toMatchObject({ status: "failed", reason: "invalid" });
+    expect(all.at(-1)?.message).toContain(B);
+    expect(all.at(-1)?.message).toContain("turn it off");
+  });
+
+  it("a domain without a bot check: the failure names it and says what to do", async () => {
+    await addDomain(A);
+    await addDomain(B);
+    await publish(A);
+    await publish(B);
+    await makeStale(B);
+    await db.run(`UPDATE domains SET turnstile_widget_id = NULL WHERE host = '${B}'`);
+    await draft(A, { headline: "New {domain}" });
+
+    const steps = await publish(A);
+
+    expect(steps.at(-1)).toMatchObject({ status: "failed", reason: "invalid" });
+    expect(steps.at(-1)?.message).toContain(B);
+    expect(steps.at(-1)?.message).toContain("turn it off");
+  });
+
   it("too many stale domains in one step: fails and points at Republish all", async () => {
     const hosts = [B, "c.example", "d.example", "e.example"];
     await addDomain(A);
@@ -542,6 +701,36 @@ describe("placeholder and removal", () => {
     expect(await startPublish(ctx, { host: A, kind: "draft" })).toMatchObject({ ok: false, reason: "invalid" });
     await expectInSync();
   });
+  it("a removal finds the domain turned on again: fails instead of publishing it", async () => {
+    await addDomain(A);
+    await publish(A);
+    await setDomainStatus(db, { host: A, status: "off", now: time });
+    const id = await start({ host: A, kind: "remove" });
+    const versions = hosting.versions.length;
+    await setDomainStatus(db, { host: A, status: "live", now: time + 10_000 });
+
+    const step = await stepPublish(ctx, id);
+
+    expect(step).toMatchObject({ status: "failed", reason: "invalid" });
+    expect(step.message).toContain("turned on again");
+    expect(hosting.versions).toHaveLength(versions);
+    expect(await listSiteFilesByHost(db, A)).toHaveLength(3);
+  });
+
+  it("refuses a domain row whose host could leave its folder", async () => {
+    await db.run(
+      `INSERT INTO domains (host, zone_id, turnstile_widget_id, status, created_at, updated_at) VALUES ('../evil', 'z', '${SITEKEY}', 'placeholder', 0, 0)`,
+    );
+
+    const steps = await run(await start({ kind: "republish-all" }));
+
+    expect(steps.at(-1)).toMatchObject({ status: "failed", reason: "invalid" });
+    expect(hosting.versions).toHaveLength(0);
+    expect(() => sitePath("../evil", "index.html")).toThrow();
+    expect(() => sitePath("a..example", "index.html")).toThrow();
+    expect(() => sitePath(`${"a".repeat(254)}`, "index.html")).toThrow();
+    expect(sitePath(A, "index.html")).toBe(`/sites/${A}/index.html`);
+  });
 });
 
 describe("revert and rollback", () => {
@@ -564,6 +753,27 @@ describe("revert and rollback", () => {
     expect(await listConfigHistory(db, { host: A })).toHaveLength(3);
     expect(hosting.liveFiles()).toEqual(hosting.versions[0]?.files);
     expect(await revertTo(ctx, 999)).toMatchObject({ ok: false, reason: "invalid" });
+  });
+
+  it("a revert whose draft cannot be saved fails the publish and frees the lock", async () => {
+    await addDomain(A);
+    await publish(A);
+    const entry = (await listConfigHistory(db, { host: A }))[0];
+    const failing = new Proxy(db, {
+      get(target, property, receiver) {
+        if (property !== "insert") return Reflect.get(target, property, receiver);
+        return (table: unknown) => {
+          if (table === configTable) throw new Error("D1 is unavailable");
+          return target.insert(table as typeof configTable);
+        };
+      },
+    });
+
+    const started = await revertTo({ ...ctx, db: failing }, entry?.id ?? 0);
+
+    expect(started).toMatchObject({ ok: false, reason: "unexpected", deploymentId: 2 });
+    expect(await getPublishLock(db)).toBeUndefined();
+    expect(await getDeployment(db, 2)).toMatchObject({ status: "failed" });
   });
 
   it("emergency rollback puts the old version live and reports out of sync until the next publish", async () => {
@@ -611,19 +821,61 @@ describe("saving a draft", () => {
 });
 
 describe("the release file fetcher", () => {
-  it("fetches base URL + path and fails readably when the file is missing or no release is installed", async () => {
-    const requested: string[] = [];
+  it("fetches base URL + path without following redirects and fails readably when the file is missing", async () => {
+    const requested: { url: string; redirect: RequestRedirect | undefined }[] = [];
     const fetcher = createReleaseFileFetcher({
       baseUrl: "https://release.example/v1",
-      fetch: async (url) => {
-        requested.push(url);
+      fetch: async (url, init) => {
+        requested.push({ url, redirect: init.redirect });
         return url.endsWith(FONT) ? new Response(FONT_BYTES) : new Response("no", { status: 404 });
       },
     });
 
-    expect(await fetcher(FONT)).toEqual(FONT_BYTES);
-    expect(requested).toEqual([`https://release.example/v1${FONT}`]);
-    await expect(fetcher("/catalog/missing.avif")).rejects.toThrow("status 404");
-    await expect(createReleaseFileFetcher({ baseUrl: null })(FONT)).rejects.toThrow("no release is installed");
+    expect(await fetcher(FONT, FONT_BYTES.length)).toEqual(FONT_BYTES);
+    expect(requested).toEqual([{ url: `https://release.example/v1${FONT}`, redirect: "error" }]);
+    await expect(fetcher("/catalog/missing.avif", 10)).rejects.toThrow("status 404");
+    await expect(createReleaseFileFetcher({ baseUrl: null })(FONT, 10)).rejects.toThrow("no release is installed");
+  });
+
+  it("refuses a file larger than the manifest says, by its header or by its body", async () => {
+    const big = new Uint8Array(1000);
+    const byHeader = createReleaseFileFetcher({
+      baseUrl: "https://release.example",
+      fetch: async () => new Response(big, { headers: { "content-length": "1000" } }),
+    });
+    const stream = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (let index = 0; index < 10; index += 1) controller.enqueue(new Uint8Array(100));
+          controller.close();
+        },
+      });
+    const byBody = createReleaseFileFetcher({
+      baseUrl: "https://release.example",
+      fetch: async () => new Response(stream()),
+    });
+
+    await expect(byHeader(FONT, 10)).rejects.toThrow("larger");
+    await expect(byBody(FONT, 10)).rejects.toThrow("larger");
+    expect(await byBody(FONT, 1000)).toHaveLength(1000);
+  });
+
+  it("accepts only an https base URL, or http on this machine", () => {
+    expect(parseReleaseBaseUrl("https://release.example/v1/")).toBe("https://release.example/v1");
+    expect(parseReleaseBaseUrl("http://127.0.0.1:8787/files")).toBe("http://127.0.0.1:8787/files");
+    expect(parseReleaseBaseUrl("http://localhost:9000")).toBe("http://localhost:9000");
+    for (const value of [
+      undefined,
+      "",
+      "http://release.example",
+      "http://127.0.0.1.evil.example/",
+      "http://localhost.evil.example",
+      "https://user:pass@release.example",
+      "https://release.example/?x=1",
+      "ftp://release.example",
+      "not a url",
+    ]) {
+      expect(parseReleaseBaseUrl(value)).toBeNull();
+    }
   });
 });

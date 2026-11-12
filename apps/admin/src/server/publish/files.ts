@@ -22,8 +22,11 @@ export type HostFile = NewSiteFile & { content: Uint8Array };
 export type HostBuild = {
   host: string;
   files: HostFile[];
-  /** The draft these files were rendered from, normalised. Only set for a draft publish. */
-  published?: { json: string; schemaVersion: number };
+  /**
+   * The draft these files were rendered from, normalised, and the draft as it was stored (`rendered`). Only set
+   * for a draft publish.
+   */
+  published?: { json: string; schemaVersion: number; rendered: { json: string; schemaVersion: number } };
   /** True when the files come from the live config again (an update, or templates that changed). */
   rerendered?: boolean;
 };
@@ -34,7 +37,21 @@ const CONTENT_TYPES: Record<keyof SiteFiles, string> = {
   "sitemap.xml": "application/xml; charset=utf-8",
 };
 
+const HOST_NAME = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;
+
+/** A lowercase domain name that stays one folder under `/sites/`: no slashes, no `..`, at most 253 characters. */
+export function isHostName(host: string): boolean {
+  return host.length <= 253 && HOST_NAME.test(host) && !host.includes("..");
+}
+
+function assertHostName(host: string): void {
+  if (!isHostName(host)) {
+    throw new PublishFailure("invalid", `“${host.slice(0, 80)}” is not a domain name. Remove it, then publish again.`);
+  }
+}
+
 export function sitePath(host: string, name: string): string {
+  assertHostName(host);
   return `/sites/${host}/${name}`;
 }
 
@@ -65,6 +82,7 @@ export async function buildHost(
   host: string,
   source: "draft" | "live",
 ): Promise<HostBuild> {
+  assertHostName(host);
   const domain = await getDomain(input.db, host);
   if (domain === undefined || domain.status === "off" || domain.status === "removed") return { host, files: [] };
 
@@ -82,12 +100,19 @@ export async function buildHost(
     parsed = undefined;
   }
   const result = migrateConfig(parsed);
+  // `live`: another domain's pages, rebuilt for this publish. Its owner has to act on it, not on this publish.
+  const fix = source === "live" ? ` Fix its design or turn it off, then publish again.` : "";
   if (!result.ok) {
     const [field, problem] = Object.entries(result.errors)[0] ?? ["form", "It can't be read."];
-    throw new PublishFailure("invalid", `The design of ${host} can't be published (${field}): ${problem}`);
+    throw new PublishFailure("invalid", `The design of ${host} can't be published (${field}): ${problem}${fix}`);
   }
   if (domain.turnstileWidgetId === null) {
-    throw new PublishFailure("invalid", `${host} has no bot check yet. Finish setting the domain up, then publish.`);
+    throw new PublishFailure(
+      "invalid",
+      source === "live"
+        ? `${host} has no bot check yet. Finish setting it up or turn it off, then publish again.`
+        : `${host} has no bot check yet. Finish setting the domain up, then publish.`,
+    );
   }
   const files = render(result.config, host, {
     catalog: input.catalog,
@@ -95,7 +120,11 @@ export async function buildHost(
     ...(domain.analyticsBeaconToken === null ? {} : { beaconToken: domain.analyticsBeaconToken }),
   });
   const built = await toHostFiles(host, files);
-  return source === "draft"
-    ? { host, files: built, published: { json: JSON.stringify(result.config), schemaVersion: CONFIG_VERSION } }
-    : { host, files: built, rerendered: true };
+  if (source === "live") return { host, files: built, rerendered: true };
+  const rendered = { json, schemaVersion: stored?.draftSchemaVersion ?? CONFIG_VERSION };
+  return {
+    host,
+    files: built,
+    published: { json: JSON.stringify(result.config), schemaVersion: CONFIG_VERSION, rendered },
+  };
 }

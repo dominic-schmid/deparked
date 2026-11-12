@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNull, lte, ne, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lte, ne, type SQL, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import type { Db } from "../client";
 import {
@@ -17,7 +17,7 @@ import {
 } from "../schema";
 
 const ROW = 1;
-// 6 columns per file, and D1 allows 100 bound parameters per statement.
+// 6 columns per file, and D1 allows 100 bound parameters per statement (`commitPublish` adds 2 for its guard).
 const FILES_PER_STATEMENT = 16;
 
 function forHost(host: string | null): SQL {
@@ -150,6 +150,20 @@ export async function latestDeployment(
   return rows[0];
 }
 
+/**
+ * The pages Worker deployment that last changed which version is live: a finished publish or rollback, or a failed
+ * publish whose version went live before it could be recorded. Newest by when it finished.
+ */
+export function latestLiveChange(db: Db): Promise<Deployment | undefined> {
+  return db
+    .select()
+    .from(deployments)
+    .where(and(eq(deployments.worker, "sites"), isNotNull(deployments.cfVersionId)))
+    .orderBy(desc(deployments.finishedAt), desc(deployments.id))
+    .limit(1)
+    .get();
+}
+
 export function getPublishLock(db: Db): Promise<PublishLock | undefined> {
   return db.select().from(publishLock).where(eq(publishLock.id, ROW)).get();
 }
@@ -209,16 +223,26 @@ export async function renewPublishLock(
 export type PublishedHost = {
   host: string;
   files: readonly NewSiteFile[];
-  /** Set when the files were rendered from the draft: it becomes the live config, with a history row. */
-  published?: { json: string; schemaVersion: number };
+  /**
+   * Set when the files were rendered from the draft: it becomes the live config, with a history row, and the
+   * draft too while the stored draft is still `rendered` (the one these files came from).
+   */
+  published?: { json: string; schemaVersion: number; rendered: { json: string; schemaVersion: number } };
   /** True when the files were rendered again from the live config: only the release they were built with changes. */
   rerendered?: boolean;
 };
 
+/** True while `deploymentId` is running and holds the lock, evaluated by each statement of the commit batch. */
+function holdsCommit(deploymentId: number): SQL {
+  return sql`exists (select 1 from ${deployments} where ${deployments.id} = ${deploymentId} and ${deployments.status} = 'running')
+    and exists (select 1 from ${publishLock} where ${publishLock.id} = 1 and ${publishLock.deploymentId} = ${deploymentId})`;
+}
+
 /**
  * Records a version that is now live, in one transaction: each host's files in the manifest, a published draft as
  * the live config, the release the pages were rendered with, and, with `finish`, the deployment as done and the
- * lock released. The caller must hold the lock (`renewPublishLock`) when it calls this.
+ * lock released. Every statement applies only while the deployment is still running and holds the lock, so a
+ * publish that was taken over writes nothing. False when it did not apply.
  */
 export async function commitPublish(
   db: Db,
@@ -230,49 +254,57 @@ export async function commitPublish(
     finish: boolean;
     now: number;
   },
-): Promise<void> {
+): Promise<boolean> {
   const { now, release } = input;
+  const held = holdsCommit(input.deploymentId);
+  const check = db
+    .select({ held: sql<number>`1` })
+    .from(publishLock)
+    .where(and(eq(publishLock.id, ROW), held));
   const statements: BatchItem<"sqlite">[] = [];
   for (const entry of input.hosts) {
     const { host, published } = entry;
-    statements.push(db.delete(siteFiles).where(eq(siteFiles.host, host)));
+    statements.push(db.delete(siteFiles).where(and(eq(siteFiles.host, host), held)));
     for (let start = 0; start < entry.files.length; start += FILES_PER_STATEMENT) {
+      const rows = entry.files
+        .slice(start, start + FILES_PER_STATEMENT)
+        .map((file) => sql`(${file.path}, ${host}, ${file.hash}, ${file.size}, ${file.contentType}, ${now})`);
+      // Columns in table order: path, host, hash, size, content_type, updated_at.
       statements.push(
-        db
-          .insert(siteFiles)
-          .values(
-            entry.files.slice(start, start + FILES_PER_STATEMENT).map((file) => ({ ...file, host, updatedAt: now })),
-          ),
+        db.insert(siteFiles).select(sql`select * from (values ${sql.join(rows, sql`, `)}) where ${held}`),
       );
     }
     if (published !== undefined) {
-      const live = {
-        liveJson: published.json,
-        liveSchemaVersion: published.schemaVersion,
-        publishedAt: now,
-        publishedRelease: release,
-      };
+      const { json, schemaVersion, rendered } = published;
       statements.push(
         db
-          .insert(config)
-          .values({
-            host,
-            draftJson: published.json,
-            draftSchemaVersion: published.schemaVersion,
-            updatedAt: now,
-            ...live,
-          })
-          .onConflictDoUpdate({ target: config.host, set: live }),
+          .update(config)
+          .set({ liveJson: json, liveSchemaVersion: schemaVersion, publishedAt: now, publishedRelease: release })
+          .where(and(eq(config.host, host), held)),
         db
-          .insert(configHistory)
-          .values({ host, json: published.json, schemaVersion: published.schemaVersion, publishedAt: now }),
+          .update(config)
+          .set({ draftJson: json, draftSchemaVersion: schemaVersion })
+          .where(
+            and(
+              eq(config.host, host),
+              eq(config.draftJson, rendered.json),
+              eq(config.draftSchemaVersion, rendered.schemaVersion),
+              held,
+            ),
+          ),
+        db.insert(configHistory).select(sql`select null, ${host}, ${json}, ${schemaVersion}, ${now} where ${held}`),
         db
           .update(domains)
           .set({ status: "live", turnedOffAt: null, removedAt: null, updatedAt: now })
-          .where(and(eq(domains.host, host), ne(domains.status, "live"))),
+          .where(and(eq(domains.host, host), ne(domains.status, "live"), held)),
       );
     } else if (entry.rerendered) {
-      statements.push(db.update(config).set({ publishedRelease: release }).where(eq(config.host, host)));
+      statements.push(
+        db
+          .update(config)
+          .set({ publishedRelease: release })
+          .where(and(eq(config.host, host), held)),
+      );
     }
   }
   if (input.finish) {
@@ -280,10 +312,10 @@ export async function commitPublish(
       db
         .update(deployments)
         .set({ status: "done", cfVersionId: input.versionId, error: null, finishedAt: now })
-        .where(and(eq(deployments.id, input.deploymentId), eq(deployments.status, "running"))),
+        .where(and(eq(deployments.id, input.deploymentId), held)),
       db.delete(publishLock).where(and(eq(publishLock.id, ROW), eq(publishLock.deploymentId, input.deploymentId))),
     );
   }
-  const [first, ...rest] = statements;
-  if (first !== undefined) await db.batch([first, ...rest]);
+  const [result] = await db.batch([check, ...statements]);
+  return result.length === 1;
 }

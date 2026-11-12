@@ -6,18 +6,12 @@ import { z } from "zod";
 import sitesHeaders from "../../../../sites/public/_headers?raw";
 import { createHosting } from "../hosting";
 import { requireSession } from "../require-session";
+import { isHostName } from "./files";
 import * as pipeline from "./pipeline";
-import { createReleaseFileFetcher } from "./release";
+import { createReleaseFileFetcher, parseReleaseBaseUrl } from "./release";
 
-const host = z.string().min(1).max(253);
+const host = z.string().refine(isHostName, "Not a domain name.");
 const id = z.number().int().positive();
-
-/** `RELEASE_FILES_URL`: where catalog files are downloaded again. Every file is checked against its hash. */
-function releaseBaseUrl(): string | null {
-  const value = (env as unknown as Record<string, unknown>).RELEASE_FILES_URL;
-  if (typeof value !== "string") return null;
-  return /^(https:\/\/|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/)/.test(value) ? value.replace(/\/$/, "") : null;
-}
 
 async function publishContext(): Promise<pipeline.PublishContext> {
   const db = createDb(env.DB);
@@ -29,7 +23,9 @@ async function publishContext(): Promise<pipeline.PublishContext> {
     catalog,
     headers: sitesHeaders,
     release: workspace?.installedRelease ?? null,
-    fetchReleaseFile: createReleaseFileFetcher({ baseUrl: releaseBaseUrl() }),
+    fetchReleaseFile: createReleaseFileFetcher({
+      baseUrl: parseReleaseBaseUrl((env as unknown as Record<string, unknown>).RELEASE_FILES_URL),
+    }),
   };
 }
 

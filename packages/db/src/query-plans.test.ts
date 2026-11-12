@@ -81,6 +81,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   getDeployment: [[1]],
   listDeployments: [[{ worker: "sites" }], [{ worker: "sites", status: "done" }], [{ worker: "sites", host: HOST }]],
   latestDeployment: [[{ worker: "admin" }]],
+  latestLiveChange: [[]],
   getPublishLock: [[]],
   acquirePublishLock: [[{ deploymentId: 1, ttlMs: 60_000, now: NOW }]],
   releasePublishLock: [[1]],
@@ -94,7 +95,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
           {
             host: HOST,
             files: [{ path: `/sites/${HOST}/index.html`, hash: "h", size: 1, contentType: "text/html" }],
-            published: { json: "{}", schemaVersion: 1 },
+            published: { json: "{}", schemaVersion: 1, rendered: { json: "{ }", schemaVersion: 1 } },
           },
           { host: "other.example", files: [], rerendered: true },
         ],
@@ -129,9 +130,12 @@ const FULL_READS: Partial<Record<keyof Queries, string>> = {
 /** The tables a statement reads from start to end ("SCAN x"), according to SQLite's planner. */
 function scannedTables(sqlite: Awaited<ReturnType<typeof createTestDb>>["sqlite"], statement: ExecutedStatement) {
   const plan = sqlite.prepare(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.params as never[]));
-  return plan
-    .map((step) => /^SCAN (\S+)/.exec(String(step.detail))?.[1])
-    .filter((table) => table !== undefined && table !== "CONSTANT");
+  return (
+    plan
+      .map((step) => /^SCAN (\S+)/.exec(String(step.detail))?.[1])
+      // A `(subquery-n)` is a literal VALUES list (`commitPublish`); a subquery over a table shows that table's scan too.
+      .filter((table) => table !== undefined && table !== "CONSTANT" && !table.startsWith("(subquery-"))
+  );
 }
 
 test("the check sees a full table scan", async () => {

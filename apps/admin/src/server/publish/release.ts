@@ -1,29 +1,82 @@
 import { PublishFailure } from "./files";
 
-/** Returns the bytes of one catalog file of the installed release, by its served path (`/catalog/...`). */
-export type FetchReleaseFile = (path: string) => Promise<Uint8Array>;
+/**
+ * Returns the bytes of one catalog file of the installed release, by its served path (`/catalog/...`). `size` is
+ * what the manifest lists: a larger file is refused before it is read in full.
+ */
+export type FetchReleaseFile = (path: string, size: number) => Promise<Uint8Array>;
+
+type Fetch = (url: string, init: { redirect: RequestRedirect }) => Promise<Response>;
+
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 /**
- * Downloads catalog files from wherever the release keeps them: `baseUrl` + the served path. The publish checks
- * every file against the hash in the manifest before it is sent on, so this does not have to trust the source.
+ * `RELEASE_FILES_URL` as a base to append served paths to: `https://`, or `http://` on this machine only, without
+ * credentials, query or fragment. Null for anything else.
+ */
+export function parseReleaseBaseUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const secure = url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK.has(url.hostname));
+  if (!secure || url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "") return null;
+  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+}
+
+function tooLarge(path: string): PublishFailure {
+  return new PublishFailure("hosting", `The release's copy of ${path} is larger than the file that was installed.`);
+}
+
+async function readAtMost(path: string, response: Response, size: number): Promise<Uint8Array> {
+  const declared = response.headers.get("content-length");
+  if (declared !== null && Number(declared) > size) throw tooLarge(path);
+  if (response.body === null) return new Uint8Array();
+  const reader = response.body.getReader();
+  const content = new Uint8Array(size);
+  let length = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return content.subarray(0, length);
+    if (length + value.length > size) {
+      await reader.cancel();
+      throw tooLarge(path);
+    }
+    content.set(value, length);
+    length += value.length;
+  }
+}
+
+/**
+ * Downloads catalog files from wherever the release keeps them: `baseUrl` + the served path, no redirects. The
+ * publish checks every file against the hash in the manifest before it is sent on, so this does not have to trust
+ * the source.
  */
 export function createReleaseFileFetcher(options: {
-  /** Null when no release is installed (local dev): every request then fails with a readable message. */
+  /** From `parseReleaseBaseUrl`. Null when no release is installed (local dev): every request then fails readably. */
   baseUrl: string | null;
-  fetch?: (url: string) => Promise<Response>;
+  fetch?: Fetch;
 }): FetchReleaseFile {
-  const fetchFile = options.fetch ?? ((url: string) => fetch(url));
-  return async (path) => {
+  const fetchFile: Fetch = options.fetch ?? ((url, init) => fetch(url, init));
+  return async (path, size) => {
     if (options.baseUrl === null) {
       throw new PublishFailure(
         "invalid",
         `Cloudflare asked for ${path} again, but no release is installed to get it from.`,
       );
     }
-    const response = await fetchFile(`${options.baseUrl}${path}`);
+    let response: Response;
+    try {
+      response = await fetchFile(`${options.baseUrl}${path}`, { redirect: "error" });
+    } catch {
+      throw new PublishFailure("hosting", `Could not download ${path} from the release (no answer, or a redirect).`);
+    }
     if (!response.ok) {
       throw new PublishFailure("hosting", `Could not download ${path} from the release (status ${response.status}).`);
     }
-    return new Uint8Array(await response.arrayBuffer());
+    return readAtMost(path, response, size);
   };
 }
