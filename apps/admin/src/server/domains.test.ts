@@ -18,18 +18,27 @@ test("the overview shows each domain's status, offers, best offer and last publi
   await insertOffer(db, { offer: { ...buyer, amountMinor: 100 }, now: NOW });
   await insertOffer(db, { offer: { ...buyer, amountMinor: 900 }, now: NOW + 1 });
 
-  expect(await loadOverview(db)).toEqual([
-    { host: "draft.example", status: "draft", offers: 0, newOffers: 0, best: null, publishedAt: null },
+  expect(await loadOverview(db, NOW)).toEqual([
+    { host: "draft.example", status: "draft", offers: 0, newOffers: 0, recentOffers: 0, best: null, publishedAt: null },
     {
       host: HOST,
       status: "live",
       offers: 2,
       newOffers: 2,
+      recentOffers: 2,
       best: { amountMinor: 900, currency: "EUR" },
       publishedAt: NOW + 7,
     },
-    { host: "off.example", status: "off", offers: 0, newOffers: 0, best: null, publishedAt: null },
-    { host: "pending.example", status: "email_pending", offers: 0, newOffers: 0, best: null, publishedAt: null },
+    { host: "off.example", status: "off", offers: 0, newOffers: 0, recentOffers: 0, best: null, publishedAt: null },
+    {
+      host: "pending.example",
+      status: "email_pending",
+      offers: 0,
+      newOffers: 0,
+      recentOffers: 0,
+      best: null,
+      publishedAt: null,
+    },
   ]);
 });
 

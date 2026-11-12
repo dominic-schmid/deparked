@@ -19,7 +19,8 @@ const VW = 400;
 const LABEL_H = 26;
 const PAD_B = 4;
 
-function buildPath(data: number[], h: number): string {
+// Without `formatValue` there is no scrub label, so the line may use the room it would take.
+function buildPath(data: number[], h: number, top: number): string {
   const n = data.length;
   if (n < 2) return "";
 
@@ -29,7 +30,7 @@ function buildPath(data: number[], h: number): string {
 
   const pts = data.map((v, i) => ({
     x: (i / (n - 1)) * VW,
-    y: LABEL_H + (1 - (v - min) / range) * (h - LABEL_H - PAD_B),
+    y: top + (1 - (v - min) / range) * (h - top - PAD_B),
   }));
 
   const t = 0.4;
@@ -100,7 +101,8 @@ export function SparkChart({
 
   const [active, setActive] = useState(false);
 
-  const pathD = useMemo(() => buildPath(data, height), [data, height]);
+  const top = formatValue ? LABEL_H : PAD_B;
+  const pathD = useMemo(() => buildPath(data, height, top), [data, height, top]);
   const fillD = useMemo(() => (pathD ? `${pathD} L ${VW} ${height} L 0 ${height} Z` : ""), [pathD, height]);
 
   const update = useCallback(
@@ -209,7 +211,7 @@ export function SparkChart({
             pathLength={1}
             strokeDasharray={1}
             strokeDashoffset={0}
-            className="animate-[spark-draw_0.8s_ease-out]"
+            className="motion-safe:animate-[spark-draw_0.8s_ease-out]"
           />
         </g>
       </svg>
