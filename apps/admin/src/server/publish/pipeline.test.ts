@@ -827,13 +827,15 @@ describe("the release file fetcher", () => {
       baseUrl: "https://release.example/v1",
       fetch: async (url, init) => {
         requested.push({ url, redirect: init.redirect });
+        if (url.endsWith("/moved.avif")) return new Response(null, { status: 302, headers: { location: "/x" } });
         return url.endsWith(FONT) ? new Response(FONT_BYTES) : new Response("no", { status: 404 });
       },
     });
 
     expect(await fetcher(FONT, FONT_BYTES.length)).toEqual(FONT_BYTES);
-    expect(requested).toEqual([{ url: `https://release.example/v1${FONT}`, redirect: "error" }]);
+    expect(requested).toEqual([{ url: `https://release.example/v1${FONT}`, redirect: "manual" }]);
     await expect(fetcher("/catalog/missing.avif", 10)).rejects.toThrow("status 404");
+    await expect(fetcher("/catalog/moved.avif", 10)).rejects.toThrow("status 302");
     await expect(createReleaseFileFetcher({ baseUrl: null })(FONT, 10)).rejects.toThrow("no release is installed");
   });
 

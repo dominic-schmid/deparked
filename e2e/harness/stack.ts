@@ -12,6 +12,7 @@ import { getPlatformProxy } from "wrangler";
 import { ROOT, TMP } from "./paths";
 import { type LocalWorker, startWorker } from "./processes";
 import { startHostProxy } from "./proxy";
+import { startReleaseFiles } from "./release";
 
 /** Obvious dummies. The mock accepts exactly this token; nothing here works against Cloudflare. */
 export const TEST_TOKEN = "e2e-dummy-cloudflare-token";
@@ -85,9 +86,13 @@ export async function startStack(): Promise<Stack> {
     cpSync(resolve(ROOT, "apps/sites/public"), assets, { recursive: true });
     const written = new Set<string>();
 
+    const release = await startReleaseFiles(resolve(ROOT, "apps/sites/public"));
+    stops.push(() => release.close());
+
     const vars = { CLOUDFLARE_API_BASE: cloudflareApi, TURNSTILE_VERIFY_URL: siteverify };
     const adminVars = {
       ...vars,
+      RELEASE_FILES_URL: release.url,
       SESSION_KEY: TEST_SESSION_KEY,
       CF_API_TOKEN: TEST_TOKEN,
       CF_ACCOUNT_ID: TEST_ACCOUNT_ID,

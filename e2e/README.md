@@ -39,6 +39,7 @@ The harness passes these with `wrangler dev --var`. No secret file exists or is 
 | `CF_ACCOUNT_ID` | admin | `e2e-account` | |
 | `SESSION_KEY` | admin | a dummy | cookie signing |
 | `TURNSTILE_SECRET_1` | admin | Cloudflare's always-pass dummy secret `1x0000000000000000000000000000000AA` | a `turnstile_widgets` row arranged by a test should use `secret_name = 'TURNSTILE_SECRET_1'` and sitekey `1x00000000000000000000AA` (`TURNSTILE_DUMMY_SITEKEY`) |
+| `RELEASE_FILES_URL` | admin | `http://127.0.0.1:<port>`, a small server over `apps/sites/public` | where a publish downloads catalog files the mock asks for again (`harness/release.ts`) |
 
 The mock's siteverify answer is `mock.state.siteverify` (`{ success, hostname }`, default `example.com`).
 
