@@ -9,6 +9,7 @@ the secrets under "Environment contract".
 cp .dev.vars.example .dev.vars                 # dummy SESSION_KEY; .dev.vars is git-ignored
 pnpm --filter @deparked/admin dev:seed         # local D1 only: migrations, workspace row, a known setup secret
 pnpm --filter @deparked/admin dev              # then open the setup link dev:seed printed
+pnpm --filter @deparked/admin dev:demo         # optional: dummy domains and offers, worst cases included
 ```
 
 `dev:seed` is the only thing that migrates the local database (in production the installer does it). Run it again
@@ -62,6 +63,16 @@ Decisions:
 - **Setup secret**: the installer stores the lowercase hex SHA-256 of the secret (`hashSetupSecret`) and an expiry.
   Setup checks it and stores the password in one SQL statement (`consumeSetupSecret`).
 
+## Screens and server code
+
+- `src/routes/admin/_shell.tsx` is the layout of every logged-in screen (switcher, navigation, ⌘K, theme). Put a
+  new screen under `src/routes/admin/_shell/`. The selected domain is in the URL: `/admin/d/<host>`.
+- Server code is grouped by feature in `src/server/`: `<feature>.ts` holds the logic as plain functions of
+  `(db, hosting, input)`, unit-tested with the in-memory D1 and `createFakeHosting()`; `<feature>.functions.ts`
+  wraps them as server functions (`requireSession()`, zod input, plain data out).
+- `getHosting()` in `src/server/hosting.ts` is the only place that builds the hosting adapter.
+- Dates, amounts and relative times are formatted in a fixed locale (`src/components/format.ts`), with "now" taken
+  from the loader, so the server and the browser render the same text.
 ## The offer API
 
 `POST /api/offer` (`src/routes/api/offer.ts`) is public. It sends no CORS headers, so another site's script
