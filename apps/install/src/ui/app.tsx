@@ -1,0 +1,797 @@
+import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
+import { Button } from "@deparked/ui/button";
+import { Input } from "@deparked/ui/input";
+import { Label } from "@deparked/ui/label";
+import { cn } from "@deparked/ui/lib/utils";
+import { RadioGroup, RadioGroupItem } from "@deparked/ui/radio-group";
+import { ArrowRight, Check, CircleAlert, Copy, ExternalLink, Eye, EyeOff, RotateCw, ShieldAlert } from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import type { Account, ApiError, CheckResponse, PlanStep, Status, StepReport } from "../api";
+import { checkToken, finishInstall, getStatus, runStep } from "./client";
+import { Screen, ScreenTitle, Section, Shell, Spinner, type Stage } from "./parts";
+import { TokenDiagram, TokenPagePictures } from "./pictures";
+import { TOKEN_PERMISSIONS, tokenTemplateUrl } from "./token-link";
+
+type Ready = Extract<CheckResponse, { status: "ready" }>;
+
+type View =
+  | { name: "loading" }
+  | { name: "unreachable" }
+  | { name: "connect"; status: Status }
+  | { name: "pick"; status: Status; token: string; accounts: Account[] }
+  | { name: "review"; status: Status; token: string; ready: Ready }
+  | { name: "installing"; status: Status; token: string; ready: Ready }
+  | { name: "done"; setupUrl: string; adminUrl: string; recovered: boolean }
+  | { name: "installed"; status: Status };
+
+const STAGE: Record<View["name"], Stage | null> = {
+  loading: null,
+  unreachable: null,
+  connect: "Connect",
+  pick: "Connect",
+  review: "Review",
+  installing: "Install",
+  done: "Done",
+  installed: null,
+};
+
+const TOKEN_URL = tokenTemplateUrl("Deparked");
+
+export function App() {
+  const [view, setView] = useState<View>({ name: "loading" });
+
+  const load = useCallback(async () => {
+    const status = await getStatus();
+    if (status === null) setView({ name: "unreachable" });
+    else setView(status.phase === "installed" ? { name: "installed", status } : { name: "connect", status });
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <Shell stage={STAGE[view.name]}>
+      <Screen key={view.name}>
+        {view.name === "loading" ? (
+          <p className="flex items-center gap-2 text-muted-foreground" role="status">
+            <Spinner /> Looking at this installer…
+          </p>
+        ) : null}
+        {view.name === "unreachable" ? <Unreachable onRetry={load} /> : null}
+        {view.name === "connect" ? (
+          <Connect
+            status={view.status}
+            onReady={(token, result) =>
+              result.status === "pick-account"
+                ? setView({ name: "pick", status: view.status, token, accounts: result.accounts })
+                : setView({ name: "review", status: view.status, token, ready: result })
+            }
+          />
+        ) : null}
+        {view.name === "pick" ? (
+          <PickAccount
+            accounts={view.accounts}
+            token={view.token}
+            onBack={() => setView({ name: "connect", status: view.status })}
+            onReady={(ready) => setView({ name: "review", status: view.status, token: view.token, ready })}
+          />
+        ) : null}
+        {view.name === "review" ? (
+          <Review
+            ready={view.ready}
+            onBack={() => setView({ name: "connect", status: view.status })}
+            onInstall={() => setView({ ...view, name: "installing" })}
+          />
+        ) : null}
+        {view.name === "installing" ? (
+          <Installing
+            token={view.token}
+            ready={view.ready}
+            onDone={(setupUrl, adminUrl) => setView({ name: "done", setupUrl, adminUrl, recovered: false })}
+          />
+        ) : null}
+        {view.name === "done" ? <Done setupUrl={view.setupUrl} recovered={view.recovered} /> : null}
+        {view.name === "installed" ? (
+          <Installed
+            status={view.status}
+            onLink={(setupUrl, adminUrl) => setView({ name: "done", setupUrl, adminUrl, recovered: true })}
+          />
+        ) : null}
+      </Screen>
+    </Shell>
+  );
+}
+
+function Unreachable(props: { onRetry: () => void }) {
+  return (
+    <>
+      <ScreenTitle title="The installer does not answer">
+        <p>
+          This page loaded, but the installer Worker behind it did not reply. Wait a minute (a fresh deploy can take
+          that long), then try again.
+        </p>
+      </ScreenTitle>
+      <Button onClick={props.onRetry}>
+        <RotateCw aria-hidden /> Try again
+      </Button>
+    </>
+  );
+}
+
+function ErrorNote(props: { error: ApiError | null; id?: string }) {
+  if (props.error === null) return null;
+  return (
+    <p id={props.id} role="alert" className="mt-2.5 flex gap-2 text-sm text-destructive">
+      <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+      <span>{props.error.message}</span>
+    </p>
+  );
+}
+
+/** The paste field: hidden by default, never stored, no autocomplete. */
+function TokenField(props: {
+  value: string;
+  onChange: (value: string) => void;
+  error: ApiError | null;
+  label?: string;
+}) {
+  const id = useId();
+  const hint = useId();
+  const errorId = useId();
+  const [visible, setVisible] = useState(false);
+  return (
+    <div>
+      <Label htmlFor={id} className="mb-2 text-sm font-medium">
+        {props.label ?? "API token"}
+      </Label>
+      <div className="relative">
+        <Input
+          id={id}
+          name="token"
+          type={visible ? "text" : "password"}
+          value={props.value}
+          onChange={(event) => props.onChange(event.target.value)}
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="text"
+          aria-describedby={props.error === null ? hint : `${hint} ${errorId}`}
+          aria-invalid={props.error === null ? undefined : true}
+          className="h-11 pr-11 font-mono text-[15px] sm:text-sm"
+          placeholder="Paste the token you copied"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute top-1 right-1"
+          aria-label={visible ? "Hide the token" : "Show the token"}
+          aria-pressed={visible}
+          onClick={() => setVisible((shown) => !shown)}
+        >
+          {visible ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+        </Button>
+      </div>
+      <p id={hint} className="mt-2 text-[13px] text-muted-foreground">
+        It stays in this tab's memory and goes only to your installer. Close the tab and it is gone.
+      </p>
+      <ErrorNote error={props.error} id={errorId} />
+    </div>
+  );
+}
+
+function formatDate(epoch: number): string {
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epoch));
+}
+
+function NoRelease() {
+  return (
+    <>
+      <ScreenTitle title="Nothing to install yet">
+        <p>
+          This installer was built before the first Deparked release. Update your copy of the installer from the
+          Deparked repository (sync your fork on GitHub, Cloudflare redeploys it), then open this page again.
+        </p>
+      </ScreenTitle>
+    </>
+  );
+}
+
+function Connect(props: {
+  status: Status;
+  onReady: (token: string, result: Extract<CheckResponse, { ok: true }>) => void;
+}) {
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  if (props.status.pinnedRelease === null) return <NoRelease />;
+  const resuming = props.status.phase === "in-progress";
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (token.trim() === "") {
+      setError({ ok: false, error: "invalid-token", message: "Paste the token first." });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await checkToken({ token: token.trim() });
+    setBusy(false);
+    if (result.ok) props.onReady(token.trim(), result);
+    else setError(result);
+  }
+
+  return (
+    <>
+      <ScreenTitle eyebrow={`Deparked ${props.status.pinnedRelease}`} title="Connect your Cloudflare account">
+        <p>
+          Deparked installs itself into the Cloudflare account you deployed this installer to: a Worker for your
+          for-sale pages, an admin panel and its database. It needs one API token for that, which you create on
+          Cloudflare's site and paste here.
+        </p>
+      </ScreenTitle>
+
+      {resuming ? (
+        <Alert role="note" className="mb-8">
+          <RotateCw aria-hidden />
+          <AlertTitle>An install is half done</AlertTitle>
+          <AlertDescription>
+            <p>
+              It started {props.status.startedAt === null ? "earlier" : formatDate(props.status.startedAt)}
+              {props.status.stoppedAt === null ? "" : ` and stopped at “${props.status.stoppedAt}”`}. Paste your token
+              again: the install continues where it stopped and repeats nothing.
+            </p>
+            {props.status.lastError === null ? null : <p className="mt-1">Last problem: {props.status.lastError}</p>}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Section title="Why a token">
+        <TokenDiagram />
+        <p className="mt-4 max-w-[62ch] text-sm leading-relaxed text-muted-foreground">
+          Cloudflare only lets a Worker publish pages or change settings with a token. The token travels from this page
+          to your installer, then into your account as a secret of the admin panel. Deparked has no server of its own,
+          so nobody else ever sees it.
+        </p>
+      </Section>
+
+      <Section title="Create the token" number={1}>
+        <div className="flex flex-col gap-6">
+          <div>
+            <Button asChild size="lg" className="h-11 px-5">
+              <a href={TOKEN_URL} target="_blank" rel="noreferrer">
+                Open Cloudflare's token page <ExternalLink aria-hidden />
+              </a>
+            </Button>
+            <p className="mt-2.5 text-[13px] text-muted-foreground">
+              Opens in a new tab with the name and every permission filled in. Log in to the same account first.
+            </p>
+          </div>
+          <TokenPagePictures />
+          <Alert role="note">
+            <ShieldAlert aria-hidden />
+            <AlertTitle>What this token can do</AlertTitle>
+            <AlertDescription>
+              <p>
+                It can change every Worker in this account, not just Deparked's: Cloudflare cannot narrow that
+                permission to one Worker. Deparked keeps it only as a secret of its admin panel. Delete it on
+                Cloudflare's token page whenever you like; your pages keep working, publishing stops until you add a new
+                one.
+              </p>
+              <details className="group mt-2">
+                <summary className="cursor-pointer font-medium text-foreground underline-offset-2 hover:underline">
+                  All {TOKEN_PERMISSIONS.length} permissions and why
+                </summary>
+                <ul className="mt-2 grid gap-1.5">
+                  {TOKEN_PERMISSIONS.map((permission) => (
+                    <li key={permission.key} className="grid gap-x-3 sm:grid-cols-[13rem_1fr]">
+                      <span className="font-medium text-foreground">
+                        {permission.label} · {permission.type === "edit" ? "Edit" : "Read"}
+                      </span>
+                      <span>{permission.why}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </Section>
+
+      <Section title="Paste it here" number={2} className="pb-0">
+        <form onSubmit={submit} noValidate className="flex max-w-xl flex-col gap-4">
+          <TokenField value={token} onChange={setToken} error={error} />
+          <div>
+            <Button type="submit" size="lg" className="h-11 px-5" disabled={busy}>
+              {busy ? <Spinner /> : null}
+              {busy ? "Checking the token…" : resuming ? "Check and continue" : "Check the token"}
+            </Button>
+          </div>
+        </form>
+      </Section>
+    </>
+  );
+}
+
+function PickAccount(props: {
+  accounts: Account[];
+  token: string;
+  onBack: () => void;
+  onReady: (ready: Ready) => void;
+}) {
+  const [choice, setChoice] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const legend = useId();
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (choice === "") {
+      setError({ ok: false, error: "bad-request", message: "Choose the account first." });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await checkToken({ token: props.token, accountId: choice });
+    setBusy(false);
+    if (result.ok && result.status === "ready") props.onReady(result);
+    else if (!result.ok) setError(result);
+  }
+
+  return (
+    <>
+      <ScreenTitle title="Which account is this?">
+        <p>
+          The token reaches {props.accounts.length} Cloudflare accounts. Pick the one you deployed the installer to;
+          Deparked checks that it really is.
+        </p>
+      </ScreenTitle>
+      <form onSubmit={submit} className="flex max-w-xl flex-col gap-5">
+        <fieldset aria-labelledby={legend}>
+          <legend id={legend} className="sr-only">
+            Cloudflare account
+          </legend>
+          <RadioGroup value={choice} onValueChange={setChoice} className="gap-2">
+            {props.accounts.map((account) => (
+              <Label
+                key={account.id}
+                className={cn(
+                  "flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-accent/60",
+                  choice === account.id && "border-primary/40 bg-accent/60",
+                )}
+              >
+                <RadioGroupItem value={account.id} />
+                <span className="min-w-0">
+                  <span className="block break-words text-sm font-medium">{account.name}</span>
+                  <span className="block truncate font-mono text-xs text-muted-foreground">{account.id}</span>
+                </span>
+              </Label>
+            ))}
+          </RadioGroup>
+        </fieldset>
+        <ErrorNote error={error} />
+        <div className="flex flex-wrap gap-3">
+          <Button type="submit" size="lg" className="h-11 px-5" disabled={busy}>
+            {busy ? <Spinner /> : null}
+            {busy ? "Checking…" : "Continue"}
+          </Button>
+          <Button type="button" variant="ghost" size="lg" className="h-11" onClick={props.onBack}>
+            Use another token
+          </Button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+function StepPreview(props: { step: PlanStep }) {
+  const { step } = props;
+  return (
+    <li className="flex gap-3 py-3.5">
+      <span
+        className={cn(
+          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border",
+          step.status === "done" && "border-primary bg-primary text-primary-foreground",
+          step.status === "blocked" && "border-destructive text-destructive",
+        )}
+      >
+        {step.status === "done" ? <Check aria-hidden className="size-3" strokeWidth={3} /> : null}
+        {step.status === "blocked" ? <CircleAlert aria-hidden className="size-3.5" /> : null}
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium">
+          {step.title}
+          {step.status === "done" ? <span className="font-normal text-muted-foreground"> · already done</span> : null}
+        </p>
+        {step.status === "blocked" ? (
+          <p className="mt-1 text-sm text-destructive">{step.reason}</p>
+        ) : (
+          <ul className="mt-1 grid gap-0.5 text-[13px] text-muted-foreground">
+            {step.effects.map((effect) => (
+              <li key={effect.what} className="break-words">
+                {effect.kind === "create" ? "Creates " : effect.kind === "change" ? "Updates " : ""}
+                {effect.what}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function Review(props: { ready: Ready; onBack: () => void; onInstall: () => void }) {
+  const { ready } = props;
+  const blocked = ready.missing.length > 0 || ready.steps.some((step) => step.status === "blocked");
+  return (
+    <>
+      <ScreenTitle
+        eyebrow={`Account: ${ready.account.name}`}
+        title={
+          ready.missing.length > 0 ? "The token is missing permissions" : `Ready to install Deparked ${ready.release}`
+        }
+      >
+        {ready.missing.length > 0 ? (
+          <p>
+            Cloudflare refused {ready.missing.length === 1 ? "one thing" : `${ready.missing.length} things`} Deparked
+            needs. Create a new token with the button below (it asks for everything), then paste it.
+          </p>
+        ) : (
+          <p>Nothing has changed in your account yet. This is what the install does, one step at a time.</p>
+        )}
+      </ScreenTitle>
+
+      {ready.missing.length > 0 ? (
+        <div className="mb-8 rounded-xl border border-destructive/30 bg-destructive/[0.04] p-4 sm:p-5">
+          <ul className="grid gap-2.5">
+            {ready.missing.map((gap) => (
+              <li key={gap.label} className="text-sm">
+                <span className="font-semibold">{gap.label}</span>
+                <span className="text-muted-foreground"> · {gap.why}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button asChild>
+              <a href={TOKEN_URL} target="_blank" rel="noreferrer">
+                Create a complete token <ExternalLink aria-hidden />
+              </a>
+            </Button>
+            <Button variant="outline" onClick={props.onBack}>
+              Paste the new token
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <ol className="mb-6 divide-y border-y">
+          {ready.steps.map((step) => (
+            <StepPreview key={step.id} step={step} />
+          ))}
+        </ol>
+      )}
+
+      {ready.unchecked.length > 0 && ready.missing.length === 0 ? (
+        <p className="mb-8 max-w-[62ch] text-[13px] text-muted-foreground">
+          {ready.unchecked.map((gap) => gap.label).join(", ")} could not be checked: they only work on a domain, and
+          this account has none yet. They matter when you add your first domain; the admin checks them then.
+        </p>
+      ) : null}
+
+      {ready.missing.length > 0 ? null : (
+        <div className="flex flex-wrap gap-3">
+          <Button size="lg" className="h-11 px-5" disabled={blocked} onClick={props.onInstall}>
+            {ready.nothingToDo ? "Finish" : "Install Deparked"} <ArrowRight aria-hidden />
+          </Button>
+          <Button variant="ghost" size="lg" className="h-11" onClick={props.onBack}>
+            Use another token
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+type Row = { id: string; title: string; state: "waiting" | "running" | "done" | "failed"; detail: string[] };
+
+function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: string, adminUrl: string) => void }) {
+  const [rows, setRows] = useState<Row[]>(() =>
+    props.ready.steps.map((step) => ({
+      id: step.id,
+      title: step.title,
+      state: step.status === "done" ? "done" : "waiting",
+      detail: step.status === "done" ? ["already done"] : [],
+    })),
+  );
+  const [problem, setProblem] = useState<string | null>(null);
+  const [handing, setHanding] = useState(false);
+  const [announce, setAnnounce] = useState("Starting the install.");
+  const next = useRef(0);
+  const running = useRef(false);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const { token, onDone } = props;
+  const accountId = props.ready.account.id;
+
+  const update = useCallback((id: string, patch: Partial<Row>) => {
+    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }, []);
+
+  const run = useCallback(async () => {
+    if (running.current) return;
+    running.current = true;
+    setProblem(null);
+    for (let guard = 0; guard < 40; guard += 1) {
+      const id = props.ready.steps[next.current]?.id;
+      if (id === undefined) break;
+      update(id, { state: "running" });
+      const result = await runStep({ token, accountId, next: next.current });
+      if (!result.ok) {
+        update(id, { state: "failed" });
+        setProblem(result.message);
+        setAnnounce(`Stopped: ${result.message}`);
+        running.current = false;
+        return;
+      }
+      const report: StepReport = result.report;
+      if (report.outcome === "busy") {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        continue;
+      }
+      if (report.outcome === "failed" || report.outcome === "blocked") {
+        update(id, { state: "failed" });
+        setProblem(report.message);
+        setAnnounce(`${report.step?.title ?? "A step"} stopped: ${report.message}`);
+        running.current = false;
+        return;
+      }
+      update(id, {
+        state: "done",
+        detail: report.outcome === "already-done" ? ["already done"] : report.effects.map((effect) => effect.what),
+      });
+      setAnnounce(`${report.step?.title ?? "Step"}: done.`);
+      next.current = report.next;
+      if (report.finished) break;
+    }
+    setHanding(true);
+    setAnnounce("Every step is done. Making your setup link.");
+    const finished = await finishInstall({ token, accountId });
+    running.current = false;
+    if (finished.ok) onDone(finished.setupUrl, finished.adminUrl);
+    else {
+      setHanding(false);
+      setProblem(finished.message);
+      setAnnounce(`Stopped: ${finished.message}`);
+    }
+  }, [accountId, onDone, props.ready.steps, token, update]);
+
+  useEffect(() => {
+    void run();
+  }, [run]);
+
+  useEffect(() => {
+    if (problem !== null) retryRef.current?.focus();
+  }, [problem]);
+
+  return (
+    <>
+      <ScreenTitle title="Installing Deparked">
+        <p>
+          Each step is one short request from this tab. If you close it, open the installer again and paste your token:
+          it continues where it stopped.
+        </p>
+      </ScreenTitle>
+      <p className="sr-only" aria-live="polite">
+        {announce}
+      </p>
+      <ol className="divide-y border-y">
+        {rows.map((row, index) => (
+          <li key={row.id} className="flex gap-3.5 py-4">
+            <span
+              className={cn(
+                "grid size-6 shrink-0 place-items-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors duration-200",
+                row.state === "done" && "border-primary bg-primary text-primary-foreground",
+                row.state === "running" && "border-primary text-foreground",
+                row.state === "failed" && "border-destructive bg-destructive/10 text-destructive",
+                row.state === "waiting" && "text-muted-foreground",
+              )}
+            >
+              {row.state === "done" ? <Check aria-hidden className="size-3.5" strokeWidth={3} /> : null}
+              {row.state === "running" ? <Spinner className="size-3.5" /> : null}
+              {row.state === "failed" ? <CircleAlert aria-hidden className="size-3.5" /> : null}
+              {row.state === "waiting" ? index + 1 : null}
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className={cn("text-sm font-medium", row.state === "waiting" && "text-muted-foreground")}>
+                {row.title}
+                <span className="sr-only">
+                  {row.state === "done"
+                    ? ", done"
+                    : row.state === "running"
+                      ? ", running"
+                      : row.state === "failed"
+                        ? ", stopped"
+                        : ", waiting"}
+                </span>
+              </p>
+              {row.detail.length > 0 ? (
+                <ul className="mt-1 grid gap-0.5 text-[13px] text-muted-foreground">
+                  {row.detail.map((line) => (
+                    <li key={line} className="break-words">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ol>
+      {handing ? (
+        <p className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner /> Making your one-time setup link…
+        </p>
+      ) : null}
+      {problem === null ? null : (
+        <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/[0.04] p-4 sm:p-5" role="alert">
+          <p className="flex gap-2 text-sm">
+            <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
+            <span>{problem}</span>
+          </p>
+          <Button ref={retryRef} className="mt-4" onClick={() => void run()}>
+            <RotateCw aria-hidden /> Retry
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+function CopyButton(props: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      size="lg"
+      className="h-11"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(props.text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch {
+          setCopied(false);
+        }
+      }}
+    >
+      {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+      <span aria-live="polite">{copied ? "Copied" : "Copy the link"}</span>
+    </Button>
+  );
+}
+
+function Done(props: { setupUrl: string; recovered: boolean }) {
+  return (
+    <>
+      <ScreenTitle
+        eyebrow={props.recovered ? "Recovery" : "Installed"}
+        title={props.recovered ? "Here is a new setup link" : "Deparked is installed"}
+      >
+        <p>
+          {props.recovered
+            ? "Open it to set a new password for your workspace. Earlier setup links stop working."
+            : "One step is left, and it happens in your new admin panel: create the password for your workspace."}
+        </p>
+      </ScreenTitle>
+      <div className="rounded-xl border bg-card p-5 sm:p-6">
+        <p className="text-sm font-medium">Your one-time setup link</p>
+        <p className="mt-2 break-all rounded-md bg-muted px-3 py-2.5 font-mono text-[13px] leading-relaxed">
+          {props.setupUrl}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Button asChild size="lg" className="h-11 px-5">
+            <a href={props.setupUrl}>
+              Create your password <ArrowRight aria-hidden />
+            </a>
+          </Button>
+          <CopyButton text={props.setupUrl} />
+        </div>
+        <p className="mt-4 text-[13px] text-muted-foreground">
+          It works once, for 24 hours, and this page shows it only now. Lost it? Open this installer again and paste
+          your token: you get a new one.
+        </p>
+      </div>
+    </>
+  );
+}
+
+function Installed(props: { status: Status; onLink: (setupUrl: string, adminUrl: string) => void }) {
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [accounts, setAccounts] = useState<Account[] | null>(null);
+
+  async function recover(accountId?: string) {
+    setBusy(true);
+    setError(null);
+    const checked = await checkToken(
+      accountId === undefined ? { token: token.trim() } : { token: token.trim(), accountId },
+    );
+    if (!checked.ok) {
+      setBusy(false);
+      setError(checked);
+      return;
+    }
+    if (checked.status === "pick-account") {
+      setBusy(false);
+      setAccounts(checked.accounts);
+      return;
+    }
+    const finished = await finishInstall({ token: token.trim(), accountId: checked.account.id });
+    setBusy(false);
+    if (finished.ok) props.onLink(finished.setupUrl, finished.adminUrl);
+    else setError(finished);
+  }
+
+  return (
+    <>
+      <ScreenTitle eyebrow={`Deparked ${props.status.installedRelease ?? ""}`} title="Deparked is installed">
+        <p>Your admin panel runs as its own Worker. This installer only helps you back in if you lose access.</p>
+      </ScreenTitle>
+      {props.status.adminUrl === null ? null : (
+        <Button asChild size="lg" className="mb-10 h-11 px-5">
+          <a href={props.status.adminUrl}>
+            Open the admin <ArrowRight aria-hidden />
+          </a>
+        </Button>
+      )}
+      <Section title="Lost your password or the setup link?" className="pb-0">
+        <p className="mb-5 max-w-[62ch] text-sm text-muted-foreground">
+          Paste a token for this account (the one you installed with, or a new one from{" "}
+          <a
+            className="underline underline-offset-2 hover:text-foreground"
+            href={TOKEN_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Cloudflare's token page
+          </a>
+          ). The installer checks it really is your account, then gives you a new one-time setup link.
+        </p>
+        <form
+          noValidate
+          className="flex max-w-xl flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (token.trim() === "") setError({ ok: false, error: "invalid-token", message: "Paste the token first." });
+            else void recover();
+          }}
+        >
+          <TokenField value={token} onChange={setToken} error={error} />
+          {accounts === null ? null : (
+            <div className="grid gap-2">
+              <p className="text-sm font-medium">The token reaches several accounts. Which one is this?</p>
+              {accounts.map((account) => (
+                <Button
+                  key={account.id}
+                  type="button"
+                  variant="outline"
+                  className="h-11 justify-start"
+                  onClick={() => void recover(account.id)}
+                >
+                  {account.name}
+                </Button>
+              ))}
+            </div>
+          )}
+          <div>
+            <Button type="submit" size="lg" className="h-11 px-5" disabled={busy}>
+              {busy ? <Spinner /> : null}
+              {busy ? "Checking…" : "Get a new setup link"}
+            </Button>
+          </div>
+        </form>
+      </Section>
+    </>
+  );
+}
