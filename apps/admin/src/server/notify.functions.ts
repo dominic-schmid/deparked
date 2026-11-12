@@ -53,7 +53,9 @@ export const removeNotify = createServerFn({ method: "POST" })
   .validator(notifyEmailSchema)
   .handler(async ({ data }) => {
     await requireSession();
-    return withHosting((hosting) => removeNotifyAddress(createDb(env.DB), hosting, { email: data.email }));
+    return withHosting((hosting) =>
+      removeNotifyAddress(createDb(env.DB), hosting, { email: data.email, now: Date.now() }),
+    );
   });
 
 export const checkNotify = createServerFn({ method: "POST" }).handler(async () => {

@@ -4,6 +4,7 @@ import {
   type Db,
   getDomain,
   insertDeployment,
+  insertNotifyAddress,
   listSiteFilesByHost,
   replaceSiteFiles,
   saveDraft,
@@ -110,6 +111,12 @@ describe("adding a domain", () => {
     expect(await listSiteFilesByHost(db, HOST)).toHaveLength(3);
     expect((await getDomain(db, HOST))?.status).toBe("placeholder");
     expect(zoneRoutes().length).toBeGreaterThan(0);
+  });
+
+  it("gives the domain the only notify address once it is added, pending as it is", async () => {
+    await insertNotifyAddress(db, { email: "owner@example.com", now: clock });
+    await drive("attach");
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe("owner@example.com");
   });
 
   it("a publish that needs several requests answers `working` and continues where it stopped", async () => {

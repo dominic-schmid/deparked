@@ -2,6 +2,7 @@ import {
   deleteNotifyAddress,
   getDomain,
   getNotifyAddress,
+  insertDomain,
   insertNotifyAddress,
   listNotifyAddresses,
   updateDomain,
@@ -12,12 +13,15 @@ import { createFakeHosting } from "@deparked/hosting/testing";
 import { describe, expect, test } from "vitest";
 import {
   addNotifyAddress,
+  fillMissingNotifyAddresses,
   notifyEmailSchema,
   pickNotifyAddress,
   refreshNotifyAddresses,
   removeNotifyAddress,
   resendNotifyAddress,
+  waitWords,
 } from "./notify";
+import { defaultNotifyAddress, offerMail } from "./notify-default";
 import { HOST, NOTIFY, NOW, seed } from "./test-seed";
 
 const SECOND = "second@example.com";
@@ -83,13 +87,14 @@ describe("add", () => {
     const { db, hosting } = await setup();
     for (let round = 0; round < 5; round++) {
       expect((await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + round })).ok).toBe(true);
-      expect((await removeNotifyAddress(db, hosting, { email: SECOND })).ok).toBe(true);
+      expect((await removeNotifyAddress(db, hosting, { email: SECOND, now: NOW })).ok).toBe(true);
     }
 
     const sixth = await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + 10 });
 
     expect(sixth.ok).toBe(false);
-    expect(sixth.message).toContain("Too many verification emails");
+    expect(sixth.message).toContain("at most 5 to one address in 6 hours");
+    expect(sixth.message).toContain("You can send the next one in about 6 hours.");
     expect(hosting.verificationMails).toHaveLength(5);
     expect(await getNotifyAddress(db, SECOND)).toBeUndefined();
     expect((await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + 6 * 3_600_000 + 10 })).ok).toBe(true);
@@ -126,7 +131,8 @@ describe("add", () => {
     const twenty1st = await addNotifyAddress(db, hosting, { email: "buyer20@example.com", now: NOW + 100 });
 
     expect(twenty1st.ok).toBe(false);
-    expect(twenty1st.message).toContain("Too many verification emails");
+    expect(twenty1st.message).toContain("at most 20 an hour across all addresses");
+    expect(twenty1st.message).toContain("in about 60 minutes");
     expect(hosting.verificationMails).toHaveLength(20);
     expect((await addNotifyAddress(db, hosting, { email: "buyer20@example.com", now: NOW + 3_600_000 + 100 })).ok).toBe(
       true,
@@ -156,7 +162,10 @@ describe("resend", () => {
     await addNotifyAddress(db, hosting, { email: SECOND, now: NOW });
     const before = await getNotifyAddress(db, SECOND);
 
-    expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 1000 })).ok).toBe(false);
+    expect(await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 1000 })).toEqual({
+      ok: false,
+      message: `A verification email went to ${SECOND} less than a minute ago, and it can take a minute to arrive. You can send another in a minute.`,
+    });
     expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 61_000 })).ok).toBe(true);
     const after = await getNotifyAddress(db, SECOND);
     expect(after?.cfAddressId).not.toBe(before?.cfAddressId);
@@ -206,7 +215,7 @@ describe("remove", () => {
   test("is refused while a domain sends its offers there", async () => {
     const { db, hosting } = await setup();
 
-    const result = await removeNotifyAddress(db, hosting, { email: NOTIFY });
+    const result = await removeNotifyAddress(db, hosting, { email: NOTIFY, now: NOW });
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain(HOST);
@@ -217,7 +226,7 @@ describe("remove", () => {
     const { db, hosting } = await setup();
     await addNotifyAddress(db, hosting, { email: SECOND, now: NOW });
 
-    expect((await removeNotifyAddress(db, hosting, { email: SECOND })).ok).toBe(true);
+    expect((await removeNotifyAddress(db, hosting, { email: SECOND, now: NOW })).ok).toBe(true);
 
     expect(await getNotifyAddress(db, SECOND)).toBeUndefined();
     expect((await hosting.notifyAddresses.list()).map((address) => address.email)).toEqual([NOTIFY]);
@@ -227,7 +236,7 @@ describe("remove", () => {
     const { db, hosting } = await setup();
     await updateDomain(db, { host: HOST, patch: { notifyEmail: null }, now: NOW });
 
-    const result = await removeNotifyAddress(db, hosting, { email: NOTIFY });
+    const result = await removeNotifyAddress(db, hosting, { email: NOTIFY, now: NOW });
 
     expect(result.ok).toBe(true);
     expect(await getNotifyAddress(db, NOTIFY)).toBeUndefined();
@@ -239,7 +248,7 @@ describe("remove", () => {
     await addNotifyAddress(db, hosting, { email: SECOND, now: NOW });
     hosting.failNext("notifyAddresses", new HostingError("unavailable", "Cloudflare did not answer."));
 
-    expect(await removeNotifyAddress(db, hosting, { email: SECOND })).toEqual({
+    expect(await removeNotifyAddress(db, hosting, { email: SECOND, now: NOW })).toEqual({
       ok: false,
       message: "Cloudflare did not answer just now, so nothing was changed. Try again in a minute.",
       detail: "Cloudflare did not answer.",
@@ -286,5 +295,97 @@ describe("pick for a domain", () => {
     expect((await pickNotifyAddress(db, { host: HOST, email: "nobody@example.com", now: NOW })).ok).toBe(false);
     expect((await pickNotifyAddress(db, { host: "b.example", email: NOTIFY, now: NOW })).ok).toBe(false);
     expect((await getDomain(db, HOST))?.notifyEmail).toBe(NOTIFY);
+  });
+});
+
+test("a wait reads in plain words", () => {
+  expect(waitWords(NOW, 60_000, NOW + 59_000)).toBe("in a minute");
+  expect(waitWords(NOW, 3_600_000, NOW + 20 * 60_000)).toBe("in about 40 minutes");
+  expect(waitWords(NOW, 6 * 3_600_000, NOW + 60_000)).toBe("in about 6 hours");
+});
+
+describe("the address a domain without one gets", () => {
+  const pending = (email: string, createdAt = NOW) => ({ email, verifiedAt: null, createdAt });
+  const verified = (email: string, verifiedAt: number) => ({ email, verifiedAt, createdAt: NOW });
+
+  test("the only address, even while it is pending", () => {
+    expect(defaultNotifyAddress([pending(NOTIFY)])?.email).toBe(NOTIFY);
+  });
+
+  test("of several, the most recently verified", () => {
+    expect(
+      defaultNotifyAddress([verified(NOTIFY, NOW + 2), verified(SECOND, NOW + 5), pending("third@example.com")])?.email,
+    ).toBe(SECOND);
+  });
+
+  test("none while there is none, or several and none verified", () => {
+    expect(defaultNotifyAddress([])).toBeNull();
+    expect(defaultNotifyAddress([pending(NOTIFY), pending(SECOND)])).toBeNull();
+  });
+});
+
+describe("domains without an address get one", () => {
+  async function bare() {
+    const { db } = await createTestDb();
+    await insertDomain(db, { domain: { host: HOST, zoneId: "zone-1", status: "live" }, now: NOW });
+    return { db, hosting: createFakeHosting() };
+  }
+
+  test("adding the first address gives it to the domain at once, pending as it is", async () => {
+    const { db, hosting } = await bare();
+    await addNotifyAddress(db, hosting, { email: NOTIFY, now: NOW });
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe(NOTIFY);
+  });
+
+  test("with two pending addresses the first one verified is taken, as soon as it is", async () => {
+    const { db, hosting } = await bare();
+    for (const email of [NOTIFY, SECOND]) {
+      await hosting.notifyAddresses.add(email);
+      await insertNotifyAddress(db, { email, now: NOW });
+    }
+    expect(await fillMissingNotifyAddresses(db, NOW)).toEqual([]);
+    hosting.verifyAddress(SECOND);
+    await refreshNotifyAddresses(db, hosting, { now: NOW + 1 });
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe(SECOND);
+  });
+
+  test("a domain that has an address keeps it, and a removed one gets none", async () => {
+    const { db } = await createTestDb();
+    await seed(db);
+    await insertNotifyAddress(db, { email: SECOND, verifiedAt: NOW + 9, now: NOW });
+    await insertDomain(db, { domain: { host: "gone.example", zoneId: "zone-2", status: "removed" }, now: NOW });
+    await insertDomain(db, { domain: { host: "new.example", zoneId: "zone-3" }, now: NOW });
+    expect(await fillMissingNotifyAddresses(db, NOW)).toEqual(["new.example"]);
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe(NOTIFY);
+    expect((await getDomain(db, "new.example"))?.notifyEmail).toBe(SECOND);
+    expect((await getDomain(db, "gone.example"))?.notifyEmail).toBeNull();
+  });
+
+  test("removing a pending address in use moves its domains to the next default", async () => {
+    const { db } = await setup();
+    const hosting = createFakeHosting({ verifiedAddresses: [NOTIFY] });
+    await insertNotifyAddress(db, { email: "typo@example.com", now: NOW });
+    await updateDomain(db, { host: HOST, patch: { notifyEmail: "typo@example.com" }, now: NOW });
+
+    const result = await removeNotifyAddress(db, hosting, { email: "typo@example.com", now: NOW });
+
+    expect(result).toEqual({
+      ok: true,
+      message: `typo@example.com was removed. Offers for ${HOST} go to ${NOTIFY} now.`,
+    });
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe(NOTIFY);
+  });
+});
+
+describe("whether a domain's offers are emailed", () => {
+  const addresses = [
+    { email: NOTIFY, verifiedAt: NOW, createdAt: NOW },
+    { email: SECOND, verifiedAt: null, createdAt: NOW },
+  ];
+  test("tells the four cases apart", () => {
+    expect(offerMail(NOTIFY, addresses)).toEqual({ state: "ok", email: NOTIFY });
+    expect(offerMail(SECOND, addresses)).toEqual({ state: "unverified", email: SECOND });
+    expect(offerMail(null, addresses)).toEqual({ state: "unassigned" });
+    expect(offerMail(null, [])).toEqual({ state: "no-address" });
   });
 });

@@ -10,6 +10,7 @@ import type {
   SetupStepReport,
 } from "@deparked/hosting";
 import { z } from "zod";
+import { fillMissingNotifyAddresses } from "../notify";
 import { type PublishContext, type StartKind, startPublish, stepPublish } from "../publish/pipeline";
 
 const LABEL = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
@@ -174,7 +175,8 @@ async function publishStep(deps: SetupDeps, host: string, state: SetupState): Pr
  * One step of attaching (or turning on again) a domain. The browser calls it until `finished`.
  *
  * While the domain is off its placeholder step always publishes: rows left by a turn off that stopped half-way
- * do not prove the page is live. Publishing again sends only what the host lacks.
+ * do not prove the page is live. Publishing again sends only what the host lacks. Once finished, a domain without
+ * a notify address gets the default one.
  */
 export async function attachStep(
   deps: SetupDeps,
@@ -182,10 +184,13 @@ export async function attachStep(
 ): Promise<StepView> {
   const { host, state } = input;
   const step = listSteps(deps, "attach", host)[state.next];
-  if (step?.id === PUBLISH_STEP && isOff((await getDomain(deps.db, host))?.status)) {
-    return publishStep(deps, host, state);
-  }
-  return hostingStep(deps, "attach", host, state, input.confirmations);
+  const result =
+    step?.id === PUBLISH_STEP && isOff((await getDomain(deps.db, host))?.status)
+      ? await publishStep(deps, host, state)
+      : await hostingStep(deps, "attach", host, state, input.confirmations);
+  // The domain row exists once a step has run: it gets the default address, so its offers never go nowhere.
+  if (result.finished) await fillMissingNotifyAddresses(deps.db, deps.publish.now());
+  return result;
 }
 
 /** Takes the domain's pages out, once nothing of Deparked is left for it at the host. Runs under the lock. */

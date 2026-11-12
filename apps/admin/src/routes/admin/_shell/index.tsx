@@ -9,6 +9,7 @@ import {
   VisitsSparkline,
 } from "../../../components/analytics";
 import { formatMoney } from "../../../components/format";
+import { OfferMailBadge } from "../../../components/offer-mail";
 import { PageError, PageHeader, PagePending } from "../../../components/page";
 import { SetupChecklistCard } from "../../../components/setup-checklist";
 import { StatusLabel } from "../../../components/status";
@@ -87,6 +88,15 @@ function BestCell({ best }: { best: DomainOverview["best"] }) {
   return <span className="tabular-nums [overflow-wrap:anywhere]">{formatMoney(best.amountMinor, best.currency)}</span>;
 }
 
+function StatusCell({ domain }: { domain: DomainOverview }) {
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <StatusLabel status={domain.status} />
+      {domain.status === "email_pending" ? <OfferMailBadge host={domain.host} mail={domain.mail} /> : null}
+    </span>
+  );
+}
+
 function PublishedCell({ time, now }: { time: number | null; now: number }) {
   if (time === null) return <span className="text-muted-foreground">Never</span>;
   return <RelativeTime time={time} now={now} />;
@@ -142,7 +152,7 @@ function OverviewPage() {
                   </Link>
                 </TableHead>
                 <TableCell>
-                  <StatusLabel status={domain.status} />
+                  <StatusCell domain={domain} />
                 </TableCell>
                 <TableCell>
                   <VisitsCell visits={visits} host={domain.host} />
@@ -171,7 +181,7 @@ function OverviewPage() {
               <Link to="/admin/d/$host" params={{ host: domain.host }} className={`min-w-0 ${HOST_LINK}`}>
                 {domain.host}
               </Link>
-              <StatusLabel status={domain.status} />
+              <StatusCell domain={domain} />
             </div>
             <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
               <dt className="text-muted-foreground">Visits, 7 / 30 days</dt>

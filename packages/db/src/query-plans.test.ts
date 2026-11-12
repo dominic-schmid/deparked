@@ -26,6 +26,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   insertDomain: [[{ domain: { host: "other.example", zoneId: "zone-2" }, now: NOW }]],
   updateDomain: [[{ host: HOST, patch: { analyticsSiteTag: "tag" }, now: NOW }]],
   setDomainStatus: [[{ host: HOST, status: "off", now: NOW }]],
+  assignMissingNotifyEmail: [[{ email: NOTIFY, now: NOW }]],
   getOfferTarget: [[HOST]],
 
   getConfig: [[HOST]],

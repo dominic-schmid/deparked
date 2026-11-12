@@ -1,4 +1,4 @@
-import { asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import type { Db } from "../client";
 import { config, type Domain, type DomainStatus, domains, turnstileWidgets } from "../schema";
 
@@ -83,6 +83,19 @@ export async function setDomainStatus(
     .where(eq(domains.host, input.host))
     .returning();
   return rows[0];
+}
+
+/**
+ * Gives `email` to every domain (removed ones aside) that has no notify address, in one statement: a domain that
+ * got one in the meantime keeps it. Returns the hosts that got it.
+ */
+export async function assignMissingNotifyEmail(db: Db, input: { email: string; now: number }): Promise<string[]> {
+  const rows = await db
+    .update(domains)
+    .set({ notifyEmail: input.email, updatedAt: input.now })
+    .where(and(isNull(domains.notifyEmail), ne(domains.status, "removed")))
+    .returning({ host: domains.host });
+  return rows.map((row) => row.host);
 }
 
 export type OfferTarget = {

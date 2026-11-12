@@ -9,7 +9,8 @@ import { useId, useState } from "react";
 import type { NotifyResult } from "../server/notify";
 import { pickNotify } from "../server/notify.functions";
 
-const TEXT_LINK = "underline underline-offset-4";
+const TEXT_LINK =
+  "rounded-sm font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 /** Picks where a domain's offers are emailed, from the verified notify addresses only. */
 export function NotifyPicker(props: { host: string; current: string | null; addresses: NotifyAddress[] }) {
@@ -19,6 +20,8 @@ export function NotifyPicker(props: { host: string; current: string | null; addr
   const [result, setResult] = useState<NotifyResult | null>(null);
   const id = useId();
   const verified = props.addresses.filter((address) => address.verifiedAt !== null);
+  // A pending current address (given by default) shows as picked, but cannot be picked again.
+  const pendingCurrent = props.current !== null && !verified.some((address) => address.email === props.current);
 
   async function onPick(email: string) {
     setBusy(true);
@@ -43,10 +46,12 @@ export function NotifyPicker(props: { host: string; current: string | null; addr
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {verified.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No verified address yet.{" "}
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {props.current === null
+              ? "No verified address yet. "
+              : `Offers go to ${props.current} once it is verified. `}
             <Link to="/admin/settings" className={TEXT_LINK}>
-              Add one in Notify addresses
+              {props.current === null ? "Add one in Notify addresses" : "Verify it in Notify addresses"}
             </Link>
             .
           </p>
@@ -58,6 +63,11 @@ export function NotifyPicker(props: { host: string; current: string | null; addr
                 <SelectValue placeholder="Pick an address" />
               </SelectTrigger>
               <SelectContent>
+                {pendingCurrent && props.current !== null ? (
+                  <SelectItem value={props.current} disabled>
+                    {props.current} (not verified yet)
+                  </SelectItem>
+                ) : null}
                 {verified.map((address) => (
                   <SelectItem key={address.email} value={address.email}>
                     {address.email}

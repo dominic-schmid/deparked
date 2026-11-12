@@ -1,7 +1,7 @@
 import { expect, TEST_RELEASE, TEST_TOKEN, test } from "../fixtures";
 
 // The v1 acceptance flow, one piece handing over to the next with nothing seeded in between: install, password,
-// the first-run wizard (notify address, first domain), edit and publish, a visitor's offer, the inbox and the mail.
+// the first-run wizard (notify address, first domain, which gets that address by itself), edit and publish, a visitor's offer, the inbox and the mail.
 const HOST = "example.com";
 const OWNER = "owner@example.com";
 const PASSWORD = "a-long-new-password";
@@ -69,33 +69,27 @@ test("install, set up, add a domain, publish it, take an offer and read it in th
 
   await test.step("the wizard: add the first domain from the Cloudflare account", async () => {
     await expect(page.getByRole("heading", { level: 1, name: "Add your first domain" })).toBeVisible();
+    await expect(page.getByText(`Offers for it go to ${OWNER}.`)).toBeVisible();
     await page
       .getByRole("list", { name: "Domains you can add" })
       .getByRole("button", { name: /example\.com/ })
       .click();
     await page.getByRole("button", { name: `Add ${HOST}` }).click();
     await expect(page.getByRole("heading", { name: `${HOST} is set up` })).toBeVisible({ timeout: 30_000 });
+    // The wizard's address became the domain's: nothing to pick in Settings, and no "not emailed" notice.
+    expect(await db.sql("SELECT notify_email FROM domains WHERE host = ?", HOST)).toEqual([{ notify_email: OWNER }]);
+    await expect(page.getByText("not emailed yet")).toHaveCount(0);
     // With a domain the wizard is over.
     await page.goto(`${urls.admin}/admin/welcome`);
     await page.waitForURL(`${urls.admin}/admin`);
     await expect(page.getByRole("heading", { name: "All domains" })).toBeVisible();
   });
 
-  await test.step("send the domain's offers to the verified address", async () => {
-    await page.goto(`${urls.admin}/admin/d/${HOST}/settings`);
-    // A click before the page hydrates opens nothing: click until the list is open.
-    const option = page.getByRole("option", { name: OWNER });
-    await expect(async () => {
-      if (!(await option.isVisible())) await page.getByLabel("Send offers to").click();
-      await expect(option).toBeVisible({ timeout: 1_000 });
-    }).toPass();
-    await option.click();
-    await expect(page.getByText(`Offers for ${HOST} go to ${OWNER}.`)).toBeVisible();
-  });
-
   await test.step("edit the headline, pick another design and publish", async () => {
     await page.goto(`${urls.admin}/admin/d/${HOST}`);
     const preview = page.frameLocator(`iframe[title="Preview of ${HOST}"]`);
+    // The preview renders once the editor has hydrated: typing before that would be reset by React.
+    await expect(preview.getByRole("heading", { level: 1 })).toBeVisible();
     await page.getByLabel("Headline").fill(HEADLINE);
     await page.getByRole("radiogroup", { name: "Design" }).getByRole("radio", { name: "Gradient" }).click();
     await expect(preview.getByRole("heading", { level: 1 })).toHaveText(SHOWN);
