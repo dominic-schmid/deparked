@@ -95,6 +95,8 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   hitRateLimit: [[{ key: "login:abc", windowMs: 60_000, now: NOW }]],
   clearRateLimit: [["login:abc"]],
   pruneRateLimits: [[NOW]],
+  acquireProvisionLock: [[{ holder: 1, ttlMs: 60_000, now: NOW }]],
+  releaseProvisionLock: [[1]],
 };
 
 // At most one row each, by a CHECK constraint.

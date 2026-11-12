@@ -30,7 +30,7 @@ import {
   wouldCreate,
 } from "./context";
 import { inspectDomain } from "./inspect";
-import type { Effect, Plan, Step, StepCheck } from "./steps";
+import { type Effect, type Plan, type Step, StepBlockedError, type StepCheck } from "./steps";
 import {
   ADDRESS_RECORD_TYPES,
   PLACEHOLDER_RECORD,
@@ -75,6 +75,33 @@ function sameRouteReason(routes: readonly WorkerRoute[]): string {
 
 const NO_PUBLISHER = "The placeholder page cannot be published: this setup was started without a publisher.";
 
+function liveSiteReason(host: string): string {
+  return `${host} shows a website today. Confirm that Deparked may take over ${host}: visitors then get the for-sale page instead. Your site and its settings stay untouched, and Turn off brings it back.`;
+}
+
+/** True when the host's placeholder page is in the publish manifest. */
+async function placeholderPublished(ctx: ProvisionContext, host: string): Promise<boolean> {
+  const files = await listSiteFilesByHost(ctx.db, host);
+  return files.some((file) => file.path === `/sites/${host}/index.html`);
+}
+
+/**
+ * What a step that sends visitors to Deparked checks right before it changes anything, because the browser
+ * chooses which step runs: the placeholder page is there, and a live site is only taken over when the owner
+ * confirmed it. Looking for a live site costs an inspection, so it is skipped once the domain is on.
+ */
+async function requireVisitorGate(ctx: ProvisionContext, host: string, options: AttachOptions): Promise<void> {
+  if (!(await placeholderPublished(ctx, host))) {
+    throw new StepBlockedError(
+      `Publish the placeholder page of ${host} first: nothing may send visitors to it before it exists.`,
+    );
+  }
+  if (options.takeOverLiveSite === true) return;
+  const status = (await getDomain(ctx.db, host))?.status;
+  if (status === "placeholder" || status === "live") return;
+  if ((await inspectDomain(ctx, host)).servesWebsite) throw new StepBlockedError(liveSiteReason(host));
+}
+
 /** Stops before anything changes when the domain cannot be attached, then remembers the domain and its zone. */
 function registerStep(host: string, options: AttachOptions): Step {
   return {
@@ -86,9 +113,7 @@ function registerStep(host: string, options: AttachOptions): Step {
       if (inspection.zone === null || inspection.blockers.length > 0) return blocked(inspection.blockers.join(" "));
       const isOn = inspection.managed === "placeholder" || inspection.managed === "live";
       if (inspection.servesWebsite && !isOn && options.takeOverLiveSite !== true) {
-        return blocked(
-          `${host} shows a website today. Confirm that Deparked may take over ${host}: visitors then get the for-sale page instead. Your site and its settings stay untouched, and Turn off brings it back.`,
-        );
+        return blocked(liveSiteReason(host));
       }
       if (inspection.sameRoutePatterns.length > 0 && options.repointExistingRoutes !== true) {
         return blocked(sameRouteReason(inspection.sameRoutePatterns));
@@ -122,9 +147,9 @@ function publishPlaceholderStep(host: string): Step {
     title: "Publish the placeholder page",
     async check(ctx) {
       if (ctx.publishPlaceholder === undefined) return blocked(NO_PUBLISHER);
-      const files = await listSiteFilesByHost(ctx.db, host);
-      const published = files.some((file) => file.path === `/sites/${host}/index.html`);
-      return published ? done([{ kind: "reuse", what }]) : needed([{ kind: "create", what }]);
+      return (await placeholderPublished(ctx, host))
+        ? done([{ kind: "reuse", what }])
+        : needed([{ kind: "create", what }]);
     },
     async run(ctx) {
       if (ctx.publishPlaceholder === undefined) throw new Error(NO_PUBLISHER);
@@ -192,6 +217,7 @@ function routesStep(host: string, options: AttachOptions): Step {
     async run(ctx) {
       const zone = await findZone(ctx, host);
       if (zone === null) throw new Error(notInAccount(host));
+      await requireVisitorGate(ctx, host, options);
       const { list, ledger } = await items(ctx, zone.id);
       for (const item of list) {
         if (item.action === "create") {
@@ -237,6 +263,7 @@ function rulesStep(input: {
   title: string;
   host: string;
   phase: RulesetPhase;
+  options: AttachOptions;
   /** The wanted rules. The rewrite rules depend on the owner's routes, hence the zone. */
   rules: (ctx: ProvisionContext, zoneId: string) => Promise<RuleInput[]>;
   words: (rule: RuleInput) => string;
@@ -280,6 +307,7 @@ function rulesStep(input: {
     async run(ctx) {
       const zone = await findZone(ctx, host);
       if (zone === null) throw new Error(notInAccount(host));
+      await requireVisitorGate(ctx, host, input.options);
       const { list, ledger } = await items(ctx, zone.id);
       for (const item of list) {
         if (item.conflict) throw new Error(ruleConflictReason(host, item.rule.description));
@@ -428,11 +456,17 @@ async function createWidget(ctx: ProvisionContext, host: string): Promise<Pick<T
   return { sitekey, name };
 }
 
+/** The hostnames Cloudflare has for a widget right now. Undefined when the widget is gone. */
+async function hostnamesOf(ctx: ProvisionContext, sitekey: string): Promise<string[] | undefined> {
+  return (await ctx.cf.turnstile.list()).find((widget) => widget.sitekey === sitekey)?.domains;
+}
+
 /**
  * One hostname place in a Turnstile widget. Widgets hold 10 hostnames and fill up one after another; when all
  * are full a new one is created. The place is taken in the database first, in one statement together with
  * `domains.turnstile_widget_id`, so a retry sees it and never takes a second one. Cloudflare's hostname list
- * is read again right before it is written and the host is only added when it is missing.
+ * is read again right before it is written, the host is only added when it is missing, and it is read once more
+ * after the write to confirm the host is there. The step is only done when Cloudflare's list has the host.
  */
 function botCheckStep(host: string): Step {
   return {
@@ -443,7 +477,9 @@ function botCheckStep(host: string): Step {
       const widgets = await listTurnstileWidgets(ctx.db);
       const current = widgets.find((widget) => widget.sitekey === row?.turnstileWidgetId);
       if (current !== undefined) {
-        const told = findEntry(await activeLedger(ctx, host), "turnstile_hostname", current.sitekey) !== undefined;
+        const told =
+          findEntry(await activeLedger(ctx, host), "turnstile_hostname", current.sitekey) !== undefined &&
+          (await hostnamesOf(ctx, current.sitekey))?.includes(host) === true;
         const what = `${host}'s place in the bot check ${current.name}`;
         return told ? done([{ kind: "reuse", what }]) : needed([{ kind: "change", what }]);
       }
@@ -479,9 +515,14 @@ function botCheckStep(host: string): Step {
       if (sitekey === null) throw new Error(`No bot check has a free place for ${host}.`);
 
       const held = sitekey;
-      const widget = (await ctx.cf.turnstile.list()).find((entry) => entry.sitekey === held);
+      let widget = (await ctx.cf.turnstile.list()).find((entry) => entry.sitekey === held);
+      // Read again after each write: a write by someone else at the same moment can drop the host.
+      for (let write = 0; widget !== undefined && !widget.domains.includes(host); write += 1) {
+        if (write === 2) throw new Error(`${host} could not be added to the bot check ${widget.name}. Try again.`);
+        await ctx.cf.turnstile.updateHostnames(widget, [...widget.domains, host]);
+        widget = (await ctx.cf.turnstile.list()).find((entry) => entry.sitekey === held);
+      }
       if (widget === undefined) throw new Error(`The bot check of ${host} no longer exists in Cloudflare.`);
-      if (!widget.domains.includes(host)) await ctx.cf.turnstile.updateHostnames(widget, [...widget.domains, host]);
       if (findEntry(await activeLedger(ctx, host), "turnstile_hostname", held) === undefined) {
         await insertLedgerEntry(ctx.db, {
           host,
@@ -735,6 +776,7 @@ export function planAttachDomain(ctx: ProvisionContext, hostInput: string, optio
         title: "Show this domain's page to visitors",
         host,
         phase: "http_request_transform",
+        options,
         async rules(ctx, zoneId) {
           const owned = ownedIds(await activeLedger(ctx, host), "route");
           const wanted = wantedRoutes(host, workerNames(ctx));
@@ -757,6 +799,7 @@ export function planAttachDomain(ctx: ProvisionContext, hostInput: string, optio
         title: "Send www to the main address",
         host,
         phase: "http_request_dynamic_redirect",
+        options,
         rules: async () => wantedRedirectRules(host),
         words: () => `a rule that sends www.${host} to ${host}`,
       }),

@@ -1,4 +1,5 @@
 import { CloudflareApiError } from "@deparked/cf";
+import { acquireProvisionLock, releaseProvisionLock } from "@deparked/db";
 import type { ProvisionContext } from "./context";
 
 /** One thing a step does or would do, in words the owner can read. `reuse` changes nothing. */
@@ -53,10 +54,11 @@ export interface StepReport {
   step: { id: string; title: string; index: number; total: number } | null;
   /**
    * `ran`: the step did its work. `already-done`: nothing was needed. `blocked`: the owner must act; the state
-   * did not move. `failed`: Cloudflare refused a call; call again with the same state to retry.
+   * did not move. `failed`: Cloudflare refused a call; call again with the same state to retry. `busy`:
+   * another attach or turn off of this install is running a step; nothing was looked at, try again shortly.
    * `finished`: no step was left.
    */
-  outcome: "ran" | "already-done" | "blocked" | "failed" | "finished";
+  outcome: "ran" | "already-done" | "blocked" | "failed" | "busy" | "finished";
   /** The blocker or the error. Empty otherwise. */
   message: string;
   effects: Effect[];
@@ -69,9 +71,45 @@ export interface StepReport {
 }
 
 /**
+ * Thrown by a `run` that finds, right before it would change something, that the owner has to act first. It
+ * becomes a `blocked` report, like a blocked `check`.
+ */
+export class StepBlockedError extends Error {
+  override readonly name = "StepBlockedError";
+}
+
+/** How long a step may hold the provisioning lock. A step makes at most a few dozen requests. */
+export const PROVISION_LOCK_TTL_MS = 120_000;
+
+export const BUSY_MESSAGE = "Another change to your domains is running. Try again in a moment.";
+
+/**
+ * Runs `work` while holding the install's provisioning lock, so that no two changes to Cloudflare made by
+ * provisioning interleave (two attaches picking the same new bot check, two writes of one hostname list).
+ * `busy` when another caller holds it: nothing ran. The lock expires after `PROVISION_LOCK_TTL_MS`, so a
+ * crashed holder blocks nobody for long. `runNextStep` takes it for every step; call this directly only for
+ * other provisioning changes.
+ */
+export async function withProvisionLock<T>(
+  ctx: ProvisionContext,
+  work: () => Promise<T>,
+): Promise<{ status: "ran"; value: T } | { status: "busy" }> {
+  const holder = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0;
+  if (!(await acquireProvisionLock(ctx.db, { holder, ttlMs: PROVISION_LOCK_TTL_MS, now: ctx.now() }))) {
+    return { status: "busy" };
+  }
+  try {
+    return { status: "ran", value: await work() };
+  } finally {
+    await releaseProvisionLock(ctx.db, holder);
+  }
+}
+
+/**
  * Looks at exactly one step: runs it when it is needed, skips it when it is done. The browser calls this once
  * per request until `finished`, which keeps every request inside the free plan's limits and makes Retry a
- * repeat of the same call. Only a Cloudflare API failure becomes `failed`; any other error is thrown.
+ * repeat of the same call. Only a Cloudflare API failure becomes `failed`; any other error is thrown. The step
+ * runs under the provisioning lock (`withProvisionLock`): while another step holds it the answer is `busy`.
  */
 export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Promise<StepReport> {
   const total = plan.steps.length;
@@ -102,16 +140,20 @@ export async function runNextStep(plan: Plan, state: PlanState = PLAN_START): Pr
     };
   };
 
-  try {
-    const check = await step.check(plan.ctx);
-    if (check.status === "blocked") return report("blocked", { message: check.reason });
-    if (check.status === "done") return report("already-done", { effects: check.effects });
-    const result = await step.run(plan.ctx);
-    return report("ran", result);
-  } catch (error) {
-    if (!(error instanceof CloudflareApiError)) throw error;
-    return report("failed", { message: error.message });
-  }
+  const locked = await withProvisionLock(plan.ctx, async () => {
+    try {
+      const check = await step.check(plan.ctx);
+      if (check.status === "blocked") return report("blocked", { message: check.reason });
+      if (check.status === "done") return report("already-done", { effects: check.effects });
+      const result = await step.run(plan.ctx);
+      return report("ran", result);
+    } catch (error) {
+      if (error instanceof StepBlockedError) return report("blocked", { message: error.message });
+      if (!(error instanceof CloudflareApiError)) throw error;
+      return report("failed", { message: error.message });
+    }
+  });
+  return locked.status === "ran" ? locked.value : report("busy", { message: BUSY_MESSAGE });
 }
 
 export interface DryRunReport {

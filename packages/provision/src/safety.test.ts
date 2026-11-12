@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { planAttachDomain } from "./attach";
 import { MX_EXTERNAL } from "./fixtures/mx";
 import { inspectDomain } from "./inspect";
-import { dryRun, PLAN_START, runNextStep } from "./steps";
+import { BUSY_MESSAGE, dryRun, PLAN_START, runNextStep } from "./steps";
 import { mutatingCalls, runPlan, seedWidget, setup, ZONE, zoneSnapshot } from "./test-helpers";
 import { planTurnOff } from "./turn-off";
 import { wantedRedirectRules, wantedRewriteRules } from "./wanted";
@@ -98,7 +98,9 @@ describe("only what the ledger names is Deparked's", () => {
           action_parameters: { uri: { path: { value: "/new" } } },
         });
       }
-      mock.failNext({ route, status: 403, applyFirst: true });
+      // A 5xx is an unknown outcome; a 4xx would tell Deparked that nothing was created.
+      const status = ["workers.putSecret", "turnstile.update", "turnstile.create"].includes(route) ? 403 : 502;
+      mock.failNext({ route, status, applyFirst: true });
 
       const first = await runPlan(planAttachDomain(ctx, HOST));
       expect(first.at(-1), route).toMatchObject({ outcome: "failed", step: { id: stepId } });
@@ -226,8 +228,8 @@ describe("a domain that serves a live site", () => {
     ).not.toContain("answered by");
 
     const [pages] = zoneSnapshot(mock).rewriteRules;
-    expect(pages?.expression).toContain('and not starts_with(http.request.uri.path, "/shop")');
-    expect(pages?.expression).toContain('and http.request.uri.path ne "/health"');
+    expect(pages?.expression).toContain('and not starts_with(lower(http.request.uri.path), "/shop")');
+    expect(pages?.expression).toContain('and lower(http.request.uri.path) ne "/health"');
     expect(mock.state.routes.get(ZONE.id)?.slice(0, 2)).toMatchObject([{ script: "shop" }, { script: "shop" }]);
 
     const again = await runPlan(planAttachDomain(ctx, HOST));
@@ -284,7 +286,12 @@ describe("the bot check slot", () => {
     for (const plan of plans) await runNextStep(plan, PLAN_START);
 
     const reports = await Promise.all(plans.map((plan) => runStep(plan, "bot-check")));
-    expect(reports.map((report) => report.outcome)).toEqual(["ran", "ran"]);
+    expect(reports.map((report) => report.outcome).toSorted()).toEqual(["busy", "ran"]);
+    const busy = reports.findIndex((report) => report.outcome === "busy");
+    expect(reports[busy]).toMatchObject({ message: BUSY_MESSAGE, requests: 0, effects: [] });
+    const retry = plans[busy];
+    if (retry === undefined) throw new Error("no plan");
+    expect(await runStep(retry, "bot-check")).toMatchObject({ outcome: "ran" });
     const [first, second] = mock.state.widgets;
     expect(first?.domains).toHaveLength(10);
     expect(second?.domains).toHaveLength(1);

@@ -299,6 +299,19 @@ describe("deployments and the publish lock", () => {
     expect(await q.acquirePublishLock(db, { deploymentId: first.id, ttlMs: 1000, now: NOW + 1001 })).toBe(true);
   });
 
+  test("the provisioning lock has one holder until it releases or expires, and the holder can renew it", async () => {
+    expect(await q.acquireProvisionLock(db, { holder: 1, ttlMs: 1000, now: NOW })).toBe(true);
+    expect(await q.acquireProvisionLock(db, { holder: 2, ttlMs: 1000, now: NOW + 999 })).toBe(false);
+    expect(await q.acquireProvisionLock(db, { holder: 1, ttlMs: 1000, now: NOW + 999 })).toBe(true);
+    expect(await q.acquireProvisionLock(db, { holder: 2, ttlMs: 1000, now: NOW + 1998 })).toBe(false);
+    expect(await q.acquireProvisionLock(db, { holder: 2, ttlMs: 1000, now: NOW + 1999 })).toBe(true);
+    expect(await q.releaseProvisionLock(db, 1)).toBe(false);
+    expect(await q.releaseProvisionLock(db, 2)).toBe(true);
+    expect(await q.acquireProvisionLock(db, { holder: 1, ttlMs: 1000, now: NOW + 2000 })).toBe(true);
+    // Rate limit windows are pruned after a day; a live lock is never that old.
+    expect(await q.pruneRateLimits(db, NOW + 2000)).toBe(0);
+  });
+
   test("a deployment finishes once; latest is by worker and status", async () => {
     const first = await q.insertDeployment(db, { worker: "sites", kind: "install", releaseVersion: "1.0.0", now: NOW });
     const second = await q.insertDeployment(db, { worker: "sites", kind: "publish", host: HOST, now: NOW + 1 });

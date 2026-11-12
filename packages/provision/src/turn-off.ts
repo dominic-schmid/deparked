@@ -14,6 +14,7 @@ import { z } from "zod";
 import { pickSenderHost } from "./attach";
 import { activeLedger, intentKey, normalizeHost, type ProvisionContext, workerNames } from "./context";
 import type { Effect, Plan, Step, StepCheck } from "./steps";
+import { wantedRoutes } from "./wanted";
 
 const previousRoute = z.object({ pattern: z.string(), script: z.string().nullable() });
 const previousMail = z.object({
@@ -34,14 +35,22 @@ function previous<T>(entry: LedgerEntry, schema: z.ZodType<T>): T {
 const refused = (error: unknown, ...statuses: number[]) =>
   error instanceof CloudflareApiError && statuses.includes(error.status);
 
-/** Something that is already gone counts as undone. */
-async function unlessGone(call: Promise<unknown>): Promise<void> {
+/** `gone` when Cloudflare answers 404: the zone or the feature no longer exists. Turn off must still finish. */
+async function orIfGone<T>(call: Promise<T>, gone: T): Promise<T> {
   try {
-    await call;
+    return await call;
   } catch (error) {
     if (!refused(error, 404)) throw error;
+    return gone;
   }
 }
+
+/** Something that is already gone counts as undone. */
+async function unlessGone(call: Promise<unknown>): Promise<void> {
+  await orIfGone(call, undefined);
+}
+
+const leftAsIs = (what: string): Effect => ({ kind: "reuse", what });
 
 function notManaged(host: string): string {
   return `${host} is not a domain Deparked manages.`;
@@ -79,8 +88,19 @@ function undoEffect(host: string, entry: LedgerEntry): Effect {
   }
 }
 
-/** An entry that was announced but never got a Cloudflare id stands for nothing that exists. */
+/** An entry with a Cloudflare id. One without was announced, but whether the create worked is unknown. */
 const exists = (entry: LedgerEntry) => entry.cfId !== null;
+
+/** What the owner has to look at by hand: Turn off cannot remove what it has no id for. */
+function unknownEffect(host: string, entry: LedgerEntry): Effect {
+  return leftAsIs(
+    `${undoEffect(host, entry).what} may still exist in Cloudflare: Deparked never learned whether creating it worked. Look for it in Cloudflare and remove it there if it is there.`,
+  );
+}
+
+function reportEffects(host: string, list: readonly LedgerEntry[]): Effect[] {
+  return list.map((entry) => (exists(entry) ? undoEffect(host, entry) : unknownEffect(host, entry)));
+}
 
 interface UndoStepInput {
   id: string;
@@ -111,7 +131,7 @@ function undoStep(input: UndoStepInput): Step {
       const pending = list.length > 0 || (await input.rowPending?.(ctx)) === true;
       return {
         status: pending ? "needed" : "done",
-        effects: list.filter(exists).map((entry) => undoEffect(host, entry)),
+        effects: reportEffects(host, list),
       };
     },
     async run(ctx) {
@@ -119,12 +139,10 @@ function undoStep(input: UndoStepInput): Step {
       const notes = await input.undo(ctx, list.filter(exists));
       for (const entry of list) await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
       await input.clearRow?.(ctx);
-      return { effects: [...list.filter(exists).map((entry) => undoEffect(host, entry)), ...notes] };
+      return { effects: [...reportEffects(host, list), ...notes] };
     },
   };
 }
-
-const leftAsIs = (what: string): Effect => ({ kind: "reuse", what });
 
 function stopEmailStep(host: string): Step {
   return undoStep({
@@ -149,9 +167,10 @@ function stopEmailStep(host: string): Step {
       for (const entry of entries) {
         const zoneId = entry.zoneId ?? "";
         // An attach that failed right after writing the entry down never turned the service on.
-        if ((await ctx.cf.email.getRouting(zoneId)).enabled) await ctx.cf.email.disableRouting(zoneId);
+        const routing = await orIfGone(ctx.cf.email.getRouting(zoneId), null);
+        if (routing?.enabled === true) await unlessGone(ctx.cf.email.disableRouting(zoneId));
         if (entry.action !== "changed") continue;
-        const present = await ctx.cf.zones.listDnsRecords(zoneId, { type: "MX", name: host });
+        const present = await orIfGone(ctx.cf.zones.listDnsRecords(zoneId, { type: "MX", name: host }), []);
         for (const record of previous(entry, previousMail).mx) {
           if (present.some((existing) => existing.name === record.name && existing.content === record.content)) {
             continue;
@@ -172,7 +191,7 @@ function stopEmailStep(host: string): Step {
             });
           } catch (error) {
             // A record Cloudflare refuses must not keep the rest of Turn off from happening.
-            if (!refused(error, 400, 409)) throw error;
+            if (!refused(error, 400, 404, 409)) throw error;
             notes.push(leftAsIs(`not put back: Cloudflare refused the mail record ${record.content}, add it by hand`));
           }
         }
@@ -281,8 +300,8 @@ function stopRulesStep(host: string): Step {
 }
 
 /**
- * A route is only touched while it is still what Deparked made of it: the same id and pattern, pointing at a
- * Deparked Worker. One the owner changed since stays as it is, one that is gone is not brought back, and a
+ * A route is only touched while it is still what Deparked made of it: the same id and pattern, pointing at the
+ * Deparked Worker that pattern goes to. One the owner changed since stays as it is, one that is gone is not brought back, and a
  * restore Cloudflare refuses is reported instead of retried forever.
  */
 function stopRoutesStep(host: string): Step {
@@ -294,14 +313,16 @@ function stopRoutesStep(host: string): Step {
     async undo(ctx, entries) {
       const notes: Effect[] = [];
       if (entries.length === 0) return notes;
-      const workers = workerNames(ctx);
+      const wanted = wantedRoutes(host, workerNames(ctx));
       const routes = new Map<string, WorkerRoute[]>();
       for (const entry of entries) {
         const zoneId = entry.zoneId ?? "";
-        if (!routes.has(zoneId)) routes.set(zoneId, await ctx.cf.zones.listRoutes(zoneId));
+        if (!routes.has(zoneId)) routes.set(zoneId, await orIfGone(ctx.cf.zones.listRoutes(zoneId), []));
         const route = routes.get(zoneId)?.find((candidate) => candidate.id === entry.cfId);
         const original = entry.action === "changed" ? previous(entry, previousRoute) : undefined;
         const pattern = original?.pattern ?? intentKey(entry) ?? route?.pattern;
+        // The one Worker Deparked pointed this pattern at; the other Deparked Worker is a change too.
+        const script = wanted.find((candidate) => candidate.pattern === pattern)?.script;
         const note = async (text: string, words: string) => {
           notes.push(leftAsIs(`left as is: ${pattern} ${words}`));
           if (original !== undefined) {
@@ -313,7 +334,7 @@ function stopRoutesStep(host: string): Step {
         };
         if (route === undefined) {
           if (original !== undefined) await note("left as is: gone", "no longer exists and was not brought back");
-        } else if (route.pattern !== pattern || (route.script !== workers.sites && route.script !== workers.admin)) {
+        } else if (route.pattern !== pattern || route.script !== script) {
           await note("left as is: changed after Deparked", "was changed after Deparked set it");
         } else if (original === undefined) {
           await unlessGone(ctx.cf.zones.deleteRoute(zoneId, route.id));

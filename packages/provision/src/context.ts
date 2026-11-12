@@ -1,4 +1,4 @@
-import type { CloudflareClient } from "@deparked/cf";
+import { CloudflareApiError, type CloudflareClient } from "@deparked/cf";
 import {
   type Db,
   getDomain,
@@ -129,7 +129,8 @@ export function wouldCreate(
  * create is announced in the ledger first (an entry without an id) and the id is filled in after the call.
  * An announcement without an id found on a retry means an earlier call may have worked without the answer
  * arriving: since it was only written while no look-alike existed, exactly one look-alike now is that
- * resource and gets the entry; none means the call never worked and it is made again.
+ * resource and gets the entry; none means the call never worked and it is made again. A create Cloudflare
+ * answers with a 4xx withdraws the announcement before the error goes on.
  */
 export async function createOnce(
   ctx: ProvisionContext,
@@ -160,7 +161,17 @@ export async function createOnce(
       previousJson: JSON.stringify({ intent: input.key }),
       now: ctx.now(),
     }));
-  const cfId = input.lookAlikes[0] ?? (await input.create());
+  let cfId = input.lookAlikes[0];
+  try {
+    cfId ??= await input.create();
+  } catch (error) {
+    // A 4xx answer means Cloudflare created nothing: an announcement left open would let a later look-alike
+    // of the owner's be adopted. Only an unknown outcome (no answer, 5xx) keeps it.
+    if (error instanceof CloudflareApiError && error.status >= 400 && error.status < 500) {
+      await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
+    }
+    throw error;
+  }
   await updateLedgerEntry(ctx.db, { id: entry.id, cfId });
   return { outcome: "created", cfId };
 }

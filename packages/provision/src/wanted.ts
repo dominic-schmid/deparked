@@ -66,10 +66,13 @@ export function pathExclusions(
  */
 export function wantedRewriteRules(host: string, excluded: readonly PathExclusion[]): RewriteRuleInput[] {
   const path = "http.request.uri.path";
+  // Without regard to case, so `/Shop` and `/shop` both stay the owner's.
+  const lower = `lower(${path})`;
   const owners = excluded
-    .map((entry) =>
-      entry.kind === "prefix" ? ` and not starts_with(${path}, "${entry.path}")` : ` and ${path} ne "${entry.path}"`,
-    )
+    .map((entry) => {
+      const owned = entry.path.toLowerCase();
+      return entry.kind === "prefix" ? ` and not starts_with(${lower}, "${owned}")` : ` and ${lower} ne "${owned}"`;
+    })
     .join("");
   return [
     {
@@ -104,24 +107,37 @@ export function wantedRedirectRules(host: string): RedirectRuleInput[] {
   ];
 }
 
-function sameValue(a: unknown, b: unknown): boolean {
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return a === b;
-  const keys = Object.keys(a);
-  return (
-    keys.length === Object.keys(b).length &&
-    keys.every((key) => sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]))
-  );
+/** True when `existing` has every field `wanted` sets, with the same value. Keys Cloudflare adds are ignored. */
+function covers(existing: unknown, wanted: unknown): boolean {
+  if (typeof wanted !== "object" || wanted === null) return existing === wanted;
+  if (typeof existing !== "object" || existing === null || Array.isArray(existing) !== Array.isArray(wanted)) {
+    return false;
+  }
+  if (Array.isArray(wanted) && wanted.length !== (existing as unknown[]).length) return false;
+  return Object.entries(wanted).every(([key, value]) => covers((existing as Record<string, unknown>)[key], value));
 }
 
-/** True when an existing rule does exactly what the wanted one does. */
+const QUOTED = /("(?:[^"\\]|\\.)*")/;
+
+/** An expression with its whitespace normalised outside quoted strings, the way Cloudflare may reformat it. */
+function canonicalExpression(expression: string): string {
+  return expression
+    .split(QUOTED)
+    .map((part, index) => (index % 2 === 1 ? part : part.replace(/\s+/g, " ").replace(/\s*([(),])\s*/g, "$1")))
+    .join("")
+    .trim();
+}
+
+/** True when an existing rule does what the wanted one does: the fields Deparked sets, as Cloudflare stores them. */
 export function sameRule(
   existing: { action?: string | undefined; expression?: string | undefined; action_parameters?: unknown },
   wanted: RewriteRuleInput | RedirectRuleInput,
 ): boolean {
   return (
     existing.action === wanted.action &&
-    existing.expression === wanted.expression &&
-    sameValue(existing.action_parameters, wanted.action_parameters)
+    existing.expression !== undefined &&
+    canonicalExpression(existing.expression) === canonicalExpression(wanted.expression) &&
+    covers(existing.action_parameters, wanted.action_parameters)
   );
 }
 
