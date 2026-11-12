@@ -12,6 +12,10 @@
       "database_name": "deparked"
     }
   ],
+  // The session-signing key (HMAC). Local dev reads it from .dev.vars; the installer sets the real one.
+  "secrets": {
+    "required": ["SESSION_KEY"]
+  },
   "observability": {
     "enabled": true
   }
