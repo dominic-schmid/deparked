@@ -116,6 +116,10 @@ export const PROBE_PERMISSION_LABELS: Readonly<Record<string, string>> = {
 /**
  * Cloudflare's Create Token page with the name and every permission filled in, for all accounts and zones. The
  * owner still scrolls down, continues, creates and copies: Cloudflare offers nothing shorter.
+ *
+ * Format: `https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=<JSON>&name=<name>&accountId=*&zoneId=all`,
+ * where `<JSON>` is `[{"key":"workers_scripts","type":"edit"},…]`, one entry per `TOKEN_PERMISSIONS` row.
+ * `accountId=*` and `zoneId=all` preselect all accounts and all zones. `permissions.test.ts` pins it.
  */
 export function tokenTemplateUrl(name = "Deparked"): string {
   const keys = JSON.stringify(TOKEN_PERMISSIONS.map(({ key, type }) => ({ key, type })));
