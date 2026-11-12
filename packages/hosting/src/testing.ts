@@ -115,7 +115,12 @@ export function createFakeHosting(options: FakeHostingOptions = {}) {
       }
       const pending = missing.length - uploaded.length;
       if (pending > 0) return { done: false, uploaded, pending, requests: 1 + batches };
-      const version = { id: id("version"), createdAt: new Date().toISOString(), files: [...input.files], headers: input.headers };
+      const version = {
+        id: id("version"),
+        createdAt: new Date().toISOString(),
+        files: [...input.files],
+        headers: input.headers,
+      };
       versions.push(version);
       liveVersionId = version.id;
       return { done: true, versionId: version.id, uploaded, requests: 3 + batches };

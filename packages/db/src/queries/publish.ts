@@ -240,7 +240,9 @@ export async function commitPublish(
       statements.push(
         db
           .insert(siteFiles)
-          .values(entry.files.slice(start, start + FILES_PER_STATEMENT).map((file) => ({ ...file, host, updatedAt: now }))),
+          .values(
+            entry.files.slice(start, start + FILES_PER_STATEMENT).map((file) => ({ ...file, host, updatedAt: now })),
+          ),
       );
     }
     if (published !== undefined) {

@@ -1,8 +1,8 @@
 import { CONFIG_VERSION, type ConfigErrors, parseConfig } from "@deparked/config";
 import {
   acquirePublishLock,
-  commitPublish,
   type ConfigHistoryEntry,
+  commitPublish,
   type Db,
   type Deployment,
   type DeploymentKind,
@@ -52,8 +52,8 @@ export type PublishContext = {
  */
 export const LOCK_TTL_MS = 5 * 60_000;
 /**
- * Rendering and hashing one lander takes about 2.5 ms of CPU once the code is warm and several times that in a
- * fresh isolate (README "Publish"), so a step renders one and stays inside Workers Free's 10 ms.
+ * Rendering and hashing one lander takes about 2 ms of CPU once the code is warm and about 14 ms the first time in
+ * a fresh process (README "Publish"), so a step renders one and stays near Workers Free's 10 ms.
  */
 export const HOSTS_PER_STEP = 1;
 /** With the three fixed requests and up to `MAX_STALE_ROUNDS` restarted upload sessions, a step stays under 50. */
@@ -183,7 +183,10 @@ async function begin(
  * Starts a publish: records it and takes the publish lock. Nothing is rendered or sent yet; call `stepPublish`
  * with the returned id until it answers `done` or `failed`.
  */
-export async function startPublish(ctx: PublishContext, input: { host?: string; kind: StartKind }): Promise<StartResult> {
+export async function startPublish(
+  ctx: PublishContext,
+  input: { host?: string; kind: StartKind },
+): Promise<StartResult> {
   const { host, kind } = input;
   if (kind === "republish-all") return begin(ctx, { kind: KIND[kind] });
 
@@ -296,7 +299,8 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
         return again.content;
       };
 
-      if (!(await holdsLock())) return await fail(ctx, deploymentId, new PublishFailure("lock-lost", LOCK_LOST), progress);
+      if (!(await holdsLock()))
+        return await fail(ctx, deploymentId, new PublishFailure("lock-lost", LOCK_LOST), progress);
       let result: Awaited<ReturnType<HostingAdapter["publish"]>>;
       try {
         result = await ctx.hosting.publish({
@@ -327,7 +331,8 @@ export async function stepPublish(ctx: PublishContext, deploymentId: number): Pr
       }
 
       // The version is live. If the lock is gone, whoever took it publishes the manifest the database describes.
-      if (!(await holdsLock())) return await fail(ctx, deploymentId, new PublishFailure("lock-lost", LOCK_LOST), progress);
+      if (!(await holdsLock()))
+        return await fail(ctx, deploymentId, new PublishFailure("lock-lost", LOCK_LOST), progress);
       await commitPublish(db, {
         deploymentId,
         versionId: result.versionId,
@@ -367,7 +372,8 @@ export async function rollbackPublish(
     const earlier = await getDeployment(ctx.db, target.deploymentId);
     versionId = earlier?.worker === "sites" && earlier.status === "done" ? earlier.cfVersionId : null;
   }
-  if (versionId === null) return { ok: false, reason: "invalid", message: "This publish has no version to go back to." };
+  if (versionId === null)
+    return { ok: false, reason: "invalid", message: "This publish has no version to go back to." };
 
   const begun = await begin(ctx, { kind: "rollback" });
   if (!begun.ok) return begun;

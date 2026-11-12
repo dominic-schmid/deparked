@@ -70,7 +70,12 @@ beforeEach(async () => {
       return content;
     },
   };
-  await insertTurnstileWidget(db, { sitekey: SITEKEY, name: "deparked-1", secretName: "TURNSTILE_SECRET_1", now: time });
+  await insertTurnstileWidget(db, {
+    sitekey: SITEKEY,
+    name: "deparked-1",
+    secretName: "TURNSTILE_SECRET_1",
+    now: time,
+  });
   await replaceSiteFiles(db, {
     host: null,
     files: [
@@ -155,7 +160,12 @@ describe("publishing a draft", () => {
     expect(await listConfigHistory(db, { host: A })).toHaveLength(1);
     expect((await getDomain(db, A))?.status).toBe("live");
     const deployment = await getDeployment(db, 1);
-    expect(deployment).toMatchObject({ status: "done", kind: "publish", host: A, cfVersionId: hosting.versions[0]?.id });
+    expect(deployment).toMatchObject({
+      status: "done",
+      kind: "publish",
+      host: A,
+      cfVersionId: hosting.versions[0]?.id,
+    });
     expect(await getPublishLock(db)).toBeUndefined();
     expect(await getPublishState(ctx, A)).toMatchObject({ draftDiffers: false, lock: null, outOfSync: false });
   });
@@ -208,7 +218,11 @@ describe("publishing a draft", () => {
     const steps = await publish(B);
 
     expect(steps.at(-1)?.progress.uploaded).toBe(3);
-    expect(uploadedIn(1).sort()).toEqual([`/sites/${B}/index.html`, `/sites/${B}/robots.txt`, `/sites/${B}/sitemap.xml`]);
+    expect(uploadedIn(1).sort()).toEqual([
+      `/sites/${B}/index.html`,
+      `/sites/${B}/robots.txt`,
+      `/sites/${B}/sitemap.xml`,
+    ]);
     expect(releaseRequests).toEqual([]);
     expect(hosting.liveFiles()).toHaveLength(7);
     await expectInSync();
@@ -225,6 +239,22 @@ describe("publishing a draft", () => {
     expect(steps.at(-1)?.progress).toMatchObject({ uploaded: 1, requests: 4 });
     expect(uploadedIn(1)).toEqual([`/sites/${A}/index.html`]);
     expect(await listConfigHistory(db, { host: A })).toHaveLength(2);
+  });
+
+  it("publishing an unchanged draft again uploads nothing and still deploys the full manifest", async () => {
+    await addDomain(A);
+    await addDomain(B);
+    await publish(A);
+    await publish(B);
+    releaseRequests.length = 0;
+
+    const steps = await publish(A);
+
+    expect(steps.at(-1)).toMatchObject({ status: "done", progress: { uploaded: 0, pending: 0 } });
+    expect(uploadedIn(2)).toEqual([]);
+    expect(hosting.liveFiles()).toHaveLength(7);
+    expect(releaseRequests).toEqual([]);
+    await expectInSync();
   });
 
   it("continues over several steps when the upload does not fit in one", async () => {
@@ -256,7 +286,10 @@ describe("publishing a draft", () => {
   it("does not start without a domain or without a draft", async () => {
     await addDomain(A, null);
 
-    expect(await startPublish(ctx, { host: "nobody.example", kind: "draft" })).toMatchObject({ ok: false, reason: "invalid" });
+    expect(await startPublish(ctx, { host: "nobody.example", kind: "draft" })).toMatchObject({
+      ok: false,
+      reason: "invalid",
+    });
     expect(await startPublish(ctx, { host: A, kind: "draft" })).toMatchObject({ ok: false, reason: "invalid" });
     expect(await getDeployment(db, 1)).toBeUndefined();
   });
@@ -555,7 +588,10 @@ describe("revert and rollback", () => {
     await publish(A);
     hosting.rejectCredentials("rollback");
 
-    expect(await rollbackPublish(ctx, { deploymentId: 1 })).toMatchObject({ ok: false, reason: "credentials-rejected" });
+    expect(await rollbackPublish(ctx, { deploymentId: 1 })).toMatchObject({
+      ok: false,
+      reason: "credentials-rejected",
+    });
     expect(await rollbackPublish(ctx, { versionId: "gone" })).toMatchObject({ ok: false, reason: "hosting" });
     expect(await rollbackPublish(ctx, { deploymentId: 99 })).toMatchObject({ ok: false, reason: "invalid" });
     expect(await getPublishLock(db)).toBeUndefined();

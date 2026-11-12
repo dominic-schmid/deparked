@@ -15,7 +15,10 @@ export function createReleaseFileFetcher(options: {
   const fetchFile = options.fetch ?? ((url: string) => fetch(url));
   return async (path) => {
     if (options.baseUrl === null) {
-      throw new PublishFailure("invalid", `Cloudflare asked for ${path} again, but no release is installed to get it from.`);
+      throw new PublishFailure(
+        "invalid",
+        `Cloudflare asked for ${path} again, but no release is installed to get it from.`,
+      );
     }
     const response = await fetchFile(`${options.baseUrl}${path}`);
     if (!response.ok) {
