@@ -9,6 +9,7 @@ export {
   TEST_ACCOUNT_ID,
   TEST_PASSWORD,
   TEST_RELEASE,
+  TEST_RELEASE_NEXT,
   TEST_SESSION_KEY,
   TEST_TOKEN,
   TURNSTILE_DUMMY_SITEKEY,
@@ -27,6 +28,10 @@ interface TestFixtures {
   hostUrl: Stack["hostUrl"];
   writeSiteFile: Stack["writeSiteFile"];
   sentMail: Stack["sentMail"];
+  /** The SHA-256 of each built release's release.json, by version. */
+  releases: Stack["releases"];
+  /** What the admin finds as the newest release on "GitHub". None until set; reset before every test. */
+  setLatestRelease: Stack["setLatestRelease"];
   /** Runs before every test on its own. Call it inside a test to start over half way. */
   resetState: Stack["reset"];
   /**
@@ -99,5 +104,7 @@ export const test = base.extend<TestFixtures, { stack: Stack }>({
   hostUrl: ({ stack }, use) => use(stack.hostUrl),
   writeSiteFile: ({ stack }, use) => use(stack.writeSiteFile),
   sentMail: ({ stack }, use) => use(stack.sentMail),
+  releases: ({ stack }, use) => use(stack.releases),
+  setLatestRelease: ({ stack }, use) => use(stack.setLatestRelease),
   resetState: ({ stack }, use) => use(stack.reset),
 });

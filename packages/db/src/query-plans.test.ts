@@ -123,10 +123,13 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   releaseProvisionLock: [[1]],
   getWorkspaceMark: [["offers-exported"]],
   setWorkspaceMark: [[{ mark: "setup-checklist-dismissed", now: NOW }]],
+  getReleaseState: [[]],
+  updateReleaseState: [[{ latestSha256: "a".repeat(64) }]],
+  appliedSchema: [[]],
 };
 
 // At most one row each, by a CHECK constraint.
-const SINGLE_ROW_TABLES = ["workspace", "install_state", "publish_lock"];
+const SINGLE_ROW_TABLES = ["workspace", "install_state", "publish_lock", "release_state"];
 
 // Queries whose job is to read a whole table that is small by a hard outside limit. Nothing else may scan.
 const FULL_READS: Partial<Record<keyof Queries, string>> = {

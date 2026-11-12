@@ -1,7 +1,7 @@
 import { readAtMost } from "@deparked/provision";
 import type { CheckRequest, FinishRequest, StepRequest } from "./api";
 import type { Env } from "./server/config";
-import { check, finish, status, step } from "./server/install";
+import { check, finish, rollback, status, step } from "./server/install";
 
 const NO_STORE = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const MAX_BODY = 4096;
@@ -79,13 +79,14 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
       const input: CheckRequest = account === null ? { token: pasted } : { token: pasted, accountId: account };
       return json(await check(env, input, clientIp));
     }
-    case "/api/step": {
+    case "/api/step":
+    case "/api/rollback": {
       const next = body.next;
       if (account === null || typeof next !== "number" || !Number.isInteger(next) || next < 0 || next > 20) {
         return refuse(400, "The request is missing the account or the step.");
       }
       const input: StepRequest = { token: pasted, accountId: account, next };
-      return json(await step(env, input, clientIp));
+      return json(await (url.pathname === "/api/step" ? step : rollback)(env, input, clientIp));
     }
     case "/api/finish": {
       if (account === null) return refuse(400, "The request is missing the account.");

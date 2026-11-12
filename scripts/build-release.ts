@@ -155,6 +155,8 @@ const release = {
   format: FORMAT,
   version,
   minInstallerVersion: MIN_INSTALLER_VERSION,
+  // The database schema this release's code runs on: its last migration. Rollback refuses a database that is newer.
+  schema: files.filter((file) => file.pack === "migrations").at(-1)?.path,
   catalogFilesUrl: filesUrl,
   tokenPermissions: await import("../packages/cf/src/permissions.ts").then(({ TOKEN_PERMISSIONS }) =>
     TOKEN_PERMISSIONS.map(({ key, type }) => ({ key, type })),

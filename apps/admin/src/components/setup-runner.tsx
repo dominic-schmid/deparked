@@ -11,7 +11,7 @@ import { retryWait } from "./setup-retry";
 
 export type StepRun = (state: SetupState) => Promise<{ ok: true; value: StepView } | SetupFailure>;
 
-type RowStatus = "pending" | "running" | "waiting" | "done" | "skipped" | "failed" | "blocked";
+export type RowStatus = "pending" | "running" | "waiting" | "done" | "skipped" | "failed" | "blocked";
 
 type Row = { id: string; title: string; status: RowStatus; effects: SetupEffect[] };
 
@@ -30,7 +30,7 @@ const STATUS_WORDS: Record<RowStatus, string> = {
   blocked: "Needs you",
 };
 
-function StatusIcon({ status }: { status: RowStatus }) {
+export function StatusIcon({ status }: { status: RowStatus }) {
   const className = "size-4 shrink-0";
   switch (status) {
     case "pending":
