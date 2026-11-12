@@ -1,0 +1,9 @@
+# Catalog files are named by the hash of their content, so a path never changes what it serves.
+# catalog.json and the licence texts keep their names and are left out.
+/catalog/backgrounds/*
+  Cache-Control: public, max-age=31536000, immutable
+/catalog/fonts/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+/catalog/islands/*
+  Cache-Control: public, max-age=31536000, immutable
