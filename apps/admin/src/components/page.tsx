@@ -67,7 +67,10 @@ export const tabLinkClass = TAB;
 
 export function TabNav(props: { label: string; children: ReactNode }) {
   return (
-    <nav aria-label={props.label} className="-mx-1 mb-6 flex flex-wrap gap-1 border-b px-1 pb-2">
+    <nav
+      aria-label={props.label}
+      className="-mx-1 mb-6 flex gap-1 overflow-x-auto border-b px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {props.children}
     </nav>
   );

@@ -67,6 +67,7 @@ test("a rejected token leaves the page readable, says what to fix, and is not re
     domain: { host: "example.com", zoneId: "zone-1", analyticsSiteTag: "e2e-rejected" },
     now,
   });
+  await insertDomain(data, { domain: { host: "example.org", zoneId: "zone-2", status: "live" }, now });
   mock.failNext({ route: "analytics.graphql", status: 403, code: 10000, message: "Authentication error" });
 
   const page = await login();
@@ -78,6 +79,10 @@ test("a rejected token leaves the page readable, says what to fix, and is not re
     "/admin/settings/cloudflare",
   );
   await expect(page.getByRole("row").filter({ hasText: "example.com" })).toContainText("Unavailable");
+  // A domain without a site is not set up, whether or not the read worked, and says how to fix it.
+  const bare = page.getByRole("row").filter({ hasText: "example.org" });
+  await expect(bare).toContainText("Not set up");
+  await expect(bare.getByRole("link", { name: "Set it up" })).toHaveAttribute("href", "/admin/add?host=example.org");
 
   mock.failNext({ route: "analytics.graphql", status: 503, times: 3 });
   await page.getByRole("row").filter({ hasText: "example.com" }).getByRole("link", { name: "example.com" }).click();
@@ -88,4 +93,27 @@ test("a rejected token leaves the page readable, says what to fix, and is not re
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByText("Cloudflare did not answer in time")).toHaveCount(0);
   await expect(page.getByText("No visits in the last 30 days")).toBeVisible();
+});
+
+test("more offers than counted visits reads >100%, with the reason a click away", async ({ login, db, mock }) => {
+  const data = createDb(db.d1);
+  const now = Date.now();
+  await insertDomain(data, { domain: { host: "example.com", zoneId: "zone-1", analyticsSiteTag: "e2e-over" }, now });
+  await setDomainStatus(data, { host: "example.com", status: "live", now });
+  const offer = { host: "example.com", amountMinor: 100, currency: "USD", name: "Ada", email: "buyer@example.net" };
+  await insertOffer(data, { offer, now });
+  await insertOffer(data, { offer, now: now + 1 });
+  mock.state.analytics.push({
+    siteTag: "e2e-over",
+    host: "example.com",
+    referrer: "",
+    country: "Germany",
+    date: day(0),
+    visits: 1,
+  });
+
+  const page = await login();
+  const row = page.getByRole("row").filter({ hasText: "example.com" });
+  await row.getByRole("button", { name: /^>100%.*why/ }).click();
+  await expect(page.getByRole("dialog")).toContainText("does not count visitors who block its script");
 });

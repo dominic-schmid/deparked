@@ -8,7 +8,7 @@ import { Switch } from "@deparked/ui/switch";
 import { Textarea } from "@deparked/ui/textarea";
 import { type ReactNode, useId } from "react";
 import type { BackgroundOption, VariantOption } from "../../server/editor/editor";
-import type { EditorForm, FormField } from "./form";
+import { type EditorForm, type FormField, variantLabel } from "./form";
 
 type Errors = Partial<Record<FormField | "form", string>>;
 
@@ -31,8 +31,6 @@ const currencyNames = (() => {
     return null;
   }
 })();
-
-const variantLabel = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
 
 function Problem({ id, message }: { id: string; message: string | undefined }) {
   if (message === undefined) return null;

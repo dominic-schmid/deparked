@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
-import { createDb } from "@deparked/db";
+import { createDb, setWorkspaceMark } from "@deparked/db";
 import { createFileRoute } from "@tanstack/react-router";
 import { exportFilename, exportOffers, offerFilterSchema, offersCsv } from "../../server/offers";
 import { requireSession } from "../../server/require-session";
 
-// The inbox's "Export CSV": every offer the filter (`?host=`, `?status=`) matches, as a download.
+// The inbox's "Export CSV": every offer the filter (`?host=`, `?status=`) matches, as a download. An unfiltered,
+// complete one is recorded as the copy Uninstall asks for.
 export const Route = createFileRoute("/admin/offers.csv")({
   server: {
     handlers: {
@@ -16,11 +17,18 @@ export const Route = createFileRoute("/admin/offers.csv")({
           status: search.get("status") ?? undefined,
         });
         if (!filter.success) return new Response("Bad request", { status: 400 });
-        const data = await exportOffers(createDb(env.DB), filter.data);
+        const db = createDb(env.DB);
+        // Taken before the read: an offer that arrives while it runs is not in this file, so it is newer.
+        const startedAt = Date.now();
+        const data = await exportOffers(db, filter.data);
+        // A download of every offer is the copy Uninstall asks for.
+        if (filter.data.host === undefined && filter.data.status === undefined && !data.truncated) {
+          await setWorkspaceMark(db, { mark: "offers-exported", now: startedAt });
+        }
         return new Response(offersCsv(data), {
           headers: {
             "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": `attachment; filename="${exportFilename(filter.data, Date.now())}"`,
+            "Content-Disposition": `attachment; filename="${exportFilename(filter.data, startedAt)}"`,
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
             ...(data.truncated ? { "X-Deparked-Truncated": "1" } : {}),

@@ -1,6 +1,6 @@
-import { asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import type { Db } from "../client";
-import { config, type Domain, type DomainStatus, domains, turnstileWidgets } from "../schema";
+import { config, type Domain, type DomainStatus, domains, notifyAddresses, turnstileWidgets } from "../schema";
 
 /** Every domain, by host. A full read of `domains` on purpose: the table holds at most a few hundred rows. */
 export function listDomains(db: Db, options: { includeRemoved?: boolean } = {}): Promise<Domain[]> {
@@ -83,6 +83,30 @@ export async function setDomainStatus(
     .where(eq(domains.host, input.host))
     .returning();
   return rows[0];
+}
+
+/**
+ * Gives `email` to every domain (removed ones aside) that has no notify address, in one statement: a domain that
+ * got one in the meantime keeps it. With `replaceUnverified`, also to every domain whose address is not verified:
+ * only a verified address can be picked by hand, so those were given by default. Returns the hosts that got it.
+ */
+export async function assignMissingNotifyEmail(
+  db: Db,
+  input: { email: string; replaceUnverified?: boolean; now: number },
+): Promise<string[]> {
+  const unverified = db
+    .select({ email: notifyAddresses.email })
+    .from(notifyAddresses)
+    .where(isNull(notifyAddresses.verifiedAt));
+  const without = input.replaceUnverified
+    ? or(isNull(domains.notifyEmail), inArray(domains.notifyEmail, unverified))
+    : isNull(domains.notifyEmail);
+  const rows = await db
+    .update(domains)
+    .set({ notifyEmail: input.email, updatedAt: input.now })
+    .where(and(without, ne(domains.status, "removed")))
+    .returning({ host: domains.host });
+  return rows.map((row) => row.host);
 }
 
 export type OfferTarget = {

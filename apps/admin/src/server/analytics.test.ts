@@ -10,6 +10,7 @@ import {
   loadDomainAnalytics,
   loadOverviewVisits,
 } from "./analytics";
+import { noSiteReason, type OverviewVisits, visitsCellState } from "./analytics-shape";
 import { HOST, NOW, seed } from "./test-seed";
 
 const DAY = 86_400_000;
@@ -239,7 +240,7 @@ describe("domain analytics", () => {
     });
     expect(await loadDomainAnalytics(db, source, HOST, NOW)).toEqual({
       offers30: 1,
-      visits: { state: "not-set-up" },
+      visits: { state: "not-set-up", reason: "missing" },
     });
   });
 
@@ -260,5 +261,36 @@ describe("domain analytics", () => {
     await insertDomain(db, { domain: { host: "gone.example", zoneId: "z", status: "removed" }, now: NOW });
     expect(await loadDomainAnalytics(db, source, "unknown.example", NOW)).toBeNull();
     expect(await loadDomainAnalytics(db, source, "gone.example", NOW)).toBeNull();
+  });
+});
+
+describe("what a domain's visits cell says", () => {
+  const ok = (last30: number): OverviewVisits => ({
+    ok: true,
+    byHost: { [HOST]: { last7: last30, last30, daily: [last30] } },
+  });
+  const failed: OverviewVisits = { ok: false, problem: { message: "Down", credentials: false } };
+
+  test("a domain without a site is not set up, with the reason, even when reading failed", () => {
+    expect(visitsCellState({ host: HOST, noSite: "missing" }, failed)).toEqual({
+      kind: "not-set-up",
+      reason: "missing",
+    });
+    expect(visitsCellState({ host: HOST, noSite: "off" }, ok(3))).toEqual({ kind: "not-set-up", reason: "off" });
+  });
+
+  test("unavailable only when the read failed", () => {
+    expect(visitsCellState({ host: HOST, noSite: null }, failed)).toEqual({ kind: "unavailable" });
+  });
+
+  test("a new domain without visits has none yet, and one with visits shows them", () => {
+    expect(visitsCellState({ host: HOST, noSite: null }, ok(0))).toEqual({ kind: "no-visits" });
+    expect(visitsCellState({ host: HOST, noSite: null }, ok(12))).toMatchObject({ kind: "ok" });
+  });
+
+  test("why a site is missing follows the domain's state", () => {
+    expect(noSiteReason({ status: "live", turnedOffAt: null })).toBe("missing");
+    expect(noSiteReason({ status: "off", turnedOffAt: null })).toBe("adding");
+    expect(noSiteReason({ status: "off", turnedOffAt: NOW })).toBe("off");
   });
 });

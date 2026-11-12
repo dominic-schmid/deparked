@@ -5,6 +5,7 @@ import {
   DAYS,
   type DomainAnalytics,
   type HostVisits,
+  noSiteReason,
   type OverviewVisits,
 } from "./analytics-shape";
 
@@ -160,7 +161,9 @@ export async function loadDomainAnalytics(
   if (domain === undefined || domain.status === "removed") return null;
   const [stats] = await offerStatsForHosts(db, [host], rangeStart(now));
   const offers30 = stats?.recentCount ?? 0;
-  if (domain.analyticsSiteTag === null) return { offers30, visits: { state: "not-set-up" } };
+  if (domain.analyticsSiteTag === null) {
+    return { offers30, visits: { state: "not-set-up", reason: noSiteReason(domain) } };
+  }
 
   const days = lastDays(now);
   const result = await readReport(source, [{ host, siteId: domain.analyticsSiteTag }], days);

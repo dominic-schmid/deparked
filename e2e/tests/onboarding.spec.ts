@@ -40,7 +40,11 @@ test("a rejected token points to Replace token", async ({ login, mock, urls }) =
   );
 });
 
-test("going on unverified, then skipping the domain, lands on the empty overview", async ({ login, urls }) => {
+test("going on unverified, then skipping the domain, lands on the overview with the steps left", async ({
+  login,
+  mock,
+  urls,
+}) => {
   const page = await login();
   await page.goto(`${urls.admin}/admin/welcome`);
   await page.getByLabel("Email address").fill(OWNER);
@@ -55,6 +59,23 @@ test("going on unverified, then skipping the domain, lands on the empty overview
   await page.getByRole("link", { name: "Skip for now" }).click();
   await page.waitForURL(`${urls.admin}/admin`);
   await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
+
+  // The steps left wait on the overview, with their real state; verifying ticks one off there.
+  const steps = page.getByRole("listitem").filter({ hasText: /to do|done/ });
+  await expect(page.getByRole("heading", { name: "Finish setting up" })).toBeVisible();
+  await expect(steps.filter({ hasText: "Add an address for offers" })).toContainText("(done)");
+  await expect(steps.filter({ hasText: "Verify the address" })).toContainText(OWNER);
+  mock.verifyAddress(OWNER);
+  await steps.filter({ hasText: "Verify the address" }).getByRole("button", { name: "Check again" }).click();
+  await expect(steps.filter({ hasText: "Verify the address" })).toContainText("(done)");
+  await expect(page.getByText("2 of 4 done", { exact: false })).toBeVisible();
+
+  // Hidden for good.
+  await page.getByRole("button", { name: "Hide" }).click();
+  await expect(page.getByRole("heading", { name: "Finish setting up" })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Finish setting up" })).toHaveCount(0);
 });
 
 test("when the address becomes verified it is announced and focus stays in the page", async ({ login, mock, urls }) => {

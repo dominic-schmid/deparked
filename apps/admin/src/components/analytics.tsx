@@ -1,5 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
 import { Button } from "@deparked/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@deparked/ui/popover";
 import { SparkChart } from "@deparked/ui/ruixen/spark-chart";
 import { Link, useRouter } from "@tanstack/react-router";
 import type { AnalyticsProblem } from "../server/analytics-shape";
@@ -25,6 +26,24 @@ export function formatConversion(offers: number, visits: number): string | null 
   if (visits === 0) return null;
   if (offers > visits) return ">100%";
   return new Intl.NumberFormat(LOCALE, { style: "percent", maximumFractionDigits: 1 }).format(offers / visits);
+}
+
+/** Why more offers than visits can happen, for the ">100%" the conversion shows then. */
+export const OVER_100 =
+  "More offers than counted visits. Web Analytics does not count visitors who block its script, and an offer can come from a visit counted on another day.";
+
+/** A conversion figure. ">100%" opens a short explanation, by click, tap or keyboard. */
+export function ConversionValue({ value }: { value: string }) {
+  if (value !== ">100%") return <span className="tabular-nums">{value}</span>;
+  return (
+    <Popover>
+      <PopoverTrigger className="cursor-help rounded-sm tabular-nums underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        {value}
+        <span className="sr-only">, why?</span>
+      </PopoverTrigger>
+      <PopoverContent className="text-sm text-pretty">{OVER_100}</PopoverContent>
+    </Popover>
+  );
 }
 
 /** The small line in a domain's row. Decorative: the counts next to it are its text. */

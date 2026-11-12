@@ -13,11 +13,13 @@ import {
 import { Badge } from "@deparked/ui/badge";
 import { Button } from "@deparked/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
+import { cn } from "@deparked/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { LoaderCircle } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Info, LoaderCircle } from "lucide-react";
+import { type Ref, useState } from "react";
 import type { EditorPublishState, HistoryItem } from "../../server/editor/editor";
 import { RelativeTime } from "../time";
+import type { ChangeValue, FieldChange } from "./form";
 import type { PublishOutcome } from "./publish-loop";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "invalid";
@@ -76,7 +78,14 @@ const linkClass =
 function Outcome(props: { view: PublishView; host: string; onFollow: () => void }) {
   const { view } = props;
   if (view.phase === "idle") return null;
-  if (view.phase === "notice") return <p className="text-sm">{view.text}</p>;
+  if (view.phase === "notice") {
+    return (
+      <p className="flex items-start gap-2 text-sm">
+        <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <span className="[overflow-wrap:anywhere]">{view.text}</span>
+      </p>
+    );
+  }
   if (view.phase === "running" || view.phase === "following") {
     return (
       <p className="flex items-start gap-2 text-sm">
@@ -131,12 +140,59 @@ function Outcome(props: { view: PublishView; host: string; onFollow: () => void 
   );
 }
 
+function Value({ value, old }: { value: ChangeValue; old?: boolean }) {
+  return (
+    <span
+      title={value.full}
+      className={cn(
+        "inline-flex min-w-0 items-center gap-1.5",
+        old && "text-muted-foreground line-through decoration-muted-foreground/50",
+      )}
+    >
+      {value.colors?.map((color) => (
+        <span
+          key={color}
+          aria-hidden="true"
+          className="size-3.5 shrink-0 rounded-[4px] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.15)]"
+          style={{ backgroundColor: color }}
+        />
+      ))}
+      <span className="min-w-0 [overflow-wrap:anywhere]">{value.text}</span>
+    </span>
+  );
+}
+
+/** "Headline: “Old” → “New”", one line per field Publish would change. */
+function ChangeList({ changes }: { changes: FieldChange[] }) {
+  return (
+    <div className="mt-1 text-sm">
+      <p className="font-medium">Publish changes {changes.length === 1 ? "1 field" : `${changes.length} fields`}:</p>
+      <ul className="mt-1.5 flex flex-col gap-1.5">
+        {changes.map((change) => (
+          <li key={change.label} className="grid grid-cols-1 gap-x-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
+            <span className="text-muted-foreground">{change.label}</span>
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="sr-only">from</span>
+              <Value value={change.from} old />
+              <ArrowRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="sr-only">to</span>
+              <Value value={change.to} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function PublishBar(props: {
   host: string;
   state: EditorPublishState;
   now: number;
   /** Null while the form is invalid: then nothing can be compared. */
   changes: string[] | null;
+  /** The same changes, old to new; null while nothing is live or the form is invalid. */
+  diff: FieldChange[] | null;
   hasLive: boolean;
   canPublish: boolean;
   view: PublishView;
@@ -144,6 +200,7 @@ export function PublishBar(props: {
   onPublish: () => void;
   onFollow: () => void;
   onResetToLive: () => void;
+  publishRef?: Ref<HTMLButtonElement>;
 }) {
   const [confirmReset, setConfirmReset] = useState(false);
   const busy = props.view.phase === "running" || props.view.phase === "following";
@@ -164,15 +221,11 @@ export function PublishBar(props: {
                   Last published <RelativeTime time={state.publishedAt} now={props.now} />.
                 </>
               )}{" "}
-              {props.changes === null ? null : props.changes.length === 0 ? (
+              {props.changes?.length === 0 ? (
                 <span className="text-muted-foreground">The draft matches the live page.</span>
-              ) : props.hasLive ? (
-                <span>
-                  <span className="font-medium">Unpublished changes:</span>{" "}
-                  <span className="text-muted-foreground">{props.changes.join(", ")}.</span>
-                </span>
               ) : null}
             </p>
+            {props.diff !== null && props.diff.length > 0 ? <ChangeList changes={props.diff} /> : null}
             <SaveState {...props.save} />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -182,6 +235,7 @@ export function PublishBar(props: {
               </Button>
             ) : null}
             <Button
+              ref={props.publishRef}
               onClick={props.onPublish}
               disabled={busy || !props.canPublish}
               aria-describedby={props.canPublish ? undefined : "publish-blocked"}

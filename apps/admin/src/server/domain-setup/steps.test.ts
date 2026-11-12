@@ -4,6 +4,7 @@ import {
   type Db,
   getDomain,
   insertDeployment,
+  insertNotifyAddress,
   listSiteFilesByHost,
   replaceSiteFiles,
   saveDraft,
@@ -110,6 +111,12 @@ describe("adding a domain", () => {
     expect(await listSiteFilesByHost(db, HOST)).toHaveLength(3);
     expect((await getDomain(db, HOST))?.status).toBe("placeholder");
     expect(zoneRoutes().length).toBeGreaterThan(0);
+  });
+
+  it("gives the domain the only notify address once it is added, pending as it is", async () => {
+    await insertNotifyAddress(db, { email: "owner@example.com", now: clock });
+    await drive("attach");
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe("owner@example.com");
   });
 
   it("a publish that needs several requests answers `working` and continues where it stopped", async () => {
@@ -237,7 +244,7 @@ describe("turning a domain off and removing it", () => {
 
     const view = await takeOffStep(deps, { change: "turn-off", host: HOST, state: takeDown });
     expect(view).toMatchObject({ outcome: "blocked", state: takeDown });
-    expect(view.message).toContain("stopped half-way");
+    expect(view.message).toContain("put settings back in Cloudflare while it was being turned off");
     expect(livePaths()).toContain(`/sites/${HOST}/index.html`);
 
     await drive("turn-off");

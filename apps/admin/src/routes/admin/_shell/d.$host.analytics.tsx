@@ -1,9 +1,11 @@
+import { Button } from "@deparked/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
 import { SparkChart } from "@deparked/ui/ruixen/spark-chart";
-import { createFileRoute, notFound } from "@tanstack/react-router";
-import { AnalyticsProblemAlert, formatConversion, formatCount } from "../../../components/analytics";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+import { AnalyticsProblemAlert, ConversionValue, formatConversion, formatCount } from "../../../components/analytics";
 import { PageError, PagePending } from "../../../components/page";
-import { DAYS, type DomainVisits } from "../../../server/analytics-shape";
+import { DAYS, type DomainVisits, type NoSiteReason } from "../../../server/analytics-shape";
 import { getDomainAnalytics } from "../../../server/domains.functions";
 
 export const Route = createFileRoute("/admin/_shell/d/$host/analytics")({
@@ -24,7 +26,7 @@ const DATE = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", tim
 const formatDate = (date: string) => DATE.format(Date.parse(`${date}T00:00:00Z`));
 
 /** `null`: not known right now (no visits to count or divide by). */
-function Stat({ label, value }: { label: string; value: string | null }) {
+function Stat({ label, value }: { label: string; value: ReactNode | null }) {
   return (
     <div className="min-w-0 rounded-xl border bg-card p-4">
       <dt className="text-sm text-muted-foreground">{label}</dt>
@@ -50,7 +52,10 @@ function Stats({ visits, offers30 }: { visits: DomainVisits; offers30: number })
       <Stat label="Visits, 7 days" value={ok === null ? null : formatCount(ok.last7)} />
       <Stat label={`Visits, ${DAYS} days`} value={ok === null ? null : formatCount(ok.last30)} />
       <Stat label={`Offers, ${DAYS} days`} value={formatCount(offers30)} />
-      <Stat label={`Conversion, ${DAYS} days`} value={conversion} />
+      <Stat
+        label={`Conversion, ${DAYS} days`}
+        value={conversion === null ? null : <ConversionValue value={conversion} />}
+      />
     </dl>
   );
 }
@@ -153,24 +158,52 @@ function TopList(props: { title: string; empty: string; rows: { label: string; v
   );
 }
 
+const NOT_SET_UP: Record<NoSiteReason, { title: string; text: string }> = {
+  missing: {
+    title: "Visits are not counted yet",
+    text: "This domain has no Cloudflare Web Analytics site. Setting the domain up again adds the missing site and changes nothing else. Offers are counted either way.",
+  },
+  adding: {
+    title: "Visits are counted once the domain is added",
+    text: "Adding this domain stopped before its Web Analytics site was made. Finish adding it to start counting visits. Offers are counted either way.",
+  },
+  off: {
+    title: "Visits are not counted while the domain is off",
+    text: "Turning the domain off removed its Web Analytics site. Turning it on again starts counting from that day.",
+  },
+};
+
+function NotSetUp({ host, reason }: { host: string; reason: NoSiteReason }) {
+  const copy = NOT_SET_UP[reason];
+  return (
+    <Card className="mb-6 max-w-xl">
+      <CardHeader>
+        <CardTitle>
+          <h2>{copy.title}</h2>
+        </CardTitle>
+        <CardDescription>{copy.text}</CardDescription>
+      </CardHeader>
+      {/* Adding or turning on is offered by the domain's own notice and Settings; only a missing site is fixed here. */}
+      {reason === "missing" ? (
+        <CardContent>
+          <Button asChild variant="outline">
+            <Link to="/admin/add" search={{ host }}>
+              Set up visit counting
+            </Link>
+          </Button>
+        </CardContent>
+      ) : null}
+    </Card>
+  );
+}
+
 function DomainAnalyticsPage() {
   const { visits, offers30 } = Route.useLoaderData();
+  const { host } = Route.useParams();
   return (
     <>
       {visits.state === "error" ? <AnalyticsProblemAlert problem={visits.problem} /> : null}
-      {visits.state === "not-set-up" ? (
-        <Card className="mb-6 max-w-xl">
-          <CardHeader>
-            <CardTitle>
-              <h2>Visits are not counted yet</h2>
-            </CardTitle>
-            <CardDescription>
-              This domain has no Cloudflare Web Analytics site yet. Visits are counted from the day Deparked sets one up
-              for it. Offers are counted either way.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      ) : null}
+      {visits.state === "not-set-up" ? <NotSetUp host={host} reason={visits.reason} /> : null}
       <Stats visits={visits} offers30={offers30} />
       {visits.state === "ok" ? (
         <>

@@ -47,33 +47,39 @@ function NotifyAddressesPage() {
   const resend = useServerFn(resendNotify);
   const remove = useServerFn(removeNotify);
   const check = useServerFn(checkNotify);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<NotifyResult | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  /** The last answer, and the address row it belongs to (null: the whole list). */
+  const [result, setResult] = useState<{ for: string | null; answer: NotifyResult } | null>(null);
   const [email, setEmail] = useState("");
   const emailId = useId();
 
-  /** One action at a time; whatever it answers is shown, and the list is read again. */
-  async function run(action: () => Promise<NotifyResult>): Promise<boolean> {
-    if (busy) return false;
-    setBusy(true);
+  /**
+   * One action at a time; whatever it answers is shown next to what it was about, and the list is read again.
+   * `key` names the busy control: an address, "check" or "add".
+   */
+  async function run(key: string, about: string | null, action: () => Promise<NotifyResult>): Promise<boolean> {
+    if (busy !== null) return false;
+    setBusy(key);
     setResult(null);
     try {
       const answer = await action();
-      setResult(answer);
+      setResult({ for: about, answer });
       await router.invalidate();
       return answer.ok;
     } catch {
-      setResult(FAILED);
+      setResult({ for: about, answer: FAILED });
       return false;
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function onAdd(event: FormEvent) {
     event.preventDefault();
-    if (await run(() => add({ data: { email } }))) setEmail("");
+    if (await run("add", null, () => add({ data: { email } }))) setEmail("");
   }
+
+  const listResult = result !== null && result.for === null ? result.answer : null;
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -100,22 +106,29 @@ function NotifyAddressesPage() {
                   address={address}
                   now={now}
                   busy={busy}
-                  onResend={() => void run(() => resend({ data: { email: address.email } }))}
-                  onRemove={() => void run(() => remove({ data: { email: address.email } }))}
+                  result={result?.for === address.email ? result.answer : null}
+                  onResend={() =>
+                    void run(address.email, address.email, () => resend({ data: { email: address.email } }))
+                  }
+                  onRemove={() => void run(address.email, null, () => remove({ data: { email: address.email } }))}
                 />
               ))}
             </ul>
           )}
           <div aria-live="polite">
-            {result ? (
-              <Alert variant={result.ok ? "default" : "destructive"}>
-                <AlertDescription className="[overflow-wrap:anywhere]">{result.message}</AlertDescription>
+            {listResult ? (
+              <Alert variant={listResult.ok ? "default" : "destructive"}>
+                <AlertDescription className="[overflow-wrap:anywhere]">{listResult.message}</AlertDescription>
               </Alert>
             ) : null}
           </div>
           <div>
-            <Button variant="outline" aria-disabled={busy} onClick={() => void run(() => check())}>
-              {busy ? "Working…" : "Check now"}
+            <Button
+              variant="outline"
+              aria-disabled={busy !== null}
+              onClick={() => void run("check", null, () => check())}
+            >
+              {busy === "check" ? "Checking…" : "Check now"}
             </Button>
             <p className="mt-2 text-sm text-muted-foreground">
               Asks Cloudflare which addresses are verified. Use it after clicking a verification link.
@@ -147,8 +160,8 @@ function NotifyAddressesPage() {
                 onChange={(event) => setEmail(event.target.value)}
               />
             </Field>
-            <Button type="submit" aria-disabled={busy}>
-              Add address
+            <Button type="submit" aria-disabled={busy !== null}>
+              {busy === "add" ? "Sending…" : "Add address"}
             </Button>
           </form>
         </CardContent>
@@ -160,26 +173,37 @@ function NotifyAddressesPage() {
 function AddressRow(props: {
   address: NotifyAddress;
   now: number;
-  busy: boolean;
+  busy: string | null;
+  result: NotifyResult | null;
   onResend: () => void;
   onRemove: () => void;
 }) {
-  const { address } = props;
+  const { address, now } = props;
   const verified = address.verifiedAt !== null;
+  const sending = props.busy === address.email;
   return (
-    <li className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <p className="font-medium [overflow-wrap:anywhere]">{address.email}</p>
-        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+    <li className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <p className="font-medium [overflow-wrap:anywhere]" translate="no">
+          {address.email}
+        </p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <Badge variant={verified ? "secondary" : "outline"}>{verified ? "Verified" : "Pending"}</Badge>
-          {address.lastResentAt !== null && !verified ? (
+          {address.verifiedAt !== null ? (
             <span>
-              Email sent again <RelativeTime time={address.lastResentAt} now={props.now} />
+              Verified <RelativeTime time={address.verifiedAt} now={now} />
             </span>
           ) : (
-            <span>
-              Added <RelativeTime time={address.createdAt} now={props.now} />
-            </span>
+            <>
+              <span>
+                Waiting since <RelativeTime time={address.createdAt} now={now} />
+                {address.lastResentAt === null ? null : (
+                  <>
+                    , email sent <RelativeTime time={address.lastResentAt} now={now} />
+                  </>
+                )}
+              </span>
+            </>
           )}
         </p>
       </div>
@@ -188,25 +212,27 @@ function AddressRow(props: {
           <Button
             variant="outline"
             size="sm"
-            aria-disabled={props.busy}
+            aria-disabled={props.busy !== null}
             onClick={() => {
-              if (!props.busy) props.onResend();
+              if (props.busy === null) props.onResend();
             }}
           >
-            Resend email
+            {sending ? "Sending…" : "Send it again"}
           </Button>
         )}
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="outline" size="sm" aria-disabled={props.busy}>
-              Remove
+            <Button variant="outline" size="sm" aria-disabled={props.busy !== null}>
+              Remove…
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Remove this address?</AlertDialogTitle>
+              <AlertDialogTitle className="[overflow-wrap:anywhere]">Remove {address.email}?</AlertDialogTitle>
               <AlertDialogDescription className="[overflow-wrap:anywhere]">
-                Offers can no longer be emailed to {address.email}. Offers already received stay in the inbox.
+                {verified
+                  ? "Offers can no longer be emailed to it. Offers already received stay in the inbox."
+                  : "It never received an offer. A domain that would have used it moves to your other address, if you have one."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -217,6 +243,18 @@ function AddressRow(props: {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      </div>
+      <div className="basis-full empty:hidden">
+        {props.result === null ? null : (
+          <p
+            role={props.result.ok ? "status" : "alert"}
+            className={
+              props.result.ok ? "text-sm [overflow-wrap:anywhere]" : "text-sm text-destructive [overflow-wrap:anywhere]"
+            }
+          >
+            {props.result.message}
+          </p>
+        )}
       </div>
     </li>
   );

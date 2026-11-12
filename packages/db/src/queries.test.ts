@@ -316,6 +316,17 @@ describe("deployments and the publish lock", () => {
     expect(await q.pruneRateLimits(db, NOW + 2000)).toBe(0);
   });
 
+  test("a workspace mark keeps its latest time and survives the prune", async () => {
+    expect(await q.getWorkspaceMark(db, "offers-exported")).toBeNull();
+    await q.setWorkspaceMark(db, { mark: "offers-exported", now: NOW });
+    await q.setWorkspaceMark(db, { mark: "offers-exported", now: NOW + 5 });
+    expect(await q.getWorkspaceMark(db, "offers-exported")).toBe(NOW + 5);
+    expect(await q.getWorkspaceMark(db, "setup-checklist-dismissed")).toBeNull();
+    await q.hitRateLimit(db, { key: "login:abc", windowMs: 1000, now: NOW });
+    expect(await q.pruneRateLimits(db, NOW + 10 * 86_400_000)).toBe(1);
+    expect(await q.getWorkspaceMark(db, "offers-exported")).toBe(NOW + 5);
+  });
+
   test("a deployment finishes once; latest is by worker and status", async () => {
     const first = await q.insertDeployment(db, { worker: "sites", kind: "install", releaseVersion: "1.0.0", now: NOW });
     const second = await q.insertDeployment(db, { worker: "sites", kind: "publish", host: HOST, now: NOW + 1 });

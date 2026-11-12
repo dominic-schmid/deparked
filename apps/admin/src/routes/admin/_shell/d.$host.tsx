@@ -1,6 +1,8 @@
 import { Button } from "@deparked/ui/button";
 import { createFileRoute, Link, notFound, Outlet } from "@tanstack/react-router";
+import { OfferMailNotice } from "../../../components/offer-mail";
 import { PageError, PagePending, TabNav, tabLinkClass } from "../../../components/page";
+import { PendingChangeNotice } from "../../../components/pending-change";
 import { StatusLabel } from "../../../components/status";
 import { RelativeTime } from "../../../components/time";
 import { getDomainDetail } from "../../../server/domains.functions";
@@ -33,9 +35,6 @@ function UnknownDomain() {
   );
 }
 
-const TEXT_LINK =
-  "rounded-sm underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
-
 function DomainLayout() {
   const { domain, now } = Route.useLoaderData();
   const params = { host: domain.host };
@@ -58,31 +57,19 @@ function DomainLayout() {
             <dt className="shrink-0 text-muted-foreground">Offers go to</dt>
             <dd className="min-w-0 [overflow-wrap:anywhere]">
               {domain.notifyEmail === null ? (
-                <>
-                  No address yet.{" "}
-                  <Link to="/admin/settings" className={TEXT_LINK}>
-                    Notify addresses
-                  </Link>
-                </>
+                <span className="text-muted-foreground">No address yet</span>
               ) : (
                 <>
-                  {domain.notifyEmail}
-                  {domain.notifyVerified ? null : (
-                    <>
-                      {" "}
-                      (not verified yet,{" "}
-                      <Link to="/admin/settings" className={TEXT_LINK}>
-                        check
-                      </Link>
-                      )
-                    </>
-                  )}
+                  <span translate="no">{domain.notifyEmail}</span>
+                  {domain.notifyVerified ? null : <span className="text-muted-foreground"> (not verified yet)</span>}
                 </>
               )}
             </dd>
           </div>
         </dl>
       </div>
+      <PendingChangeNotice host={domain.host} pending={domain.pending} />
+      {domain.status === "off" ? null : <OfferMailNotice host={domain.host} mail={domain.mail} />}
       <TabNav label="Domain">
         <Link to="/admin/d/$host" params={params} activeOptions={{ exact: true }} className={tabLinkClass}>
           Editor
