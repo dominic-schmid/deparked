@@ -5,6 +5,7 @@
     "includes": [
       "**",
       "!apps/install/dist",
+      "!apps/install/public/assets",
       "!apps/sites/public/catalog",
       "!**/*.generated.ts",
       "!scripts/hooks",

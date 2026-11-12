@@ -8,6 +8,7 @@ export { expect } from "@playwright/test";
 export {
   TEST_ACCOUNT_ID,
   TEST_PASSWORD,
+  TEST_RELEASE,
   TEST_SESSION_KEY,
   TEST_TOKEN,
   TURNSTILE_DUMMY_SITEKEY,

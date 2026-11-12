@@ -1,41 +1,40 @@
-import { readFile } from "node:fs/promises";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { relative, resolve } from "node:path";
-
-export interface ReleaseFiles {
-  /** The admin's `RELEASE_FILES_URL`: served paths (`/catalog/...`) are appended to it. */
-  url: string;
-  close(): Promise<void>;
-}
+import { normalize, resolve, sep } from "node:path";
 
 /**
- * Stands in for the installed release's download location: serves `root` by path, as the release keeps the
- * catalog. The admin downloads a catalog file from here when the mock Cloudflare asks for it during a publish.
+ * Stands in for GitHub Releases and for raw.githubusercontent.com: `/v<version>/<file>` from the built release,
+ * `/files/<path>` from the sites Worker's committed files. No redirects, like the admin expects.
  */
-export async function startReleaseFiles(root: string): Promise<ReleaseFiles> {
-  const server = createServer((incoming, outgoing) => {
+export async function startReleaseServer(options: { dir: string; files: string }) {
+  const server = createServer((request, response) => {
     let path: string;
     try {
-      path = decodeURIComponent(new URL(incoming.url ?? "/", "http://release").pathname);
+      path = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
     } catch {
-      outgoing.writeHead(400).end();
+      response.writeHead(400).end();
       return;
     }
-    const file = resolve(root, `.${path}`);
-    if (relative(root, file).startsWith("..")) {
-      outgoing.writeHead(404).end();
+    const [base, rest] = path.startsWith("/files/")
+      ? [options.files, path.slice("/files/".length)]
+      : [options.dir, path.split("/").slice(2).join("/")];
+    const file = resolve(base, normalize(rest));
+    if (!file.startsWith(base + sep) || !existsSync(file) || !statSync(file).isFile()) {
+      response.writeHead(404).end();
       return;
     }
-    readFile(file).then(
-      (body) => outgoing.writeHead(200, { "content-length": body.length }).end(body),
-      () => outgoing.writeHead(404).end(),
-    );
+    response.writeHead(200, { "content-length": statSync(file).size });
+    createReadStream(file).pipe(response);
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const { port } = server.address() as AddressInfo;
   return {
     url: `http://127.0.0.1:${port}`,
-    close: () => new Promise((done) => server.close(() => done())),
+    close: () =>
+      new Promise<void>((done) => {
+        server.closeAllConnections();
+        server.close(() => done());
+      }),
   };
 }

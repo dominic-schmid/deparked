@@ -69,7 +69,7 @@ describe("the hosting adapter boundary", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("outside the workspace packages, only the E2E harness reaches @deparked/cf, to drive the mock", () => {
+  it("outside the workspace packages, only the E2E harness and the release build reach @deparked/cf", () => {
     const root = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as PackageJson;
     expect(root.dependencies?.["@deparked/cf"]).toBeUndefined();
     expect(root.devDependencies?.["@deparked/cf"]).toBe("workspace:*");
@@ -78,6 +78,8 @@ describe("the hosting adapter boundary", () => {
       if (!entry.isDirectory() || entry.name.startsWith(".") || SKIPPED_DIRS.has(entry.name)) continue;
       if (["apps", "packages", "e2e"].includes(entry.name)) continue;
       for (const file of sourceFiles(join(ROOT, entry.name))) {
+        // The release lists the token permissions it needs, from the one list the installer checks.
+        if (relative(ROOT, file) === "scripts/build-release.ts") continue;
         for (const match of readFileSync(file, "utf8").matchAll(SPECIFIER)) {
           if (reachesCf(file, match[1] ?? "")) offenders.push(`${relative(ROOT, file)} imports ${match[1]}`);
         }

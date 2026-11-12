@@ -14,7 +14,7 @@ export function createNonce(): string {
  * - `frame-src 'self'` is for the sandboxed lander preview; `frame-ancestors 'none'` forbids framing the admin.
  * - Turnstile (challenges.cloudflare.com) is not allowed: nothing in the admin uses it.
  */
-export function securityHeaders(options: { nonce: string; dev: boolean }): Record<string, string> {
+export function securityHeaders(options: { nonce: string; dev: boolean; setup?: boolean }): Record<string, string> {
   const csp = [
     "default-src 'none'",
     `script-src 'self' 'nonce-${options.nonce}'`,
@@ -32,7 +32,8 @@ export function securityHeaders(options: { nonce: string; dev: boolean }): Recor
     "Content-Security-Policy": csp.join("; "),
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "same-origin",
+    // The setup link's redirect carries the one-time secret in its URL: it sends no referrer at all.
+    "Referrer-Policy": options.setup === true ? "no-referrer" : "same-origin",
     "X-Robots-Tag": "noindex",
     "Cache-Control": "no-store",
     "Cross-Origin-Opener-Policy": "same-origin",

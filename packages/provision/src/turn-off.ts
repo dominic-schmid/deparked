@@ -376,7 +376,7 @@ function markStep(host: string, status: "off" | "removed"): Step {
   };
 }
 
-function turnOffSteps(host: string): Step[] {
+export function turnOffSteps(host: string): Step[] {
   return [
     stopEmailStep(host),
     stopAnalyticsStep(host),

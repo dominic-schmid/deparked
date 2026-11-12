@@ -116,6 +116,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   hitRateLimit: [[{ key: "login:abc", windowMs: 60_000, now: NOW }]],
   clearRateLimit: [["login:abc"]],
   pruneRateLimits: [[NOW]],
+  openOwnershipProof: [[{ ttlMs: 60_000, maxOpen: 20, now: NOW }]],
   acquireProvisionLock: [[{ holder: 1, ttlMs: 60_000, now: NOW }]],
   releaseProvisionLock: [[1]],
 };

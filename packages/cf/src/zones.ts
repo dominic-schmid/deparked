@@ -36,6 +36,10 @@ export function accountsApi(http: Http) {
     get(): Promise<Account> {
       return http.request({ call: "read account", method: "GET", path: account }, accountSchema);
     },
+    /** Every account the token can reach, whatever `accountId` the client was made with. One request per page of 50. */
+    list(): Promise<Account[]> {
+      return http.paginate({ call: "list accounts", method: "GET", path: "/accounts" }, accountSchema);
+    },
     /** The `<name>` in `<worker>.<name>.workers.dev`, or null when the account has none yet. */
     async workersSubdomain(): Promise<string | null> {
       const result = await http.requestOrNull(

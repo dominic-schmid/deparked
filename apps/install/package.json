@@ -1,6 +1,6 @@
 {
   "name": "@deparked/install",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Installs Deparked into your Cloudflare account. Deployed with the Deploy to Cloudflare button.",

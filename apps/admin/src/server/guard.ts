@@ -34,7 +34,9 @@ export const adminGuard = createMiddleware().server(async ({ request, handlerTyp
     return new Response(null, {
       status: 303,
       headers: {
-        ...headers,
+        // The one response whose URL carries the secret. Not on the setup page itself: under no-referrer the
+        // browser sends `Origin: null` with its form, which the origin check rightly refuses.
+        ...securityHeaders({ nonce, dev: import.meta.env.DEV, setup: true }),
         Location: setCookie === null ? SETUP_PATH : `${SETUP_PATH}?link=1`,
         ...(setCookie === null ? {} : { "Set-Cookie": setCookie }),
       },

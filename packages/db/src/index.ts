@@ -7,6 +7,7 @@ export {
   migrations,
   type SqlRunner,
   splitStatements,
+  toMigration,
 } from "./migrate";
 export * from "./queries/index";
 export * from "./schema";

@@ -1,4 +1,4 @@
-import { eq, lt, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { Db } from "../client";
 import { rateLimits } from "../schema";
 
@@ -38,4 +38,40 @@ export async function clearRateLimit(db: Db, key: string): Promise<void> {
 export async function pruneRateLimits(db: Db, before: number): Promise<number> {
   const rows = await db.delete(rateLimits).where(lt(rateLimits.windowStart, before)).returning({ key: rateLimits.key });
   return rows.length;
+}
+
+/** The installer's ownership proofs: one row each, `key` = this prefix + a random value. Never a rate limit key. */
+const OWNERSHIP_PROOF_PREFIX = "install-proof:";
+
+/**
+ * Opens one ownership proof row with a fresh random key, after deleting proofs older than `ttlMs`, and returns the
+ * key. Null (nothing written) when `maxOpen` proofs are open already. A proof never touches another proof's row;
+ * delete it with `clearRateLimit` when done.
+ */
+export async function openOwnershipProof(
+  db: Db,
+  input: { ttlMs: number; maxOpen: number; now: number },
+): Promise<string | null> {
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(24)), (byte) => byte.toString(16).padStart(2, "0"));
+  const key = `${OWNERSHIP_PROOF_PREFIX}${random.join("")}`;
+  // A key range, not LIKE: it reads the primary key index. ";" is the character after ":".
+  const ours = and(gte(rateLimits.key, OWNERSHIP_PROOF_PREFIX), lt(rateLimits.key, "install-proof;"));
+  const open = db.$count(rateLimits, ours);
+  const rows = await db.batch([
+    db.delete(rateLimits).where(and(ours, lt(rateLimits.windowStart, input.now - input.ttlMs))),
+    db
+      .insert(rateLimits)
+      .select(
+        db
+          .select({
+            key: sql<string>`${key}`.as("key"),
+            windowStart: sql<number>`${input.now}`.as("window_start"),
+            count: sql<number>`0`.as("count"),
+          })
+          .from(sql`(select 1)`)
+          .where(sql`${open} < ${input.maxOpen}`),
+      )
+      .returning({ key: rateLimits.key }),
+  ]);
+  return rows[1].length === 1 ? key : null;
 }

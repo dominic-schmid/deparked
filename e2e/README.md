@@ -21,6 +21,7 @@ The global setup builds the admin once (`vite build`). Each Playwright worker (t
 | `deparked-install` | `wrangler dev` on the committed bundle (`apps/install/dist/worker.js`) | Run `pnpm build:install` after changing the installer |
 | `deparked-sites` | `wrangler dev` on a temporary copy of `apps/sites/public` | Tests can add files, see `writeSiteFile` |
 | Host proxy | a small Node server (`harness/proxy.ts`) | Stands in for the zone's routes and rewrite rule |
+| Release server | `harness/release.ts`, in the test process | `/v<version>/<file>`: the built release; `/files/catalog/…`: the catalog for `RELEASE_FILES_URL` |
 | Local D1 | one SQLite file under `e2e/.tmp/`, migrated with `applyMigrations` | Shared, see below |
 
 Everything is stopped when the worker ends. Each `wrangler dev` runs in its own process group; a run that crashed is cleaned up by the next run's global setup. Logs: `e2e/.tmp/logs/<worker>.log`.
@@ -38,8 +39,9 @@ The harness passes these with `wrangler dev --var`. No secret file exists or is 
 | `CF_API_TOKEN` | admin | `e2e-dummy-cloudflare-token` (the mock accepts only this) | the owner's token; the installer gets it pasted in its page instead (`TEST_TOKEN`) |
 | `CF_ACCOUNT_ID` | admin | `e2e-account` | |
 | `SESSION_KEY` | admin | a dummy | cookie signing |
+| `RELEASE_VERSION`, `RELEASE_SHA256`, `RELEASE_BASE_URL` | install | `0.0.1-e2e`, the hash of the built `release.json`, the release server | the harness builds a real release from this checkout (`scripts/build-release.ts`) and serves it like GitHub Releases; `urls.release` |
 | `TURNSTILE_SECRET_1` | admin | Cloudflare's always-pass dummy secret `1x0000000000000000000000000000000AA` | a `turnstile_widgets` row arranged by a test should use `secret_name = 'TURNSTILE_SECRET_1'` and sitekey `1x00000000000000000000AA` (`TURNSTILE_DUMMY_SITEKEY`) |
-| `RELEASE_FILES_URL` | admin | `http://127.0.0.1:<port>`, a small server over `apps/sites/public` | where a publish downloads catalog files the mock asks for again (`harness/release.ts`) |
+| `RELEASE_FILES_URL` | admin | `<release server>/files`, the release's `catalogFilesUrl` | where a publish downloads catalog files the mock asks for again (`harness/release.ts`) |
 
 The mock's siteverify answer is `mock.state.siteverify` (`{ success, hostname }`, default `example.com`).
 
