@@ -29,6 +29,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   getOfferTarget: [[HOST]],
 
   getConfig: [[HOST]],
+  listPublishedAt: [[]],
   saveDraft: [[{ host: HOST, json: "{}", schemaVersion: 1, now: NOW }]],
   publishConfig: [[{ host: HOST, json: "{}", schemaVersion: 1, release: "1.0.0", now: NOW }]],
   listConfigHistory: [[{ host: HOST }]],
@@ -99,6 +100,7 @@ const SINGLE_ROW_TABLES = ["workspace", "install_state", "publish_lock"];
 // Queries whose job is to read a whole table that is small by a hard outside limit. Nothing else may scan.
 const FULL_READS: Partial<Record<keyof Queries, string>> = {
   listDomains: "domains", // about 200: 20 Turnstile widgets x 10 hostnames
+  listPublishedAt: "config", // one row per domain
   listNotifyAddresses: "notify_addresses", // 200 Email Routing destination addresses per account
   listTurnstileWidgets: "turnstile_widgets", // 20 widgets on the free plan
   listSiteFiles: "site_files", // the publish manifest is sent whole on every publish

@@ -1,0 +1,77 @@
+import { readFile } from "node:fs/promises";
+import { createDb, insertDomain, insertNotifyAddress, insertOffer, setDomainStatus } from "@deparked/db";
+import { expect, test } from "../fixtures";
+
+const OWNER = "owner@example.com";
+
+test("the owner goes from an empty workspace to a handled offer, an export and a new notify address", async ({
+  login,
+  db,
+  mock,
+  request,
+  urls,
+}) => {
+  const page = await login();
+  await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Add domain" })).toBeVisible();
+
+  const data = createDb(db.d1);
+  const now = Date.now();
+  await insertNotifyAddress(data, { email: OWNER, verifiedAt: now, now });
+  await insertDomain(data, { domain: { host: "example.com", zoneId: "zone-1", notifyEmail: OWNER }, now });
+  await insertDomain(data, { domain: { host: "example.org", zoneId: "zone-2" }, now });
+  await setDomainStatus(data, { host: "example.com", status: "live", now });
+  const buyer = { currency: "USD", email: "buyer@example.net" };
+  await insertOffer(data, {
+    offer: { ...buyer, host: "example.com", amountMinor: 150_000, name: "Ada" },
+    now: now - 3,
+  });
+  await insertOffer(data, {
+    offer: { ...buyer, host: "example.com", amountMinor: 990_000, name: "=SUM(A1)" },
+    now: now - 2,
+  });
+  await insertOffer(data, { offer: { ...buyer, host: "example.org", amountMinor: 500, name: "Grace" }, now: now - 1 });
+
+  await page.reload();
+  const row = (host: string) => page.getByRole("row").filter({ hasText: host });
+  await expect(page.getByRole("heading", { name: "All domains" })).toBeVisible();
+  await expect(row("example.com")).toContainText("Live");
+  await expect(row("example.com")).toContainText("2 (2 new)");
+  await expect(row("example.com")).toContainText("$9,900.00");
+  await expect(row("example.org")).toContainText("Draft");
+
+  const inboxLink = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Inbox/ });
+  await expect(inboxLink).toContainText("3");
+  await inboxLink.click();
+  const offers = page.getByRole("main").getByRole("listitem");
+  await expect(offers).toHaveCount(3);
+  await expect(offers.first()).toContainText("Grace");
+  await offers.first().getByRole("button", { name: "Mark as replied" }).click();
+  await expect(offers.first()).toContainText("Replied");
+  await expect(inboxLink).toContainText("2");
+  expect(await db.sql("SELECT status FROM offers WHERE name = ?", "Grace")).toEqual([{ status: "replied" }]);
+
+  const anonymous = await request.get(`${urls.admin}/admin/offers.csv`, { maxRedirects: 0 });
+  expect(anonymous.status()).toBe(303);
+  expect(anonymous.headers().location).toBe("/admin/login");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("link", { name: "Export CSV" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^offers-\d{4}-\d{2}-\d{2}\.csv$/);
+  const csv = await readFile(await download.path(), "utf8");
+  expect(csv.trimEnd().split("\r\n")).toHaveLength(4);
+  expect(csv).toContain("example.org,5.00,USD,Grace,buyer@example.net,,,replied");
+  expect(csv).toContain("example.com,9900.00,USD,'=SUM(A1),buyer@example.net");
+
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Settings" }).click();
+  await page.getByLabel("Email address").fill("Second@Example.org");
+  await page.getByRole("button", { name: "Add address" }).click();
+  await expect(page.getByText("Verification email sent to second@example.org")).toBeVisible();
+  const added = page.getByRole("listitem").filter({ hasText: "second@example.org" });
+  await expect(added).toContainText("Pending");
+  await expect(added.getByRole("button", { name: "Resend email" })).toBeVisible();
+  expect(mock.callsTo("email.createAddress")).toHaveLength(1);
+  expect(mock.state.addresses.map((address) => address.email)).toEqual(["second@example.org"]);
+});
