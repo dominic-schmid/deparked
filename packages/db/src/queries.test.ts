@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import type { Db } from "./client";
 import * as q from "./queries/index";
+import type { Offer } from "./schema";
 import { HOST, NOTIFY, NOW, SITEKEY, seed } from "./test-seed";
 import { createTestDb } from "./testing";
 import { ulid } from "./ulid";
@@ -181,6 +182,36 @@ describe("offers", () => {
 
     expect((await q.listOffers(db)).offers).toHaveLength(times.length + 1);
     expect((await q.listOffers(db)).offers[0]?.host).toBe("other.example");
+  });
+
+  test("highest first: pages walk every offer once by amount, also through equal amounts", async () => {
+    await q.insertDomain(db, { domain: { host: "other.example", zoneId: "zone-2" }, now: NOW });
+    const amounts = [500, 90_000, 500, 1, 90_000, 7, 500];
+    for (const [index, amountMinor] of amounts.entries()) {
+      await q.insertOffer(db, { offer: { ...offer, amountMinor }, now: NOW + index });
+    }
+    await q.insertOffer(db, { offer: { ...offer, host: "other.example", amountMinor: 999_999 }, now: NOW });
+    await q.insertOffer(db, { offer: { ...offer, amountMinor: 80_000 }, now: NOW + 20 });
+    const replied = (await q.listOffers(db, { host: HOST, sort: "highest", limit: 1 })).offers[0];
+    if (replied === undefined) throw new Error("no offer");
+    await q.setOfferStatus(db, { id: replied.id, status: "replied", now: NOW });
+
+    const walk = async (input: { host?: string; status?: "new" }) => {
+      const seen: Offer[] = [];
+      let before: q.OfferCursor | undefined;
+      for (let page = 0; page < 10; page++) {
+        const result = await q.listOffers(db, { ...input, sort: "highest", limit: 2, ...(before ? { before } : {}) });
+        seen.push(...result.offers);
+        if (result.next === null) break;
+        before = result.next;
+      }
+      return seen;
+    };
+    const host = await walk({ host: HOST });
+    expect(host.map((row) => row.amountMinor)).toEqual([90_000, 90_000, 80_000, 500, 500, 500, 7, 1]);
+    expect(new Set(host.map((row) => row.id)).size).toBe(8);
+    expect((await walk({})).map((row) => row.amountMinor)[0]).toBe(999_999);
+    expect(await walk({ status: "new" })).toHaveLength(8);
   });
 
   test("status filter, counts and stats", async () => {

@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createHosting } from "../../server/hosting";
 import { handleOffer } from "../../server/offer/http";
 
-// Public: the global middleware lets `/api/*` through untouched, so every check is in `handleOffer`.
+// Public: the global middleware only adds its API headers to `/api/*`, so every check is in `handleOffer`.
 export const Route = createFileRoute("/api/offer")({
   server: {
     handlers: {

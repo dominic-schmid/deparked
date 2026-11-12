@@ -149,7 +149,7 @@ describe("updating the hub", () => {
     expect(adminRelease(context)).toMatchObject({ type: "plain_text", text: "1.0.0" });
     expect(await getReleaseState(db)).toMatchObject({
       installedSha256: pinA.sha256,
-      installedSchema: "0002_release_state.sql",
+      installedSchema: migrations.at(-1)?.name,
     });
 
     const preview = await previewUpdate(ctx, context.options, pinB);

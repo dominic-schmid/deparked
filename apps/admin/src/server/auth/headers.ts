@@ -39,3 +39,15 @@ export function securityHeaders(options: { nonce: string; dev: boolean; setup?: 
     "Cross-Origin-Opener-Policy": "same-origin",
   };
 }
+
+/**
+ * Headers for the public `/api/*` answers (JSON, never a page): nothing may load from them or frame them. They
+ * keep their own Cache-Control.
+ */
+export function apiSecurityHeaders(): Record<string, string> {
+  return {
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+  };
+}

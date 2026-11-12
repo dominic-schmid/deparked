@@ -1,6 +1,6 @@
 import { and, count, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
 import type { Db } from "../client";
-import { type EmailStatus, type Offer, type OfferStatus, offers } from "../schema";
+import { type EmailStatus, type Offer, type OfferSort, type OfferStatus, offers } from "../schema";
 import { ulid } from "../ulid";
 
 export type NewOffer = Pick<Offer, "host" | "amountMinor" | "currency" | "name" | "email"> &
@@ -21,40 +21,48 @@ export function getOffer(db: Db, id: string): Promise<Offer | undefined> {
   return db.select().from(offers).where(eq(offers.id, id)).get();
 }
 
-/** Where a page of offers ended: pass it back as `before` to get the next, older page. */
-export type OfferCursor = { createdAt: number; id: string };
+/**
+ * Where a page of offers ended: the last row's sort value (`created_at` for `newest`, `amount_minor` for
+ * `highest`) and id. Pass it back as `before`, with the same sort, to get the next page.
+ */
+export type OfferCursor = { key: number; id: string };
 
 export type OfferPage = { offers: Offer[]; next: OfferCursor | null };
 
-const FIRST_PAGE: OfferCursor = { createdAt: Number.MAX_SAFE_INTEGER, id: "" };
+const FIRST_PAGE: OfferCursor = { key: Number.MAX_SAFE_INTEGER, id: "" };
 const MAX_PAGE_SIZE = 200;
 // D1 allows 100 bound parameters per statement.
 const HOSTS_PER_STATEMENT = 90;
 
 /**
- * Offers newest first, for one host or all, optionally one status. Keyset pagination on (created_at, id): every
- * page is an index range read, however deep.
+ * Offers newest or highest first, for one host or all, optionally one status. Keyset pagination on (sort column,
+ * id): every page is an index range read, however deep. `highest` compares `amount_minor` as stored: amounts in
+ * different currencies are not converted.
  */
 export async function listOffers(
   db: Db,
-  input: { host?: string; status?: OfferStatus; before?: OfferCursor; limit?: number } = {},
+  input: { host?: string; status?: OfferStatus; sort?: OfferSort; before?: OfferCursor; limit?: number } = {},
 ): Promise<OfferPage> {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), MAX_PAGE_SIZE);
   const before = input.before ?? FIRST_PAGE;
-  const conditions: SQL[] = [sql`(${offers.createdAt}, ${offers.id}) < (${before.createdAt}, ${before.id})`];
+  const column = input.sort === "highest" ? offers.amountMinor : offers.createdAt;
+  const conditions: SQL[] = [sql`(${column}, ${offers.id}) < (${before.key}, ${before.id})`];
   if (input.host !== undefined) conditions.push(eq(offers.host, input.host));
   if (input.status !== undefined) conditions.push(eq(offers.status, input.status));
   const rows = await db
     .select()
     .from(offers)
     .where(and(...conditions))
-    .orderBy(desc(offers.createdAt), desc(offers.id))
+    .orderBy(desc(column), desc(offers.id))
     .limit(limit + 1);
   const page = rows.slice(0, limit);
   const last = page.at(-1);
   return {
     offers: page,
-    next: rows.length > limit && last !== undefined ? { createdAt: last.createdAt, id: last.id } : null,
+    next:
+      rows.length > limit && last !== undefined
+        ? { key: input.sort === "highest" ? last.amountMinor : last.createdAt, id: last.id }
+        : null,
   };
 }
 

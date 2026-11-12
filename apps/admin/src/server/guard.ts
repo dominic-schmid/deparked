@@ -1,7 +1,7 @@
 import { createMiddleware } from "@tanstack/react-start";
 import { isSetupPending } from "./auth/account";
 import { gate, isPublicApi, isSetupPath, SETUP_PATH } from "./auth/gate";
-import { createNonce, securityHeaders } from "./auth/headers";
+import { apiSecurityHeaders, createNonce, securityHeaders } from "./auth/headers";
 import { isAllowedOrigin } from "./auth/origin";
 import { httpsRedirect, setupSecretCookie } from "./auth/session";
 import { readSession } from "./request";
@@ -9,7 +9,7 @@ import { readSession } from "./request";
 /**
  * The one global request middleware. It runs before every page, server route and server function, in this order:
  *
- * 1. `/api/*` passes untouched (public; those routes do their own checks).
+ * 1. `/api/*` passes to its route (public; those routes do their own checks) and only gets `apiSecurityHeaders`.
  * 2. Plain http is redirected to https (308), except on localhost.
  * 3. Origin check on state-changing methods: 403.
  * 4. A setup link's `?secret=` is moved into a short-lived cookie and the URL is redirected clean.
@@ -20,7 +20,11 @@ import { readSession } from "./request";
 export const adminGuard = createMiddleware().server(async ({ request, handlerType, next }) => {
   const url = new URL(request.url);
   const { pathname } = url;
-  if (isPublicApi(pathname)) return next();
+  if (isPublicApi(pathname)) {
+    const result = await next();
+    for (const [name, value] of Object.entries(apiSecurityHeaders())) result.response.headers.set(name, value);
+    return result;
+  }
 
   const nonce = createNonce();
   const headers = securityHeaders({ nonce, dev: import.meta.env.DEV });
