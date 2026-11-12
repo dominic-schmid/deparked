@@ -32,9 +32,18 @@ importers:
 
   apps/admin:
     dependencies:
+      '@deparked/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@deparked/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@deparked/hosting':
+        specifier: workspace:*
+        version: link:../../packages/hosting
+      '@deparked/hosting-cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/hosting-cloudflare
       '@deparked/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -50,6 +59,9 @@ importers:
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.69.0
