@@ -9,5 +9,5 @@ export const Route = createFileRoute("/admin/_shell/d/$host/settings")({
 
 function DomainSettings() {
   const { domain } = domainRoute.useLoaderData();
-  return <DomainActions host={domain.host} status={domain.status} />;
+  return <DomainActions host={domain.host} status={domain.status} hasPages={domain.hasPages} />;
 }

@@ -7,6 +7,7 @@ import { Check, Circle, CircleAlert, Clock, LoaderCircle, Minus } from "lucide-r
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { SetupFailure } from "../server/domain-setup/functions";
 import type { StepView } from "../server/domain-setup/steps";
+import { retryWait } from "./setup-retry";
 
 export type StepRun = (state: SetupState) => Promise<{ ok: true; value: StepView } | SetupFailure>;
 
@@ -16,9 +17,8 @@ type Row = { id: string; title: string; status: RowStatus; effects: SetupEffect[
 
 type Problem = { kind: "failed" | "blocked"; message: string; credentialsRejected: boolean };
 
-/** How long to wait before asking again while another change runs, and how often. */
-const BUSY_WAIT_MS = 3000;
-const BUSY_TRIES = 40;
+const STUCK =
+  "This step kept going without finishing. Nothing is lost and every step is safe to repeat: try again in a minute.";
 
 const STATUS_WORDS: Record<RowStatus, string> = {
   pending: "Not started",
@@ -109,6 +109,7 @@ export function SetupRunner(props: {
     setProblem(null);
     setRunning(true);
     let busyTries = 0;
+    let workingTries = 0;
     while (alive.current) {
       const index = state.current.next;
       mark(index, busyTries > 0 ? "waiting" : "running");
@@ -129,18 +130,21 @@ export function SetupRunner(props: {
         break;
       }
       const view = result.value;
-      if (view.outcome === "working") continue;
-      if (view.outcome === "busy") {
-        busyTries += 1;
-        if (busyTries > BUSY_TRIES) {
+      if (view.outcome === "working" || view.outcome === "busy") {
+        const working = view.outcome === "working";
+        if (working) workingTries += 1;
+        else busyTries += 1;
+        const wait = retryWait(view.outcome, working ? workingTries : busyTries);
+        if (wait === null) {
           mark(index, "failed");
-          setProblem({ kind: "failed", message: view.message, credentialsRejected: false });
+          setProblem({ kind: "failed", message: working ? STUCK : view.message, credentialsRejected: false });
           break;
         }
-        mark(index, "waiting");
-        await sleep(BUSY_WAIT_MS);
+        if (!working) mark(index, "waiting");
+        await sleep(wait);
         continue;
       }
+      workingTries = 0;
       busyTries = 0;
       if (view.outcome === "failed" || view.outcome === "blocked") {
         mark(index, view.outcome);

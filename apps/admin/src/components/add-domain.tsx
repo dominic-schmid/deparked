@@ -368,7 +368,7 @@ function DomainReview(props: {
 
           {canStart ? null : (
             <p id={`${hintId}-hint`} className="text-sm text-muted-foreground">
-              Tick {missing.length === 1 ? "the first box" : "the first two boxes"} above to continue.
+              To continue, tick {missing.map((ask) => `“${confirmationCopy(result, ask).label}”`).join(" and ")}.
             </p>
           )}
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">

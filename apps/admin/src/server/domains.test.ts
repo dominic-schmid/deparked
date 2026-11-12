@@ -1,4 +1,4 @@
-import { insertDomain, insertOffer, publishConfig, setDomainStatus } from "@deparked/db";
+import { insertDomain, insertOffer, publishConfig, replaceSiteFiles, setDomainStatus } from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
 import { expect, test } from "vitest";
 import { loadDomain, loadOverview } from "./domains";
@@ -42,9 +42,16 @@ test("a domain page exists only for a managed host", async () => {
     host: HOST,
     status: "draft",
     publishedAt: null,
+    hasPages: false,
     notifyEmail: "owner@example.com",
     notifyVerified: true,
   });
+  await replaceSiteFiles(db, {
+    host: HOST,
+    files: [{ path: `/sites/${HOST}/index.html`, hash: "0".repeat(32), size: 1, contentType: "text/html" }],
+    now: NOW,
+  });
+  expect(await loadDomain(db, HOST)).toMatchObject({ hasPages: true });
   expect(await loadDomain(db, "unknown.example")).toBeNull();
   expect(await loadDomain(db, "gone.example")).toBeNull();
 });

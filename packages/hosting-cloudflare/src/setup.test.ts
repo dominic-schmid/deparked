@@ -1,3 +1,4 @@
+import { createCloudflareClient } from "@deparked/cf";
 import { replaceSiteFiles } from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
 import type { DomainSetup, SetupChange, SetupConfirmations, SetupStepReport } from "@deparked/hosting";
@@ -24,7 +25,7 @@ async function world(seed: Parameters<typeof createMockAccount>[0] = { zones: [Z
       await replaceSiteFiles(db, { host, files: [file], now: now() });
     },
   });
-  return { mock, db, setup, published };
+  return { mock, db, setup, published, connection };
 }
 
 async function run(setup: DomainSetup, change: SetupChange, confirmations: SetupConfirmations = {}) {
@@ -100,6 +101,36 @@ describe("previewing an attach", () => {
 
     const confirmed = await setup.preview(HOST, { takeOverLiveSite: true });
     expect(confirmed.steps.find((step) => step.id === "register")).toMatchObject({ status: "needed" });
+  });
+
+  it("stays under the 50 subrequests of one request on a large zone", async () => {
+    const records = [
+      ...Array.from({ length: 450 }, (_, index) => ({
+        id: `t${index}`,
+        type: "TXT",
+        name: HOST,
+        content: `v${index}`,
+      })),
+      ...Array.from({ length: 300 }, (_, index) => ({
+        id: `s${index}`,
+        type: "A",
+        name: `s${index}.${HOST}`,
+        content: "192.0.2.1",
+        proxied: true,
+      })),
+      { id: "a", type: "A", name: HOST, content: "192.0.2.10", proxied: true },
+      { id: "w", type: "CNAME", name: `www.${HOST}`, content: HOST, proxied: true },
+      { id: "mx", type: "MX", name: HOST, content: "aspmx.l.google.com", priority: 1 },
+    ];
+    const { setup, mock, connection } = await world({ zones: [ZONE], dnsRecords: { [ZONE.id]: records } });
+    const cf = createCloudflareClient(connection);
+    for (let index = 0; index < 150; index += 1) {
+      await cf.zones.createRoute(ZONE.id, { pattern: `s${index}.${HOST}/*`, script: `site-${index}` });
+    }
+    mock.calls.length = 0;
+    const preview = await setup.preview(HOST, { takeOverLiveSite: true });
+    expect(preview.servesWebsite).toBe(true);
+    expect(mock.calls.length).toBeLessThan(50);
   });
 
   it("explains a domain that is not in the account", async () => {

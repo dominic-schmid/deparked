@@ -181,7 +181,7 @@ function ChangeProgress(props: { host: string; change: Change; steps: Descriptio
   );
 }
 
-function ChangeCard(props: { host: string; change: Change; description: string }) {
+function ChangeCard(props: { host: string; change: Change; description: string; title?: string }) {
   const [open, setOpen] = useState(false);
   const [running, setRunning] = useState<Description["steps"] | null>(null);
   const copy = COPY[props.change];
@@ -189,7 +189,7 @@ function ChangeCard(props: { host: string; change: Change; description: string }
     <Card className={props.change === "remove" ? "border-destructive/40" : undefined}>
       <CardHeader>
         <CardTitle>
-          <h2>{copy.title}</h2>
+          <h2>{props.title ?? copy.title}</h2>
         </CardTitle>
         <CardDescription>{props.description}</CardDescription>
       </CardHeader>
@@ -197,7 +197,7 @@ function ChangeCard(props: { host: string; change: Change; description: string }
         {running === null ? (
           <>
             <Button variant={props.change === "remove" ? "destructive" : "outline"} onClick={() => setOpen(true)}>
-              {copy.action}…
+              {props.title ?? copy.action}…
             </Button>
             <ChangeDialog
               host={props.host}
@@ -219,10 +219,20 @@ function ChangeCard(props: { host: string; change: Change; description: string }
 }
 
 /** Turn off, Turn on and Remove for one domain. */
-export function DomainActions({ host, status }: { host: string; status: DisplayStatus }) {
+export function DomainActions(props: { host: string; status: DisplayStatus; hasPages: boolean }) {
+  const { host, status } = props;
+  const off = status === "off";
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      {status === "off" ? (
+      {off && props.hasPages ? (
+        <ChangeCard
+          host={host}
+          change="turn-off"
+          title="Finish turning off"
+          description={`Turning ${host} off stopped before its pages were taken offline. Finishing checks every step again and takes them down.`}
+        />
+      ) : null}
+      {off ? (
         <Card>
           <CardHeader>
             <CardTitle>
