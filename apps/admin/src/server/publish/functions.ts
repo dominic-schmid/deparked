@@ -1,33 +1,14 @@
 import { env } from "cloudflare:workers";
-import { createDb, getWorkspace } from "@deparked/db";
-import { catalog } from "@deparked/templates/catalog";
+import { createDb } from "@deparked/db";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import sitesHeaders from "../../../../sites/public/_headers?raw";
-import { createHosting } from "../hosting";
 import { requireSession } from "../require-session";
+import { publishContext } from "./context";
 import { isHostName } from "./files";
 import * as pipeline from "./pipeline";
-import { createReleaseFileFetcher, parseReleaseBaseUrl } from "./release";
 
 const host = z.string().refine(isHostName, "Not a domain name.");
 const id = z.number().int().positive();
-
-export async function publishContext(): Promise<pipeline.PublishContext> {
-  const db = createDb(env.DB);
-  const workspace = await getWorkspace(db);
-  return {
-    db,
-    hosting: createHosting({ accountId: workspace?.cfAccountId ?? null }),
-    now: Date.now,
-    catalog,
-    headers: sitesHeaders,
-    release: workspace?.installedRelease ?? null,
-    fetchReleaseFile: createReleaseFileFetcher({
-      baseUrl: parseReleaseBaseUrl((env as unknown as Record<string, unknown>).RELEASE_FILES_URL),
-    }),
-  };
-}
 
 function dbContext() {
   return { db: createDb(env.DB), now: Date.now };

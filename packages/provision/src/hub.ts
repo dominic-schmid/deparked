@@ -252,7 +252,8 @@ function adminStep(options: HubOptions): Step {
       const databaseId = await findDatabase(ctx, name);
       if (databaseId === null) throw new StepBlockedError(`The database ${name} is missing from this account.`);
       const modules = await options.release.pack("admin-modules");
-      const assets = await options.release.pack("admin-assets");
+      // The catalog too: the editor's preview loads it from the admin's own address (`img-src 'self'`).
+      const assets = [...(await options.release.pack("admin-assets")), ...(await options.release.pack("catalog"))];
       const settings = await ctx.cf.workers.getSettings(admin);
       const hasSessionKey = settings?.bindings.some((binding) => binding.name === "SESSION_KEY") === true;
       const bindings: WorkerBinding[] = [
@@ -281,7 +282,12 @@ function adminStep(options: HubOptions): Step {
           compatibilityDate: release.workers.admin.compatibilityDate,
           compatibilityFlags: release.workers.admin.compatibilityFlags,
           bindings,
-          assets: { jwt: completionJwt },
+          assets: {
+            jwt: completionJwt,
+            ...(release.workers.admin.headers === undefined
+              ? {}
+              : { config: { _headers: release.workers.admin.headers } }),
+          },
         });
       });
       await ctx.cf.workers.setSubdomain(admin, true);

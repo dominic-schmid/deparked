@@ -69,6 +69,8 @@ const releaseSchema = z.object({
       mainModule: z.string(),
       compatibilityDate: z.string(),
       compatibilityFlags: z.array(z.string()),
+      /** The admin's `_headers` (CORS for the catalog fonts its editor preview loads). */
+      headers: z.string().optional(),
     }),
   }),
   files: z.array(fileSchema),

@@ -93,6 +93,10 @@ describe("installing the hub", () => {
     expect(bindings.RELEASE_FILES_URL).toMatchObject({ type: "plain_text", text: fake.release.catalogFilesUrl });
     expect(mock.state.scripts.get("deparked-admin")?.subdomainEnabled).toBe(true);
     expect(mock.deployedAssets("deparked-admin").has("/admin/_assets/app.js")).toBe(true);
+    expect(mock.deployedAssets("deparked-admin").has("/catalog/fonts/a.woff2")).toBe(true);
+    expect(mock.state.scripts.get("deparked-admin")?.versions.at(-1)?.metadata.assets).toMatchObject({
+      config: { _headers: fake.release.workers.admin.headers },
+    });
 
     const ledger = await listLedger(db, { host: null });
     expect(ledger.map((entry) => [entry.resource, entry.cfId]).sort()).toEqual([

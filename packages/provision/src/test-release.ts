@@ -67,7 +67,12 @@ export async function buildFakeRelease(version = "1.0.0", files = FAKE_FILES) {
     packs,
     workers: {
       sites: { compatibilityDate: "2026-11-01", headers: "/*\n  X-Content-Type-Options: nosniff\n" },
-      admin: { mainModule: "index.js", compatibilityDate: "2026-11-01", compatibilityFlags: ["nodejs_compat"] },
+      admin: {
+        mainModule: "index.js",
+        compatibilityDate: "2026-11-01",
+        compatibilityFlags: ["nodejs_compat"],
+        headers: "/catalog/fonts/*\n  Access-Control-Allow-Origin: *\n",
+      },
     },
     files: listed,
   };

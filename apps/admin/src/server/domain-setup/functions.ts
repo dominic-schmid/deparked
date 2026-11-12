@@ -5,7 +5,7 @@ import { createCloudflareDomainSetup } from "@deparked/hosting-cloudflare";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { hostingConnection } from "../hosting-env";
-import { publishContext } from "../publish/functions";
+import { publishContext } from "../publish/context";
 import { requireSession } from "../require-session";
 import * as steps from "./steps";
 

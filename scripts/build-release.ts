@@ -7,7 +7,7 @@
 // `--files-url` is where the admin re-downloads catalog files (`<base>/catalog/…`, no redirects). Default: the
 // repository's committed copy at the tag on raw.githubusercontent.com, which is byte for byte what the pack holds.
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { contentHash } from "../packages/hosting/src/index.ts";
@@ -101,7 +101,12 @@ const entries: Entry[] = [
       contentType: "application/javascript+module",
     })),
   ...walk(adminClient)
-    .filter((file) => !file.endsWith(".assetsignore"))
+    // `_headers` is asset configuration, not a served file: it travels in `workers.admin.headers`. The admin's
+    // copy of the catalog (for the editor's preview) is the catalog pack: the installer uploads it to both Workers.
+    .filter((file) => {
+      const path = relative(adminClient, file);
+      return !file.endsWith(".assetsignore") && path !== "_headers" && !path.startsWith("catalog/");
+    })
     .map((file) => ({
       pack: "admin-assets",
       path: `/${relative(adminClient, file)}`,
@@ -164,6 +169,9 @@ const release = {
       mainModule: adminConfig.main,
       compatibilityDate: adminConfig.compatibility_date,
       compatibilityFlags: adminConfig.compatibility_flags ?? [],
+      ...(existsSync(join(adminClient, "_headers"))
+        ? { headers: readFileSync(join(adminClient, "_headers"), "utf8") }
+        : {}),
     },
   },
   files,
