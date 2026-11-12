@@ -7,7 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@deparked/ui/radio-group";
 import { ArrowRight, Check, CircleAlert, Copy, ExternalLink, Eye, EyeOff, RotateCw, ShieldAlert } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { Account, ApiError, CheckResponse, PlanStep, Status, StepReport } from "../api";
-import { checkToken, finishInstall, getStatus, runStep } from "./client";
+import { checkToken, finishInstall, getStatus, rollbackStep, runStep } from "./client";
 import { Screen, ScreenTitle, Section, Shell, Spinner, type Stage } from "./parts";
 import { TokenDiagram, TokenPagePictures } from "./pictures";
 import { TOKEN_PERMISSIONS, tokenTemplateUrl } from "./token-link";
@@ -752,31 +752,65 @@ function adminUrlFromHere(): string | null {
   return `https://deparked-admin.${labels[1]}.workers.dev/admin`;
 }
 
+type Action = "link" | "rollback";
+
+/** Rolls the hub back one step per request, as the admin's own Roll back does. */
+async function rollBack(input: { token: string; accountId: string }, onStep: (report: StepReport) => void) {
+  let next = 0;
+  for (let count = 0; count < 20; count += 1) {
+    const answer = await rollbackStep({ ...input, next });
+    if (!answer.ok) return answer;
+    onStep(answer.report);
+    const { outcome } = answer.report;
+    if (outcome === "failed" || outcome === "blocked" || outcome === "busy") {
+      return { ok: false as const, error: "cloudflare" as const, message: answer.report.message };
+    }
+    if (answer.report.finished || outcome === "finished") return { ok: true as const };
+    next = answer.report.next;
+  }
+  return { ok: false as const, error: "cloudflare" as const, message: "The rollback did not finish. Try again." };
+}
+
 function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void }) {
   const adminUrl = adminUrlFromHere();
   const [token, setToken] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [accounts, setAccounts] = useState<Account[] | null>(null);
+  const [action, setAction] = useState<Action>("link");
+  const [progress, setProgress] = useState("");
+  const [rolledBack, setRolledBack] = useState(false);
 
-  async function recover(accountId?: string) {
-    setBusy(true);
+  async function recover(chosen: Action, accountId?: string) {
+    setAction(chosen);
+    setBusy(chosen);
     setError(null);
+    setRolledBack(false);
     const checked = await checkToken(
       accountId === undefined ? { token: token.trim() } : { token: token.trim(), accountId },
     );
     if (!checked.ok) {
-      setBusy(false);
+      setBusy(null);
       setError(checked);
       return;
     }
     if (checked.status === "pick-account") {
-      setBusy(false);
+      setBusy(null);
       setAccounts(checked.accounts);
       return;
     }
+    if (chosen === "rollback") {
+      const result = await rollBack({ token: token.trim(), accountId: checked.account.id }, (report) => {
+        if (report.step !== null) setProgress(`${report.step.title}: done`);
+      });
+      setBusy(null);
+      setProgress("");
+      if (result.ok) setRolledBack(true);
+      else setError(result);
+      return;
+    }
     const finished = await finishInstall({ token: token.trim(), accountId: checked.account.id });
-    setBusy(false);
+    setBusy(null);
     if (finished.ok) props.onLink(finished.setupUrl, finished.adminUrl);
     else setError(finished);
   }
@@ -812,7 +846,7 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
           onSubmit={(event) => {
             event.preventDefault();
             if (token.trim() === "") setError({ ok: false, error: "invalid-token", message: "Paste the token first." });
-            else void recover();
+            else void recover("link");
           }}
         >
           <TokenField value={token} onChange={setToken} error={error} />
@@ -825,7 +859,7 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
                   type="button"
                   variant="outline"
                   className="h-11 justify-start"
-                  onClick={() => void recover(account.id)}
+                  onClick={() => void recover(action, account.id)}
                 >
                   {account.name}
                 </Button>
@@ -833,10 +867,44 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
             </div>
           )}
           <div>
-            <Button type="submit" size="lg" className="h-11 px-5" disabled={busy}>
-              {busy ? <Spinner /> : null}
-              {busy ? "Checking…" : "Get a new setup link"}
+            <Button type="submit" size="lg" className="h-11 px-5" disabled={busy !== null}>
+              {busy === "link" ? <Spinner /> : null}
+              {busy === "link" ? "Checking…" : "Get a new setup link"}
             </Button>
+          </div>
+          <div className="mt-6 border-t pt-6">
+            <p className="text-sm font-medium">The admin stopped working after an update?</p>
+            <p className="mt-1 mb-4 max-w-[62ch] text-sm text-muted-foreground">
+              With the same token, the installer puts back the version you had before the last update. Your pages stay
+              online; the database keeps the newer version's changes, which the earlier version can work with. Then open
+              the admin: it publishes every page again.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-11 px-5"
+              disabled={busy !== null}
+              onClick={() => {
+                if (token.trim() === "")
+                  setError({ ok: false, error: "invalid-token", message: "Paste the token first." });
+                else void recover("rollback");
+              }}
+            >
+              {busy === "rollback" ? <Spinner /> : <RotateCw aria-hidden />}
+              {busy === "rollback" ? "Rolling back…" : "Roll back the last update"}
+            </Button>
+            <p className="mt-3 text-sm text-muted-foreground" aria-live="polite">
+              {busy === "rollback" ? progress : ""}
+            </p>
+            {rolledBack ? (
+              <Alert className="mt-3" role="status">
+                <AlertTitle>Rolled back</AlertTitle>
+                <AlertDescription>
+                  The earlier version is installed again. Open the admin to finish: it publishes every page again.
+                </AlertDescription>
+              </Alert>
+            ) : null}
           </div>
         </form>
       </Section>

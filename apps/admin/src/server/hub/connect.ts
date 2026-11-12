@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { createDb, getWorkspace } from "@deparked/db";
 import { HostingError, type HubSetup } from "@deparked/hosting";
 import { createCloudflareHubSetup } from "@deparked/hosting-cloudflare";
+import { releaseLocation } from "../updates/latest";
 import { hubConnection, type TokenCache, tokenRejected } from "./hub";
 
 // Not in `functions.ts`: an exported plain function there would pull `cloudflare:workers` into the client bundle.
@@ -14,7 +15,8 @@ export async function hub(token?: string): Promise<HubSetup> {
   if (connection === null) {
     throw new HostingError("credentials-rejected", "No Cloudflare token is stored for this install.");
   }
-  return createCloudflareHubSetup({ ...connection, db, now: Date.now });
+  const vars = env as unknown as Record<string, unknown>;
+  return createCloudflareHubSetup({ ...connection, db, now: Date.now, releaseUrl: releaseLocation(vars).releaseUrl });
 }
 
 export const tokenCache: { current: TokenCache } = { current: null };

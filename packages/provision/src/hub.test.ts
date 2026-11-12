@@ -6,6 +6,7 @@ import {
   insertTurnstileWidget,
   listLedger,
   listSiteFilesByHost,
+  migrations,
   replaceSiteFiles,
 } from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
@@ -86,7 +87,7 @@ describe("installing the hub", () => {
 
     const bindings = Object.fromEntries(mock.liveBindings("deparked-admin").map((binding) => [binding.name, binding]));
     expect(Object.keys(bindings).sort()).toEqual(
-      ["CF_ACCOUNT_ID", "CF_API_TOKEN", "DB", "EMAIL", "RELEASE_FILES_URL", "SESSION_KEY"].sort(),
+      ["CF_ACCOUNT_ID", "CF_API_TOKEN", "DB", "DEPARKED_RELEASE", "EMAIL", "RELEASE_FILES_URL", "SESSION_KEY"].sort(),
     );
     expect(bindings.CF_API_TOKEN).toMatchObject({ type: "secret_text", text: TOKEN });
     expect(bindings.DB).toMatchObject({ type: "d1", database_id: databaseId });
@@ -126,7 +127,7 @@ describe("installing the hub", () => {
       token: TOKEN,
     });
     const reports = await runPlan(plan);
-    expect(reports[1]).toMatchObject({ outcome: "ran", effects: [{ kind: "change" }] });
+    expect(reports[1]).toMatchObject({ outcome: "ran", effects: migrations.map(() => ({ kind: "change" })) });
     expect(mock.callsTo("d1.query").length).toBeGreaterThan(0);
   });
 
