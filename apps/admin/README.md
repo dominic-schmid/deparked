@@ -110,6 +110,48 @@ form contract"), and its field names, limits and redirect fragments are imported
   in-memory D1 and the real adapter (HMAC, zod, MIME): about 1.7 ms wall and 1.9 ms CPU per request, SQLite
   included, so well inside Workers Free's 10 ms. Not measured on Cloudflare itself.
 
+## Publish
+
+The logic is `src/server/publish/pipeline.ts` (pure: `{ db, hosting, now, catalog, headers, release,
+fetchReleaseFile }`, unit-tested with the in-memory D1 and the fake hosting adapter); the server functions in
+`src/server/publish/functions.ts` each call `requireSession()` first and validate their input with zod.
+
+- **Protocol for a UI**: `startPublish({ kind, host })` (`draft`, `placeholder`, `remove`; or `republish-all`
+  without a host) or `revertTo({ historyId })` returns `{ ok: true, deploymentId }` or `{ ok: false, reason }`
+  (`busy` names the running deployment). Then call `stepPublish({ deploymentId })` one request at a time while
+  it answers `running`, showing its `message` and `progress`; stop at `done` or `failed`. A `failed` with reason
+  `credentials-rejected` means the token banner. `getPublishState({ host })` says whether the draft differs from
+  live, the domain's last deployment, the lock, and `outOfSync` after an emergency rollback or after a publish
+  whose version went live but could not be recorded (it failed with `lock-lost` and keeps `cfVersionId`). A
+  `remove` is recorded as kind `update` with its host (`republish-all` is `update` without one); a step checks the
+  domain's status again and fails if a removal finds it turned on, or a draft publish finds it turned off.
+- **One step** renders this publish's host (or one host of "republish all"), builds the full manifest (every other
+  host's rows from `site_files`, the catalog rows as the installer recorded them, this host's new files) and calls
+  `hosting.publish`. Every subrequest of the step (host requests in every round, release downloads) counts
+  against `STEP_REQUEST_BUDGET` (40 of Workers Free's 50); the step answers `running` before it would go over and
+  the next one continues. When the host answers `done`, one D1 batch replaces the host's `site_files`, makes the
+  draft live (and the draft, unless it changed meanwhile) with a `config_history` row, sets the domain `live`,
+  finishes the deployment and releases the lock. Each statement of that batch applies only while the deployment is
+  running and holds the lock. Before that nothing in D1 changes, so a failure at any point leaves D1 as it was.
+- **Lock**: one row with a 5-minute TTL, renewed at the start of each step and right before the host is called,
+  and checked by the D1 commit itself. A step that lost it writes nothing but its own failure; two requests of
+  the same publish commit once. A
+  publish that died is marked failed by the next start once its lock expired.
+- **Files the host asks for again**: this host's are in memory; another host's are rendered again from its live
+  config (if the bytes differ, the templates changed: that host joins this deploy, up to 3 times per step); a
+  catalog file is downloaded from `RELEASE_FILES_URL` + path (no redirects, read up to the size in its row) and
+  refused unless size and hash match its row. A host name that is not a plain domain name is refused before
+  anything is written under `/sites/`.
+- **Revert** makes a `config_history` entry the draft and publishes it like any draft (the draft the owner had is
+  replaced, even if that publish then fails). **Rollback** (emergency) puts an earlier `deparked-sites` version
+  live without touching D1; the next publish of any kind sends the D1 manifest again and undoes it.
+- **Cost**, measured in Node with the in-memory D1 and the fake adapter, not on Cloudflare: render and hash of one
+  lander about 1.9 ms CPU (median; p90 5 ms; the first in a fresh process 14 ms); one whole step about 11 ms CPU
+  with in-process SQLite, whose queries are I/O on Workers. Subrequests per `hosting.publish` call: 3 fixed (upload
+  session, script upload, deployment) plus one per upload batch, plus one download per catalog file Cloudflare
+  asks for again; a step splits what is left of its budget between batches and downloads. "Republish all" deploys
+  one version per host.
+
 ## URLs
 
 A managed domain routes only `<host>/admin*` and `<host>/api/*` here, so built files are served from
@@ -133,3 +175,4 @@ are not secrets and are not listed: pass them as variables, the way the E2E harn
 | `TURNSTILE_SECRET_<n>` | Secret of Turnstile widget `deparked-<n>`. |
 | `CLOUDFLARE_API_BASE` | Override of the Cloudflare API base URL, for the mock API in tests. Honoured only when it is `http://127.0.0.1:<port>/…` or `http://localhost:<port>/…`; anything else is ignored. |
 | `TURNSTILE_VERIFY_URL` | Override of the Turnstile siteverify URL, for tests. Same rule. |
+| `RELEASE_FILES_URL` | Optional. Base URL the publish downloads catalog files from when Cloudflare asks for one again (`https://`, or `http://` on 127.0.0.1, localhost or [::1]; no credentials, query or fragment; anything else counts as unset). Each file is checked against its hash. Unset: such a publish fails with a readable message. |
