@@ -177,8 +177,9 @@
   .slot input[aria-invalid="true"] {
     border-bottom: 2px solid var(--invalid);
   }
+  /* room for the focus ring between the currency and the blank */
   .slot input[name="amount"] {
-    margin-left: 0.1em;
+    margin-left: 0.3em;
   }
 
   .row {
