@@ -54,3 +54,22 @@ export async function markLedgerUndone(db: Db, input: { id: number; now: number 
     .returning({ id: ledger.id });
   return rows.length === 1;
 }
+
+/**
+ * Fills in what was not known when the entry was written: the Cloudflare id of a resource that was announced
+ * before it was created, or a changed `previous_json`. False when the entry is unknown.
+ */
+export async function updateLedgerEntry(
+  db: Db,
+  input: { id: number; cfId?: string; previousJson?: string },
+): Promise<boolean> {
+  const rows = await db
+    .update(ledger)
+    .set({
+      ...(input.cfId === undefined ? {} : { cfId: input.cfId }),
+      ...(input.previousJson === undefined ? {} : { previousJson: input.previousJson }),
+    })
+    .where(eq(ledger.id, input.id))
+    .returning({ id: ledger.id });
+  return rows.length === 1;
+}

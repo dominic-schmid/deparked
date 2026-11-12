@@ -40,10 +40,10 @@ describe("looking at a domain before attaching it", () => {
       blockers: [],
     });
     expect(inspection.summary).toBe(
-      "example.com shows a website today. Deparked will take over the address. Your site and its settings stay untouched, and you can switch back at any time. example.com has no email set up. Deparked will turn on Cloudflare's email service for it, so offers can be sent from this domain.",
+      "example.com shows a website today. Deparked will take over the address: visitors get the for-sale page instead. Your site and its settings stay untouched, and Turn off brings it back. example.com/shop* keeps going to your Worker shop. example.com has no email set up. Deparked will turn on Cloudflare's email service for it, so offers can be sent from this domain.",
     );
     expect(mock.calls.every((call) => call.method === "GET")).toBe(true);
-    expect(mock.calls).toHaveLength(6);
+    expect(mock.calls).toHaveLength(7);
   });
 
   it("says that an empty domain shows nothing today", async () => {

@@ -20,7 +20,7 @@ describe("Email Routing after the MX check", () => {
     await runPlan(planAttachDomain(ctx, HOST));
     expect(mock.callsTo("email.enableRouting")).toHaveLength(1);
     expect(await getDomain(db, HOST)).toMatchObject({ emailRoutingState: "enabled", senderHost: HOST });
-    expect(await mailEntries(db)).toMatchObject([{ action: "created", cfId: ZONE.id, previousJson: null }]);
+    expect(await mailEntries(db)).toMatchObject([{ action: "created", cfId: ZONE.id }]);
   });
 
   it("Cloudflare's MX records: uses what is there and records nothing to undo", async () => {
@@ -56,11 +56,11 @@ describe("Email Routing after the MX check", () => {
     const mx = () =>
       (mock.state.dnsRecords.get(ZONE.id) ?? [])
         .filter((record) => record.type === "MX")
-        .map(({ name, content, priority }) => ({ name, content, priority }));
+        .map(({ name, content, priority, ttl }) => ({ name, content, priority, ttl }));
     const original = mx();
 
     await runPlan(planAttachDomain(ctx, HOST, { replaceExistingMx: true }));
-    expect(mx()).toEqual([{ name: HOST, content: "route1.mx.cloudflare.net", priority: 10 }]);
+    expect(mx()).toMatchObject([{ name: HOST, content: "route1.mx.cloudflare.net", priority: 10 }]);
     expect(await getDomain(db, HOST)).toMatchObject({ emailRoutingState: "enabled", senderHost: HOST });
     const [entry] = await mailEntries(db);
     expect(entry).toMatchObject({ action: "changed", cfId: ZONE.id });

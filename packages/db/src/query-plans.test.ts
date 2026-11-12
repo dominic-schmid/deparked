@@ -60,6 +60,8 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   findTurnstileWidgetWithFreeSlot: [[]],
   claimTurnstileSlot: [[SITEKEY]],
   releaseTurnstileSlot: [[SITEKEY]],
+  syncTurnstileHostnameCount: [[SITEKEY]],
+  assignTurnstileWidget: [[{ host: HOST, sitekey: SITEKEY, now: NOW }]],
 
   listSiteFiles: [[]],
   listSiteFilesByHost: [[HOST], [null]],
@@ -87,6 +89,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   insertLedgerEntry: [[{ host: HOST, zoneId: "zone-1", resource: "route", cfId: "r1", action: "created", now: NOW }]],
   listLedger: [[{ host: HOST }], [{ host: null, activeOnly: true }]],
   markLedgerUndone: [[{ id: 1, now: NOW }]],
+  updateLedgerEntry: [[{ id: 1, cfId: "r1" }], [{ id: 1, previousJson: "{}" }]],
 
   hitRateLimit: [[{ key: "login:abc", windowMs: 60_000, now: NOW }]],
   clearRateLimit: [["login:abc"]],

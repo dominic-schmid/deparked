@@ -2,7 +2,7 @@ import { claimTurnstileSlot, getDomain, insertTurnstileWidget, listLedger, listT
 import { describe, expect, it } from "vitest";
 import { planAttachDomain } from "./attach";
 import { dryRun, PLAN_START, runNextStep } from "./steps";
-import { mutatingCalls, runPlan, setup, ZONE, zoneSnapshot } from "./test-helpers";
+import { mutatingCalls, runPlan, seedWidget, setup, ZONE, zoneSnapshot } from "./test-helpers";
 
 const HOST = "example.com";
 
@@ -48,17 +48,18 @@ describe("attaching a domain on a clean zone", () => {
 
     expect(reports.map((report) => [report.step?.id, report.outcome])).toEqual([
       ["register", "ran"],
+      ["bot-check", "ran"],
+      ["analytics", "ran"],
+      ["email", "ran"],
+      ["publish-placeholder", "ran"],
       ["routes", "ran"],
       ["rewrite", "ran"],
       ["www-redirect", "ran"],
       ["dns", "ran"],
-      ["bot-check", "ran"],
-      ["analytics", "ran"],
-      ["email", "ran"],
       ["ready", "ran"],
     ]);
-    expect(reports.at(-1)).toMatchObject({ finished: true, next: "publish-placeholder" });
-    expect(reports.slice(0, -1).every((report) => !report.finished && report.next === undefined)).toBe(true);
+    expect(reports.at(-1)).toMatchObject({ finished: true });
+    expect(reports.slice(0, -1).every((report) => !report.finished)).toBe(true);
     for (const report of reports) expect(report.requests).toBeLessThanOrEqual(50);
     expect(Math.max(...reports.map((report) => report.requests))).toBeLessThanOrEqual(8);
   });
@@ -135,15 +136,19 @@ describe("attaching a domain on a clean zone", () => {
     const placeholders = snapshot.dns.filter((record) => record.type === "AAAA");
     const entries = (await listLedger(db, { host: HOST })).reverse();
     expect(entries.map(({ resource, cfId, action }) => [resource, cfId, action])).toEqual([
+      ["turnstile_hostname", mock.state.widgets[0]?.sitekey, "created"],
+      ["analytics_site", mock.state.analyticsSites[0]?.siteTag, "created"],
+      ["email_routing", ZONE.id, "created"],
       ...routes.map((route) => ["route", route.id, "created"]),
       ...snapshot.rewriteRules.map((rule) => ["rule", rule.id, "created"]),
       ...snapshot.redirectRules.map((rule) => ["rule", rule.id, "created"]),
       ...placeholders.map((record) => ["dns_record", record.id, "created"]),
-      ["turnstile_hostname", mock.state.widgets[0]?.sitekey, "created"],
-      ["analytics_site", mock.state.analyticsSites[0]?.siteTag, "created"],
-      ["email_routing", ZONE.id, "created"],
     ]);
-    expect(entries.every((entry) => entry.undoneAt === null && entry.previousJson === null)).toBe(true);
+    expect(entries.every((entry) => entry.undoneAt === null && entry.zoneId !== undefined)).toBe(true);
+    // A created entry says what it was written for, since the ledger is written before the resource exists.
+    expect(entries.filter((entry) => entry.resource === "route").map((entry) => entry.previousJson)).toEqual(
+      routes.map((route) => JSON.stringify({ intent: route.pattern })),
+    );
     // The widget's secret is shared by every domain, so it is a hub-level entry.
     expect(await listLedger(db, { host: null })).toMatchObject([
       { resource: "secret", cfId: "TURNSTILE_SECRET_1", action: "created" },
@@ -157,7 +162,7 @@ describe("attaching a domain on a clean zone", () => {
     mock.calls.length = 0;
 
     const again = await runPlan(planAttachDomain(ctx, HOST));
-    expect(again.map((report) => report.outcome)).toEqual(Array(9).fill("already-done"));
+    expect(again.map((report) => report.outcome)).toEqual(Array(10).fill("already-done"));
     expect(mutatingCalls(mock)).toEqual([]);
     expect(zoneSnapshot(mock)).toEqual(before);
     expect(await dryRun(planAttachDomain(ctx, HOST))).toMatchObject({ nothingToDo: true, blocked: false });
@@ -170,7 +175,7 @@ describe("attaching a domain on a clean zone", () => {
 
   it("rejects a state that is not a step of the plan and a host that is not a domain name", async () => {
     const { ctx } = await setup();
-    await expect(runNextStep(planAttachDomain(ctx, HOST), { next: 10 })).rejects.toThrow(RangeError);
+    await expect(runNextStep(planAttachDomain(ctx, HOST), { next: 11 })).rejects.toThrow(RangeError);
     await expect(runNextStep(planAttachDomain(ctx, HOST), { next: 0.5 })).rejects.toThrow(RangeError);
     expect(() => planAttachDomain(ctx, 'example.com" or true')).toThrow("is not a domain name");
     expect(planAttachDomain(ctx, " Example.COM. ").host).toBe("example.com");
@@ -187,44 +192,40 @@ describe("dry run", () => {
     expect(mutatingCalls(mock)).toEqual([]);
     expect(report.steps.map((step) => [step.id, step.status])).toEqual([
       ["register", "needed"],
+      ["bot-check", "needed"],
+      ["analytics", "needed"],
+      ["email", "needed"],
+      ["publish-placeholder", "needed"],
       ["routes", "needed"],
       ["rewrite", "needed"],
       ["www-redirect", "needed"],
       ["dns", "needed"],
-      ["bot-check", "needed"],
-      ["analytics", "needed"],
-      ["email", "needed"],
       ["ready", "needed"],
     ]);
     const effects = report.steps.flatMap((step) => (step.status === "needed" ? step.effects : []));
     expect(effects.filter((effect) => effect.kind === "create").map((effect) => effect.what)).toEqual([
       "example.com in Deparked's list",
-      "example.com/* is answered by Deparked's pages",
-      "example.com/admin* is answered by the Deparked admin",
-      "example.com/api/* is answered by the Deparked admin",
-      "a rule that serves example.com's files (not /catalog/, /admin or /api/)",
-      "a rule that shows example.com's page at example.com/",
-      "a rule that sends www.example.com to example.com",
-      "an address record for example.com that goes through Cloudflare",
-      "an address record for www.example.com that goes through Cloudflare",
       "a new bot check deparked-1 for example.com",
       "the secret key of deparked-1, stored on the admin",
       "visitor statistics for example.com",
       "Cloudflare's email service for example.com, so offers come from offers@example.com",
+      "a placeholder page for example.com",
+      "example.com/* is answered by Deparked's pages",
+      "example.com/admin* is answered by the Deparked admin",
+      "example.com/api/* is answered by the Deparked admin",
+      "a rule that serves example.com's files (not /catalog/, /admin, /api/ or your own Workers' paths)",
+      "a rule that shows example.com's page at example.com/",
+      "a rule that sends www.example.com to example.com",
+      "an address record for example.com that goes through Cloudflare",
+      "an address record for www.example.com that goes through Cloudflare",
     ]);
   });
 
   it("tells creates from reuses on a zone that already has records, statistics and a bot check with room", async () => {
     const context = await setup(busyZone());
-    const { ctx, cf, db } = context;
+    const { ctx, cf } = context;
     await cf.analytics.createSite(HOST);
-    const widget = await cf.turnstile.create({ name: "deparked-1", domains: ["example.org"] });
-    await insertTurnstileWidget(db, {
-      sitekey: widget.sitekey,
-      name: widget.name,
-      secretName: "TURNSTILE_SECRET_1",
-      now: 1,
-    });
+    await seedWidget(context, 1);
 
     const report = await dryRun(planAttachDomain(ctx, HOST));
     const byStep = Object.fromEntries(
@@ -250,7 +251,7 @@ describe("attaching a domain that already serves a site", () => {
     await seedBusyRoutesAndRules(context);
     const before = zoneSnapshot(mock);
 
-    const reports = await runPlan(planAttachDomain(ctx, HOST));
+    const reports = await runPlan(planAttachDomain(ctx, HOST, { takeOverLiveSite: true }));
     expect(reports.at(-1)).toMatchObject({ finished: true, outcome: "ran" });
 
     const after = zoneSnapshot(mock);
@@ -276,14 +277,16 @@ describe("attaching a domain that already serves a site", () => {
     const original = await cf.zones.createRoute(ZONE.id, { pattern: "example.com/*", script: "my-site" });
     mock.calls.length = 0;
 
-    const reports = await runPlan(planAttachDomain(ctx, HOST));
+    const reports = await runPlan(planAttachDomain(ctx, HOST, { takeOverLiveSite: true }));
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ outcome: "blocked", state: PLAN_START, finished: false });
     expect(reports[0]?.message).toContain("Another Worker already answers on example.com/* (my-site)");
     expect(mutatingCalls(mock)).toEqual([]);
     expect(await getDomain(db, HOST)).toBeUndefined();
 
-    const confirmed = await runPlan(planAttachDomain(ctx, HOST, { repointExistingRoutes: true }));
+    const confirmed = await runPlan(
+      planAttachDomain(ctx, HOST, { repointExistingRoutes: true, takeOverLiveSite: true }),
+    );
     expect(confirmed.at(-1)).toMatchObject({ finished: true });
     expect(mock.state.routes.get(ZONE.id)?.[0]).toEqual({
       id: original.id,
@@ -308,18 +311,12 @@ describe("attaching a domain that already serves a site", () => {
 
 describe("the bot check", () => {
   it("fills a widget with room and opens a new one when it is full", async () => {
-    const { ctx, cf, mock, db } = await setup({
+    const context = await setup({
       zones: [ZONE, { id: "zone-2", name: "example.org" }, { id: "zone-3", name: "example.net" }],
     });
+    const { ctx, mock, db } = context;
+    await seedWidget(context, 9);
     const nine = Array.from({ length: 9 }, (_, index) => `domain-${index}.test`);
-    const first = await cf.turnstile.create({ name: "deparked-1", domains: nine });
-    await insertTurnstileWidget(db, {
-      sitekey: first.sitekey,
-      name: first.name,
-      secretName: "TURNSTILE_SECRET_1",
-      now: 1,
-    });
-    for (let slot = 0; slot < 9; slot += 1) await claimTurnstileSlot(db, first.sitekey);
 
     await runPlan(planAttachDomain(ctx, "example.org"));
     expect(mock.state.widgets).toMatchObject([{ name: "deparked-1", domains: [...nine, "example.org"] }]);
@@ -343,16 +340,15 @@ describe("a step that fails midway", () => {
   it("reports the failure, keeps its place, and Retry finishes without duplicates", async () => {
     const { ctx, mock, db } = await setup();
     const plan = planAttachDomain(ctx, HOST);
-    const registered = await runNextStep(plan, PLAN_START);
     mock.failNext({ route: "routes.create", nth: 2, status: 403, message: "Authentication error" });
 
-    const failed = await runNextStep(plan, registered.state);
-    expect(failed).toMatchObject({ outcome: "failed", state: registered.state, finished: false });
-    expect(failed.message).toContain("create Worker route failed: 403");
+    const failed = (await runPlan(plan)).at(-1);
+    expect(failed).toMatchObject({ outcome: "failed", step: { id: "routes" }, state: { next: 5 }, finished: false });
+    expect(failed?.message).toContain("create Worker route failed: 403");
     expect(mock.state.routes.get(ZONE.id)).toHaveLength(1);
 
-    const retried = await runNextStep(plan, failed.state);
-    expect(retried).toMatchObject({ outcome: "ran", state: { next: 2 } });
+    const retried = await runNextStep(plan, failed?.state);
+    expect(retried).toMatchObject({ outcome: "ran", state: { next: 6 } });
     expect(mock.state.routes.get(ZONE.id)?.map((route) => route.pattern)).toEqual([
       "example.com/*",
       "example.com/admin*",

@@ -243,6 +243,20 @@ describe("notify addresses and Turnstile widgets", () => {
     expect(await q.releaseTurnstileSlot(db, "second")).toBe(false);
     expect((await q.listTurnstileWidgets(db)).map((widget) => widget.hostnameCount)).toEqual([9, 0]);
   });
+
+  test("a domain is assigned one slot once, and never past 10 holders", async () => {
+    const hosts = Array.from({ length: 10 }, (_, index) => `d${index}.example.com`);
+    for (const host of hosts) await q.insertDomain(db, { domain: { host, zoneId: "zone-1" }, now: NOW });
+    const assign = (host: string) => q.assignTurnstileWidget(db, { host, sitekey: SITEKEY, now: NOW + 1 });
+
+    expect(await assign("d0.example.com")).toBe(true);
+    expect(await assign("d0.example.com")).toBe(false);
+    const rest = [];
+    for (const host of hosts.slice(1)) rest.push(await assign(host));
+    expect(rest).toEqual([...Array(8).fill(true), false]);
+    expect((await q.listTurnstileWidgets(db))[0]?.hostnameCount).toBe(10);
+    expect((await q.getDomain(db, "d9.example.com"))?.turnstileWidgetId).toBeNull();
+  });
 });
 
 describe("site files", () => {

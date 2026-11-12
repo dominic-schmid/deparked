@@ -97,6 +97,13 @@ describe("accounts, zones, DNS and routes", () => {
     expect(await client.zones.listRoutes(ZONE.id)).toEqual([admin]);
   });
 
+  it("can fail a call after applying it, as when the answer is lost on the way back", async () => {
+    const { mock, client } = setup();
+    mock.failNext({ route: "routes.create", status: 403, applyFirst: true });
+    await expect(client.zones.createRoute(ZONE.id, { pattern: "example.com/*", script: "a" })).rejects.toThrow("403");
+    expect(await client.zones.listRoutes(ZONE.id)).toMatchObject([{ pattern: "example.com/*", script: "a" }]);
+  });
+
   it("points an existing route at another Worker, or at none, keeping its id", async () => {
     const { client } = setup();
     const route = await client.zones.createRoute(ZONE.id, { pattern: "example.com/*", script: "blog" });

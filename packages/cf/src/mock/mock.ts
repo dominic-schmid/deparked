@@ -28,6 +28,7 @@ export interface MockDnsRecord {
   content: string;
   priority?: number;
   proxied?: boolean;
+  ttl?: number;
 }
 
 export interface MockRule {
@@ -104,6 +105,8 @@ export interface MockFailure {
   code?: number;
   message?: string;
   retryAfterSeconds?: number;
+  /** Apply the call's change first and then answer with the failure: the caller never learns it worked. */
+  applyFirst?: boolean;
 }
 
 export interface MockSeed {
@@ -534,6 +537,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
             content: text(context.json.content, "content"),
             ...(typeof context.json.priority === "number" ? { priority: context.json.priority } : {}),
             ...(typeof context.json.proxied === "boolean" ? { proxied: context.json.proxied } : {}),
+            ...(typeof context.json.ttl === "number" ? { ttl: context.json.ttl } : {}),
           };
           const list = state.dnsRecords.get(zoneId) ?? [];
           if (
@@ -1089,8 +1093,8 @@ export function createMockCloudflare(seed: MockSeed = {}) {
     );
   }
 
-  function injected(routeId: string | undefined): MockError | undefined {
-    let hit: MockError | undefined;
+  function injected(routeId: string | undefined): (MockError & { applyFirst?: boolean }) | undefined {
+    let hit: (MockError & { applyFirst?: boolean }) | undefined;
     for (const failure of failures) {
       if (failure.route !== "*" && failure.route !== routeId) continue;
       failure.seen += 1;
@@ -1102,6 +1106,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
           failure.message ?? "injected failure",
           failure.retryAfterSeconds,
         );
+        if (failure.applyFirst === true) hit.applyFirst = true;
       }
     }
     return hit;
@@ -1128,7 +1133,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
 
     try {
       const failure = injected(route?.id);
-      if (failure !== undefined) throw failure;
+      if (failure !== undefined && failure.applyFirst !== true) throw failure;
       if (route === undefined) throw new MockError(404, 7003, `No route for ${request.method} ${path}`);
       const bearer = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
       if (route.auth === undefined && bearer !== state.token) throw new MockError(401, 1000, "Invalid API Token");
@@ -1138,6 +1143,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
       const params = route.pattern.exec(path)?.groups ?? {};
       if (params.account !== undefined && params.account !== state.accountId) throw notFound("account");
       const reply = await route.handle({ params, query: url.searchParams, json: body, form, bearer });
+      if (failure !== undefined) throw failure;
       if (route.raw === true) return json(reply.status ?? 200, reply.result);
       let result = reply.result;
       let resultInfo: Record<string, number> | undefined;

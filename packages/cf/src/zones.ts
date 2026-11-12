@@ -19,6 +19,7 @@ const dnsRecordSchema = z.object({
   content: z.string().optional(),
   priority: z.number().optional(),
   proxied: z.boolean().optional(),
+  ttl: z.number().optional(),
 });
 export type DnsRecord = z.infer<typeof dnsRecordSchema>;
 
@@ -68,19 +69,19 @@ export function zonesApi(http: Http) {
       );
     },
     /**
-     * Adds one record; nothing existing is touched. TTL is automatic. Provisioning uses it for the proxied
+     * Adds one record; nothing existing is touched. TTL is automatic (1) unless given. Provisioning uses it for the proxied
      * placeholder (`AAAA 100::`) a hostname without an origin needs, and to put MX records back on Turn off.
      */
     createDnsRecord(
       zoneId: string,
-      record: { type: string; name: string; content: string; proxied?: boolean; priority?: number },
+      record: { type: string; name: string; content: string; proxied?: boolean; priority?: number; ttl?: number },
     ): Promise<DnsRecord> {
       return http.request(
         {
           call: "create DNS record",
           method: "POST",
           path: `/zones/${segment(zoneId)}/dns_records`,
-          json: { ...record, ttl: 1 },
+          json: { ttl: 1, ...record },
         },
         dnsRecordSchema,
       );

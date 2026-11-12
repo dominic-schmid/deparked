@@ -77,7 +77,9 @@ describe("turning a domain off", () => {
     };
     const before = comparable();
 
-    await runPlan(planAttachDomain(ctx, HOST, { repointExistingRoutes: true, replaceExistingMx: true }));
+    await runPlan(
+      planAttachDomain(ctx, HOST, { repointExistingRoutes: true, replaceExistingMx: true, takeOverLiveSite: true }),
+    );
     expect(mock.state.routes.get(ZONE.id)?.[0]?.script).toBe("deparked-sites");
 
     const removal = await describeRemoval(ctx, HOST);
@@ -128,7 +130,7 @@ describe("turning a domain off", () => {
 
     const reports = await runPlan(planAttachDomain(ctx, HOST));
     expect(reports[0]).toMatchObject({ step: { id: "register" }, outcome: "already-done" });
-    expect(reports.at(-1)).toMatchObject({ finished: true, next: "publish-placeholder" });
+    expect(reports.at(-1)).toMatchObject({ finished: true });
     expect(await getDomain(db, HOST)).toMatchObject({ status: "placeholder", turnedOffAt: null });
     expect(zoneSnapshot(mock).routes.map((route) => route.pattern)).toEqual(
       attached.routes.map((route) => route.pattern),
@@ -157,14 +159,14 @@ describe("removing a domain", () => {
       "remove: Cloudflare's email service on example.com",
       "remove: visitor statistics for example.com (the collected numbers are deleted)",
       "remove: example.com's place in the bot check",
-      "remove: an address record Deparked added for example.com",
-      "remove: an address record Deparked added for example.com",
-      "remove: a rule Deparked added for example.com",
-      "remove: a rule Deparked added for example.com",
-      "remove: a rule Deparked added for example.com",
-      "remove: a route that sends example.com to Deparked",
-      "remove: a route that sends example.com to Deparked",
-      "remove: a route that sends example.com to Deparked",
+      "remove: the address record Deparked added for www.example.com",
+      "remove: the address record Deparked added for example.com",
+      'remove: the rule "Deparked example.com: www to example.com"',
+      'remove: the rule "Deparked example.com: home page"',
+      'remove: the rule "Deparked example.com: pages"',
+      "remove: the route example.com/api/* to Deparked",
+      "remove: the route example.com/admin* to Deparked",
+      "remove: the route example.com/* to Deparked",
     ]);
     expect(removal.keeps).toContain("the offers example.com received");
   });

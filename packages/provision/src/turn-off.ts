@@ -1,36 +1,45 @@
-import { CloudflareApiError } from "@deparked/cf";
+import { CloudflareApiError, type WorkerRoute } from "@deparked/cf";
 import {
   getDomain,
   type LedgerEntry,
   type LedgerResource,
   listDomains,
   markLedgerUndone,
-  releaseTurnstileSlot,
   setDomainStatus,
+  syncTurnstileHostnameCount,
   updateDomain,
+  updateLedgerEntry,
 } from "@deparked/db";
 import { z } from "zod";
 import { pickSenderHost } from "./attach";
-import { activeLedger, normalizeHost, type ProvisionContext } from "./context";
+import { activeLedger, intentKey, normalizeHost, type ProvisionContext, workerNames } from "./context";
 import type { Effect, Plan, Step, StepCheck } from "./steps";
 
 const previousRoute = z.object({ pattern: z.string(), script: z.string().nullable() });
 const previousMail = z.object({
-  mx: z.array(z.object({ name: z.string(), content: z.string(), priority: z.number().nullable() })),
+  mx: z.array(
+    z.object({
+      name: z.string(),
+      content: z.string(),
+      priority: z.number().nullable(),
+      ttl: z.number().nullable().default(null),
+    }),
+  ),
 });
 
 function previous<T>(entry: LedgerEntry, schema: z.ZodType<T>): T {
   return schema.parse(JSON.parse(entry.previousJson ?? "null"));
 }
 
+const refused = (error: unknown, ...statuses: number[]) =>
+  error instanceof CloudflareApiError && statuses.includes(error.status);
+
 /** Something that is already gone counts as undone. */
-async function unlessGone(call: Promise<unknown>): Promise<"gone" | "ok"> {
+async function unlessGone(call: Promise<unknown>): Promise<void> {
   try {
     await call;
-    return "ok";
   } catch (error) {
-    if (error instanceof CloudflareApiError && error.status === 404) return "gone";
-    throw error;
+    if (!refused(error, 404)) throw error;
   }
 }
 
@@ -38,18 +47,19 @@ function notManaged(host: string): string {
   return `${host} is not a domain Deparked manages.`;
 }
 
-/** What undoing one ledger entry does, in plain words. Built from the ledger alone: no request. */
+/** What undoing one ledger entry is meant to do, in plain words. Built from the ledger alone: no request. */
 function undoEffect(host: string, entry: LedgerEntry): Effect {
+  const key = intentKey(entry);
   switch (entry.resource) {
     case "route": {
-      if (entry.action === "created") return { kind: "remove", what: `a route that sends ${host} to Deparked` };
+      if (entry.action === "created") return { kind: "remove", what: `the route ${key ?? host} to Deparked` };
       const route = previous(entry, previousRoute);
       return { kind: "restore", what: `${route.pattern} goes back to ${route.script ?? "no Worker"}` };
     }
     case "rule":
-      return { kind: "remove", what: `a rule Deparked added for ${host}` };
+      return { kind: "remove", what: `the rule "${key ?? `Deparked ${host}`}"` };
     case "dns_record":
-      return { kind: "remove", what: `an address record Deparked added for ${host}` };
+      return { kind: "remove", what: `the address record Deparked added for ${key ?? host}` };
     case "turnstile_hostname":
       return { kind: "remove", what: `${host}'s place in the bot check` };
     case "analytics_site":
@@ -69,6 +79,9 @@ function undoEffect(host: string, entry: LedgerEntry): Effect {
   }
 }
 
+/** An entry that was announced but never got a Cloudflare id stands for nothing that exists. */
+const exists = (entry: LedgerEntry) => entry.cfId !== null;
+
 interface UndoStepInput {
   id: string;
   title: string;
@@ -76,8 +89,11 @@ interface UndoStepInput {
   resource: LedgerResource;
   /** True when the `domains` row still holds what this step clears. */
   rowPending?: (ctx: ProvisionContext) => Promise<boolean>;
-  /** Undoes the entries (newest first) in Cloudflare, marking each as undone once it is. */
-  undo: (ctx: ProvisionContext, entries: LedgerEntry[]) => Promise<void>;
+  /**
+   * Undoes the entries (newest first) in Cloudflare. Whatever is already gone counts as undone. Returns what
+   * it left as it is and why, for the owner to read.
+   */
+  undo: (ctx: ProvisionContext, entries: LedgerEntry[]) => Promise<Effect[]>;
   /** Clears the step's fields on the `domains` row. */
   clearRow?: (ctx: ProvisionContext) => Promise<void>;
 }
@@ -91,22 +107,24 @@ function undoStep(input: UndoStepInput): Step {
     title: input.title,
     async check(ctx): Promise<StepCheck> {
       if ((await getDomain(ctx.db, host)) === undefined) return { status: "blocked", reason: notManaged(host) };
-      const effects = (await entries(ctx)).map((entry) => undoEffect(host, entry));
-      const pending = effects.length > 0 || (await input.rowPending?.(ctx)) === true;
-      return { status: pending ? "needed" : "done", effects };
+      const list = await entries(ctx);
+      const pending = list.length > 0 || (await input.rowPending?.(ctx)) === true;
+      return {
+        status: pending ? "needed" : "done",
+        effects: list.filter(exists).map((entry) => undoEffect(host, entry)),
+      };
     },
     async run(ctx) {
       const list = await entries(ctx);
-      const effects = list.map((entry) => undoEffect(host, entry));
-      await input.undo(ctx, list);
+      const notes = await input.undo(ctx, list.filter(exists));
+      for (const entry of list) await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
       await input.clearRow?.(ctx);
-      return { effects };
+      return { effects: [...list.filter(exists).map((entry) => undoEffect(host, entry)), ...notes] };
     },
   };
 }
 
-const undone = (ctx: ProvisionContext, entry: LedgerEntry) =>
-  markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
+const leftAsIs = (what: string): Effect => ({ kind: "reuse", what });
 
 function stopEmailStep(host: string): Step {
   return undoStep({
@@ -119,7 +137,8 @@ function stopEmailStep(host: string): Step {
       return row !== undefined && (row.emailRoutingState !== "none" || row.senderHost !== null);
     },
     async undo(ctx, entries) {
-      if (entries.length === 0) return;
+      const notes: Effect[] = [];
+      if (entries.length === 0) return notes;
       // Domains that kept their own mail and send through this one move to another sender first.
       const domains = await listDomains(ctx.db);
       const replacement = pickSenderHost(domains, host, null);
@@ -131,22 +150,34 @@ function stopEmailStep(host: string): Step {
         const zoneId = entry.zoneId ?? "";
         // An attach that failed right after writing the entry down never turned the service on.
         if ((await ctx.cf.email.getRouting(zoneId)).enabled) await ctx.cf.email.disableRouting(zoneId);
-        if (entry.action === "changed") {
-          const present = await ctx.cf.zones.listDnsRecords(zoneId, { type: "MX", name: host });
-          for (const record of previous(entry, previousMail).mx) {
-            if (present.some((existing) => existing.name === record.name && existing.content === record.content)) {
-              continue;
-            }
+        if (entry.action !== "changed") continue;
+        const present = await ctx.cf.zones.listDnsRecords(zoneId, { type: "MX", name: host });
+        for (const record of previous(entry, previousMail).mx) {
+          if (present.some((existing) => existing.name === record.name && existing.content === record.content)) {
+            continue;
+          }
+          if (record.priority === null) {
+            notes.push(
+              leftAsIs(`not put back: the mail record ${record.content} had no priority, add it by hand in Cloudflare`),
+            );
+            continue;
+          }
+          try {
             await ctx.cf.zones.createDnsRecord(zoneId, {
               type: "MX",
               name: record.name,
               content: record.content,
-              ...(record.priority === null ? {} : { priority: record.priority }),
+              priority: record.priority,
+              ...(record.ttl === null ? {} : { ttl: record.ttl }),
             });
+          } catch (error) {
+            // A record Cloudflare refuses must not keep the rest of Turn off from happening.
+            if (!refused(error, 400, 409)) throw error;
+            notes.push(leftAsIs(`not put back: Cloudflare refused the mail record ${record.content}, add it by hand`));
           }
         }
-        await undone(ctx, entry);
       }
+      return notes;
     },
     async clearRow(ctx) {
       await updateDomain(ctx.db, { host, patch: { emailRoutingState: "none", senderHost: null }, now: ctx.now() });
@@ -164,10 +195,8 @@ function stopAnalyticsStep(host: string): Step {
       return (await getDomain(ctx.db, host))?.analyticsSiteTag != null;
     },
     async undo(ctx, entries) {
-      for (const entry of entries) {
-        await unlessGone(ctx.cf.analytics.deleteSite(entry.cfId ?? ""));
-        await undone(ctx, entry);
-      }
+      for (const entry of entries) await unlessGone(ctx.cf.analytics.deleteSite(entry.cfId ?? ""));
+      return [];
     },
     async clearRow(ctx) {
       await updateDomain(ctx.db, {
@@ -179,7 +208,11 @@ function stopAnalyticsStep(host: string): Step {
   });
 }
 
-/** The widget and its secret stay: they are shared, and the next domain takes the free place. */
+/**
+ * Frees the place the domain holds, which is what `domains.turnstile_widget_id` says and nothing else. The
+ * widget's hostname list is read right before it is written. The widget and its secret stay: they are shared,
+ * and the next domain takes the free place.
+ */
 function stopBotCheckStep(host: string): Step {
   return undoStep({
     id: "stop-bot-check",
@@ -189,23 +222,21 @@ function stopBotCheckStep(host: string): Step {
     async rowPending(ctx) {
       return (await getDomain(ctx.db, host))?.turnstileWidgetId != null;
     },
-    async undo(ctx, entries) {
-      if (entries.length === 0) return;
-      const widgets = await ctx.cf.turnstile.list();
-      for (const entry of entries) {
-        const widget = widgets.find((candidate) => candidate.sitekey === entry.cfId);
-        if (widget?.domains.includes(host) === true) {
-          await ctx.cf.turnstile.updateHostnames(
+    async undo(ctx) {
+      const held = (await getDomain(ctx.db, host))?.turnstileWidgetId ?? null;
+      if (held === null) return [];
+      const widget = (await ctx.cf.turnstile.list()).find((candidate) => candidate.sitekey === held);
+      if (widget?.domains.includes(host) === true) {
+        await unlessGone(
+          ctx.cf.turnstile.updateHostnames(
             widget,
             widget.domains.filter((domain) => domain !== host),
-          );
-        }
-        // Marked first: a failure in between then wastes a place instead of freeing one twice.
-        if (await undone(ctx, entry)) await releaseTurnstileSlot(ctx.db, entry.cfId ?? "");
+          ),
+        );
       }
-    },
-    async clearRow(ctx) {
       await updateDomain(ctx.db, { host, patch: { turnstileWidgetId: null }, now: ctx.now() });
+      await syncTurnstileHostnameCount(ctx.db, held);
+      return [];
     },
   });
 }
@@ -219,8 +250,8 @@ function stopDnsStep(host: string): Step {
     async undo(ctx, entries) {
       for (const entry of entries) {
         await unlessGone(ctx.cf.zones.deleteDnsRecord(entry.zoneId ?? "", entry.cfId ?? ""));
-        await undone(ctx, entry);
       }
+      return [];
     },
   });
 }
@@ -232,7 +263,7 @@ function stopRulesStep(host: string): Step {
     host,
     resource: "rule",
     async undo(ctx, entries) {
-      if (entries.length === 0) return;
+      if (entries.length === 0) return [];
       const zoneId = entries[0]?.zoneId ?? "";
       const rulesets = [
         await ctx.cf.rulesets.getEntrypoint(zoneId, "http_request_dynamic_redirect"),
@@ -241,12 +272,19 @@ function stopRulesStep(host: string): Step {
       for (const entry of entries) {
         const ruleset = rulesets.find((candidate) => candidate?.rules.some((rule) => rule.id === entry.cfId));
         if (ruleset != null) await unlessGone(ctx.cf.rulesets.deleteRule(zoneId, ruleset.id, entry.cfId ?? ""));
-        await undone(ctx, entry);
+        // One at a time: a failure further on must not make a deleted rule look like it is still there.
+        await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
       }
+      return [];
     },
   });
 }
 
+/**
+ * A route is only touched while it is still what Deparked made of it: the same id and pattern, pointing at a
+ * Deparked Worker. One the owner changed since stays as it is, one that is gone is not brought back, and a
+ * restore Cloudflare refuses is reported instead of retried forever.
+ */
 function stopRoutesStep(host: string): Step {
   return undoStep({
     id: "stop-routes",
@@ -254,21 +292,45 @@ function stopRoutesStep(host: string): Step {
     host,
     resource: "route",
     async undo(ctx, entries) {
+      const notes: Effect[] = [];
+      if (entries.length === 0) return notes;
+      const workers = workerNames(ctx);
+      const routes = new Map<string, WorkerRoute[]>();
       for (const entry of entries) {
         const zoneId = entry.zoneId ?? "";
-        const routeId = entry.cfId ?? "";
-        if (entry.action === "created") {
-          await unlessGone(ctx.cf.zones.deleteRoute(zoneId, routeId));
+        if (!routes.has(zoneId)) routes.set(zoneId, await ctx.cf.zones.listRoutes(zoneId));
+        const route = routes.get(zoneId)?.find((candidate) => candidate.id === entry.cfId);
+        const original = entry.action === "changed" ? previous(entry, previousRoute) : undefined;
+        const pattern = original?.pattern ?? intentKey(entry) ?? route?.pattern;
+        const note = async (text: string, words: string) => {
+          notes.push(leftAsIs(`left as is: ${pattern} ${words}`));
+          if (original !== undefined) {
+            await updateLedgerEntry(ctx.db, {
+              id: entry.id,
+              previousJson: JSON.stringify({ ...original, note: text }),
+            });
+          }
+        };
+        if (route === undefined) {
+          if (original !== undefined) await note("left as is: gone", "no longer exists and was not brought back");
+        } else if (route.pattern !== pattern || (route.script !== workers.sites && route.script !== workers.admin)) {
+          await note("left as is: changed after Deparked", "was changed after Deparked set it");
+        } else if (original === undefined) {
+          await unlessGone(ctx.cf.zones.deleteRoute(zoneId, route.id));
         } else {
-          const route = previous(entry, previousRoute);
-          const original = { pattern: route.pattern, ...(route.script === null ? {} : { script: route.script }) };
-          const result = await unlessGone(ctx.cf.zones.updateRoute(zoneId, routeId, original));
-          if (result === "gone" && route.script !== null) {
-            await ctx.cf.zones.createRoute(zoneId, { pattern: route.pattern, script: route.script });
+          try {
+            await ctx.cf.zones.updateRoute(zoneId, route.id, {
+              pattern: original.pattern,
+              ...(original.script === null ? {} : { script: original.script }),
+            });
+          } catch (error) {
+            if (!refused(error, 400, 404, 409)) throw error;
+            await note("left as is: Cloudflare refused the restore", "could not be given back (Cloudflare refused)");
           }
         }
-        await undone(ctx, entry);
+        await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
       }
+      return notes;
     },
   });
 }
@@ -333,9 +395,9 @@ export interface RemovalDescription {
 export async function describeRemoval(ctx: ProvisionContext, hostInput: string): Promise<RemovalDescription> {
   const host = normalizeHost(hostInput);
   const order = turnOffOrder();
-  const entries = (await activeLedger(ctx, host)).toSorted(
-    (a, b) => order.indexOf(a.resource) - order.indexOf(b.resource),
-  );
+  const entries = (await activeLedger(ctx, host))
+    .filter(exists)
+    .toSorted((a, b) => order.indexOf(a.resource) - order.indexOf(b.resource));
   return {
     host,
     effects: entries.map((entry) => undoEffect(host, entry)),
