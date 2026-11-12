@@ -58,8 +58,12 @@ test("updates from one release to the next from Settings, republishes every page
 
   // Release B appears on "GitHub": the admin shows it with its checksum, and installs nothing yet.
   setLatestRelease(TEST_RELEASE_NEXT);
-  await page.getByRole("button", { name: "Check again" }).click();
-  await expect(page.getByRole("heading", { name: `Update available: Deparked ${TEST_RELEASE_NEXT}` })).toBeVisible();
+  await expect(async () => {
+    await page.getByRole("button", { name: "Check again" }).click();
+    await expect(page.getByRole("heading", { name: `Update available: Deparked ${TEST_RELEASE_NEXT}` })).toBeVisible({
+      timeout: 1000,
+    });
+  }).toPass();
   await expect(page.getByText(releases[TEST_RELEASE_NEXT] ?? "missing", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Review the update" }).click();
   await expect(page.getByRole("heading", { name: "What will change" })).toBeVisible();
@@ -87,8 +91,12 @@ test("updates from one release to the next from Settings, republishes every page
   await page.reload();
   await expect(page.getByText(`Deparked ${TEST_RELEASE_NEXT}`, { exact: true })).toBeVisible();
   await expect(page.getByText("You have the newest release.")).toBeVisible();
-  await page.getByRole("button", { name: `Roll back to ${TEST_RELEASE}` }).click();
   const dialog = page.getByRole("alertdialog");
+  // Clicked again until the page has hydrated and opens the dialog.
+  await expect(async () => {
+    await page.getByRole("button", { name: `Roll back to ${TEST_RELEASE}` }).click();
+    await expect(dialog).toBeVisible({ timeout: 1000 });
+  }).toPass();
   await expect(dialog).toContainText("The database stays as");
   await dialog.getByRole("button", { name: "Roll back" }).click();
   await expect(page.getByText(`Deparked ${TEST_RELEASE} is installed`)).toBeVisible({ timeout: 60_000 });
@@ -147,7 +155,12 @@ test("an update whose admin does not work is rolled back from the installer, the
   await login();
   await page.goto(`${urls.admin}/admin/settings/updates`);
   await expect(page.getByRole("heading", { name: `Rolling back to Deparked ${TEST_RELEASE}` })).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(async () => {
+    await page.getByRole("button", { name: "Continue" }).click({ timeout: 1000 });
+    await expect(
+      page.getByText(new RegExp(`Keep this tab open|Deparked ${TEST_RELEASE} is installed`)).first(),
+    ).toBeVisible({ timeout: 1000 });
+  }).toPass();
   await expect(page.getByText(`Deparked ${TEST_RELEASE} is installed`)).toBeVisible({ timeout: 60_000 });
   expect(await db.sql("SELECT change_finished_at IS NOT NULL AS done FROM release_state")).toEqual([{ done: 1 }]);
 });

@@ -41,6 +41,7 @@ The harness passes these with `wrangler dev --var`. No secret file exists or is 
 | `SESSION_KEY` | admin | a dummy | cookie signing |
 | `RELEASE_VERSION`, `RELEASE_SHA256`, `RELEASE_BASE_URL` | install | `0.0.1-e2e`, the hash of the built `release.json`, the release server | the harness builds a real release from this checkout (`scripts/build-release.ts`) and serves it like GitHub Releases; `urls.release` |
 | `TURNSTILE_SECRET_1` | admin | Cloudflare's always-pass dummy secret `1x0000000000000000000000000000000AA` | a `turnstile_widgets` row arranged by a test should use `secret_name = 'TURNSTILE_SECRET_1'` and sitekey `1x00000000000000000000AA` (`TURNSTILE_DUMMY_SITEKEY`) |
+| `RELEASE_LATEST_URL`, `RELEASE_DOWNLOAD_URL` | admin | `<release server>/latest`, `<release server>` | where Update finds the newest release (GitHub's API shape) and downloads `/v<version>/…`; set the newest with `setLatestRelease` |
 | `RELEASE_FILES_URL` | admin | `<release server>/files`, the release's `catalogFilesUrl` | where a publish downloads catalog files the mock asks for again (`harness/release.ts`) |
 
 The mock's siteverify answer is `mock.state.siteverify` (`{ success, hostname }`, default `example.com`).
@@ -73,9 +74,10 @@ test("a visitor sends an offer", async ({ page, hostUrl, db, mock, writeSiteFile
 | `hostUrl(host, path?)` | `http://<host>.localhost:<port><path>`: a managed domain as its visitor sees it. |
 | `writeSiteFile(path, body)` | Adds a file to the sites Worker and waits until it is served. |
 | `login(host?)` | Stores `TEST_PASSWORD` as the workspace password in D1, logs in through the login form and returns the page on `/admin`. Without a host: on `urls.admin`. With one: on that managed domain. A login on one does not count on the other, as in production. |
+| `releases`, `setLatestRelease(version)` | The SHA-256 of each built release (`TEST_RELEASE`, `TEST_RELEASE_NEXT`) and what the admin finds as the newest one. None until set. |
 | `resetState()` | Runs before every test already. Fresh mock (same seed), every table emptied (schema kept), written site files removed. |
 
-Constants from `../fixtures`: `TEST_PASSWORD`, `TEST_TOKEN`, `TEST_ACCOUNT_ID`, `TEST_SESSION_KEY`, `ZONES`, `TURNSTILE_DUMMY_SITEKEY`, `TURNSTILE_SECRET_NAME`.
+Constants from `../fixtures`: `TEST_RELEASE`, `TEST_RELEASE_NEXT`, `TEST_PASSWORD`, `TEST_TOKEN`, `TEST_ACCOUNT_ID`, `TEST_SESSION_KEY`, `ZONES`, `TURNSTILE_DUMMY_SITEKEY`, `TURNSTILE_SECRET_NAME`.
 
 ### How hosts map
 

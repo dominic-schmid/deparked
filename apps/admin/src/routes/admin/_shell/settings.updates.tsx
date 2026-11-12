@@ -487,6 +487,10 @@ function UpdatesPage() {
   const [started, setStarted] = useState<Pick<ReleaseChange, "kind" | "pin"> | null>(null);
   const [rollbackOpen, setRollbackOpen] = useState(false);
   const answer = checked ?? loaded;
+  // The change this page opened on stays on screen once it finishes, with its result.
+  const [opened] = useState(() =>
+    loaded.ok && loaded.value.status.change?.finished === false ? loaded.value.status.change : null,
+  );
 
   if (!answer.ok) {
     return (
@@ -502,7 +506,7 @@ function UpdatesPage() {
   const view = answer.value;
   const { status, latest } = view;
   const unfinished = status.change !== null && !status.change.finished ? status.change : null;
-  const change = started ?? unfinished;
+  const change = started ?? opened ?? unfinished;
   // After the reload that hands over to the new admin, it carries on by itself.
   const resume =
     unfinished !== null &&
