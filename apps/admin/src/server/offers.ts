@@ -76,9 +76,42 @@ const CSV_COLUMNS = [
   "email_error",
 ] as const;
 
-/** RFC 4180 with a byte order mark, so Excel reads it as UTF-8. */
-export function offersCsv(offers: readonly Offer[]): string {
-  const rows = offers.map((offer) => [
+const EXPORT_PAGE_SIZE = 200;
+// A Worker on the free plan may run 50 D1 queries per request: the session check takes some, the export the rest.
+const EXPORT_MAX_PAGES = 40;
+
+/** How many offers one export holds at most. */
+export const EXPORT_MAX_OFFERS = EXPORT_PAGE_SIZE * EXPORT_MAX_PAGES;
+
+export type OfferExport = {
+  offers: Offer[] /** More offers match the filter than the export holds. */;
+  truncated: boolean;
+};
+
+/** The offers the filter matches, newest first, up to `maxPages` pages of 200. */
+export async function exportOffers(db: Db, filter: OfferFilter, maxPages = EXPORT_MAX_PAGES): Promise<OfferExport> {
+  const offers: Offer[] = [];
+  let before: OfferPage["next"] = null;
+  for (let page = 0; page < maxPages; page++) {
+    // `listOffers` reads one row beyond the page, so `next` says whether anything is left.
+    const result = await listOffers(db, {
+      ...where(filter),
+      ...(before === null ? {} : { before }),
+      limit: EXPORT_PAGE_SIZE,
+    });
+    offers.push(...result.offers);
+    before = result.next;
+    if (before === null) break;
+  }
+  return { offers, truncated: before !== null };
+}
+
+/**
+ * RFC 4180 with a byte order mark, so Excel reads it as UTF-8. A truncated export ends with a line that says so,
+ * where the owner cannot miss it.
+ */
+export function offersCsv(data: OfferExport): string {
+  const rows = data.offers.map((offer) => [
     new Date(offer.createdAt).toISOString(),
     offer.host,
     decimalAmount(offer.amountMinor, offer.currency),
@@ -91,29 +124,15 @@ export function offersCsv(offers: readonly Offer[]): string {
     offer.emailStatus,
     offer.emailError ?? "",
   ]);
-  const lines = [CSV_COLUMNS, ...rows].map((row) => row.map(csvCell).join(","));
-  return `﻿${lines.join("\r\n")}\r\n`;
-}
-
-const EXPORT_PAGE_SIZE = 200;
-// A Worker on the free plan may run 50 D1 queries per request: the session check takes some, the export the rest.
-const EXPORT_MAX_PAGES = 40;
-
-/** Every offer the filter matches, newest first, up to 8,000 (see `EXPORT_MAX_PAGES`). */
-export async function exportOffers(db: Db, filter: OfferFilter): Promise<Offer[]> {
-  const offers: Offer[] = [];
-  let before: OfferPage["next"] = null;
-  for (let page = 0; page < EXPORT_MAX_PAGES; page++) {
-    const result = await listOffers(db, {
-      ...where(filter),
-      ...(before === null ? {} : { before }),
-      limit: EXPORT_PAGE_SIZE,
-    });
-    offers.push(...result.offers);
-    before = result.next;
-    if (before === null) break;
-  }
-  return offers;
+  const notice = data.truncated
+    ? [
+        [
+          `INCOMPLETE EXPORT: this file holds only the newest ${data.offers.length} offers. Older offers are missing. Export one domain or one status at a time to get them all.`,
+        ],
+      ]
+    : [];
+  const lines = [CSV_COLUMNS, ...rows, ...notice].map((row) => row.map(csvCell).join(","));
+  return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
 /** `offers-example.com-new-2026-11-12.csv`. Hosts hold only letters, digits, dots and hyphens; anything else is dropped. */

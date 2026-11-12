@@ -1,4 +1,10 @@
-import { getNotifyAddress, listNotifyAddresses, updateDomain } from "@deparked/db";
+import {
+  deleteNotifyAddress,
+  getNotifyAddress,
+  insertNotifyAddress,
+  listNotifyAddresses,
+  updateDomain,
+} from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
 import { HostingError } from "@deparked/hosting";
 import { createFakeHosting } from "@deparked/hosting/testing";
@@ -30,7 +36,7 @@ describe("add", () => {
     expect(result.ok).toBe(true);
     expect(hosting.verificationMails).toEqual([SECOND]);
     const row = await getNotifyAddress(db, SECOND);
-    expect(row).toMatchObject({ email: SECOND, verifiedAt: null, createdAt: NOW });
+    expect(row).toMatchObject({ email: SECOND, verifiedAt: null, createdAt: NOW, lastResentAt: NOW });
     expect(row?.cfAddressId).toBeTruthy();
   });
 
@@ -48,6 +54,43 @@ describe("add", () => {
     await addNotifyAddress(db, hosting, { email: SECOND, now: NOW });
     expect((await getNotifyAddress(db, SECOND))?.verifiedAt).not.toBeNull();
     expect(hosting.verificationMails).toEqual([]);
+  });
+
+  test("a second request that added it first is not an error", async () => {
+    const { db, hosting } = await setup();
+    const racing = {
+      ...hosting,
+      notifyAddresses: {
+        ...hosting.notifyAddresses,
+        async add(email: string) {
+          const address = await hosting.notifyAddresses.add(email);
+          await insertNotifyAddress(db, { email, cfAddressId: address.id, now: NOW });
+          return address;
+        },
+      },
+    };
+
+    expect(await addNotifyAddress(db, racing, { email: SECOND, now: NOW })).toEqual({
+      ok: true,
+      message: `${SECOND} is already on the list.`,
+    });
+    expect(await listNotifyAddresses(db)).toHaveLength(2);
+  });
+
+  test("removing and adding again cannot mail an address more than five times in six hours", async () => {
+    const { db, hosting } = await setup();
+    for (let round = 0; round < 5; round++) {
+      expect((await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + round })).ok).toBe(true);
+      expect((await removeNotifyAddress(db, hosting, { email: SECOND })).ok).toBe(true);
+    }
+
+    const sixth = await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + 10 });
+
+    expect(sixth.ok).toBe(false);
+    expect(sixth.message).toContain("Too many verification emails");
+    expect(hosting.verificationMails).toHaveLength(5);
+    expect(await getNotifyAddress(db, SECOND)).toBeUndefined();
+    expect((await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + 6 * 3_600_000 + 10 })).ok).toBe(true);
   });
 
   test("a host failure is reported and nothing is stored", async () => {
@@ -73,14 +116,33 @@ describe("resend", () => {
     await addNotifyAddress(db, hosting, { email: SECOND, now: NOW });
     const before = await getNotifyAddress(db, SECOND);
 
-    expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 1000 })).ok).toBe(true);
+    expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 1000 })).ok).toBe(false);
+    expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 61_000 })).ok).toBe(true);
     const after = await getNotifyAddress(db, SECOND);
     expect(after?.cfAddressId).not.toBe(before?.cfAddressId);
-    expect(after?.lastResentAt).toBe(NOW + 1000);
+    expect(after?.lastResentAt).toBe(NOW + 61_000);
+    expect(hosting.verificationMails).toEqual([SECOND, SECOND]);
+  });
 
-    expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 30_000 })).ok).toBe(false);
-    expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 62_000 })).ok).toBe(true);
-    expect(hosting.verificationMails).toEqual([SECOND, SECOND, SECOND]);
+  test("an address removed while its mail went out is reported, not a crash", async () => {
+    const { db, hosting } = await setup();
+    await addNotifyAddress(db, hosting, { email: SECOND, now: NOW });
+    const racing = {
+      ...hosting,
+      notifyAddresses: {
+        ...hosting.notifyAddresses,
+        async resend(id: string) {
+          const address = await hosting.notifyAddresses.resend(id);
+          await deleteNotifyAddress(db, SECOND);
+          return address;
+        },
+      },
+    };
+
+    expect(await resendNotifyAddress(db, racing, { email: SECOND, now: NOW + 61_000 })).toEqual({
+      ok: false,
+      message: "That address is not on the list any more.",
+    });
   });
 
   test("an address the host lost is added again", async () => {
@@ -89,7 +151,7 @@ describe("resend", () => {
     const row = await getNotifyAddress(db, SECOND);
     await hosting.notifyAddresses.remove(row?.cfAddressId ?? "");
 
-    expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 1 })).ok).toBe(true);
+    expect((await resendNotifyAddress(db, hosting, { email: SECOND, now: NOW + 61_000 })).ok).toBe(true);
     expect((await hosting.notifyAddresses.list()).map((address) => address.email)).toContain(SECOND);
   });
 

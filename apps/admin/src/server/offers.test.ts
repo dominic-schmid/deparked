@@ -109,9 +109,27 @@ describe("CSV export", () => {
       const offer = await insertOffer(db, { offer: buyer, now: NOW + index });
       if (index % 2 === 0) await changeOfferStatus(db, { id: offer.id, status: "replied", now: NOW });
     }
-    expect(await exportOffers(db, {})).toHaveLength(205);
-    expect(await exportOffers(db, { status: "replied" })).toHaveLength(103);
-    expect(await exportOffers(db, { host: "other.example" })).toHaveLength(0);
+    const all = await exportOffers(db, {});
+    expect(all.offers).toHaveLength(205);
+    expect(all.truncated).toBe(false);
+    expect((await exportOffers(db, { status: "replied" })).offers).toHaveLength(103);
+    expect((await exportOffers(db, { host: "other.example" })).offers).toHaveLength(0);
+  });
+
+  test("an export that hits the cap says so on its last line", async () => {
+    const db = await seeded();
+    for (let index = 0; index < 201; index++) await insertOffer(db, { offer: buyer, now: NOW + index });
+
+    const capped = await exportOffers(db, {}, 1);
+    expect(capped.offers).toHaveLength(200);
+    expect(capped.truncated).toBe(true);
+    const lines = offersCsv(capped).trimEnd().split("\r\n");
+    expect(lines).toHaveLength(202);
+    expect(lines.at(-1)).toMatch(/^INCOMPLETE EXPORT: this file holds only the newest 200 offers\./);
+
+    const exact = await exportOffers(db, { status: "new" }, 2);
+    expect(exact.truncated).toBe(false);
+    expect(offersCsv(exact)).not.toContain("INCOMPLETE");
   });
 
   test("names the file after the filter and cannot break out of the header", () => {

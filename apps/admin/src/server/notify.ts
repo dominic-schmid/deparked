@@ -2,6 +2,7 @@ import {
   type Db,
   deleteNotifyAddress,
   getNotifyAddress,
+  hitRateLimit,
   insertNotifyAddress,
   listDomains,
   listNotifyAddresses,
@@ -17,6 +18,24 @@ export const notifyEmailSchema = z.object({ email: z.string().trim().toLowerCase
 export type NotifyResult = { ok: true; message: string } | { ok: false; message: string };
 
 const RESEND_WAIT_MS = 60_000;
+// Verification mails per address, counted across add, resend and remove-then-add: the address may be a
+// stranger's, and the account must not be usable to flood it. Below the 24 hours after which counters are pruned.
+const MAILS_PER_WINDOW = 5;
+const MAIL_WINDOW_MS = 6 * 3_600_000;
+
+const TOO_MANY: NotifyResult = {
+  ok: false,
+  message: "Too many verification emails went to this address. Try again in a few hours.",
+};
+const REMOVED: NotifyResult = { ok: false, message: "That address is not on the list any more." };
+
+/** Counts one verification mail for the address. False when it has had its share for now. */
+async function mayMail(db: Db, email: string, now: number): Promise<boolean> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email.toLowerCase()));
+  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const hit = await hitRateLimit(db, { key: `notify:${hash}`, windowMs: MAIL_WINDOW_MS, now });
+  return hit.count <= MAILS_PER_WINDOW;
+}
 
 function failed(error: unknown): NotifyResult {
   if (error instanceof HostingError) return { ok: false, message: error.message };
@@ -46,15 +65,19 @@ export async function addNotifyAddress(
   if ((await getNotifyAddress(db, input.email)) !== undefined) {
     return { ok: true, message: `${input.email} is already on the list.` };
   }
+  if (!(await mayMail(db, input.email, input.now))) return TOO_MANY;
   try {
     const address = await hosting.notifyAddresses.add(input.email);
     const verifiedAt = verifiedAtOf(address, input.now);
-    await insertNotifyAddress(db, {
+    const inserted = await insertNotifyAddress(db, {
       email: input.email,
       cfAddressId: address.id,
       ...(verifiedAt === null ? {} : { verifiedAt }),
       now: input.now,
     });
+    // A second request added it in the meantime: that one's row stands.
+    if (!inserted) return { ok: true, message: `${input.email} is already on the list.` };
+    if (verifiedAt === null) await updateNotifyAddress(db, { email: input.email, patch: { lastResentAt: input.now } });
     return {
       ok: true,
       message:
@@ -74,18 +97,21 @@ export async function resendNotifyAddress(
   input: { email: string; now: number },
 ): Promise<NotifyResult> {
   const row = await getNotifyAddress(db, input.email);
-  if (row === undefined) return { ok: false, message: "That address is not on the list any more." };
+  if (row === undefined) return REMOVED;
   if (row.verifiedAt !== null) return { ok: true, message: `${row.email} is already verified.` };
   if (row.lastResentAt !== null && input.now - row.lastResentAt < RESEND_WAIT_MS) {
     return { ok: false, message: "A verification email was sent a moment ago. Wait a minute before sending another." };
   }
+  if (!(await mayMail(db, row.email, input.now))) return TOO_MANY;
   try {
     const address = await resendOrAdd(hosting, row);
     const verifiedAt = verifiedAtOf(address, input.now);
-    await updateNotifyAddress(db, {
+    const updated = await updateNotifyAddress(db, {
       email: row.email,
       patch: { cfAddressId: address.id, verifiedAt, lastResentAt: input.now },
     });
+    // Removed by another request while the mail went out.
+    if (updated === undefined) return REMOVED;
     return {
       ok: true,
       message: verifiedAt === null ? `Verification email sent again to ${row.email}.` : `${row.email} is verified.`,

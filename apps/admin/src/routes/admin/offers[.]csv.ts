@@ -16,11 +16,14 @@ export const Route = createFileRoute("/admin/offers.csv")({
           status: search.get("status") ?? undefined,
         });
         if (!filter.success) return new Response("Bad request", { status: 400 });
-        const csv = offersCsv(await exportOffers(createDb(env.DB), filter.data));
-        return new Response(csv, {
+        const data = await exportOffers(createDb(env.DB), filter.data);
+        return new Response(offersCsv(data), {
           headers: {
             "Content-Type": "text/csv; charset=utf-8",
             "Content-Disposition": `attachment; filename="${exportFilename(filter.data, Date.now())}"`,
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            ...(data.truncated ? { "X-Deparked-Truncated": "1" } : {}),
           },
         });
       },

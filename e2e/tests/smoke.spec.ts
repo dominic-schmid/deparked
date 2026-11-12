@@ -63,7 +63,7 @@ test("state from the previous test is gone", async ({ db, mock, urls }) => {
 test("a logged-in owner sees the admin, on its own address and on a managed domain", async ({ login }) => {
   for (const host of [undefined, "example.com"]) {
     const page = await login(host);
-    await expect(page.getByRole("heading", { name: "Deparked admin" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
   }
 });
 
