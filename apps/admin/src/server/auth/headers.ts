@@ -32,7 +32,7 @@ export function securityHeaders(options: { nonce: string; dev: boolean; setup?: 
     "Content-Security-Policy": csp.join("; "),
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    // A setup link carries its one-time secret in the query: none of its responses may send it on, not even same-origin.
+    // The setup link's redirect carries the one-time secret in its URL: it sends no referrer at all.
     "Referrer-Policy": options.setup === true ? "no-referrer" : "same-origin",
     "X-Robots-Tag": "noindex",
     "Cache-Control": "no-store",

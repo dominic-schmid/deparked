@@ -8,7 +8,7 @@ async function connect(page: Page, installUrl: string, token = TEST_TOKEN) {
   await page.getByRole("button", { name: "Check the token" }).click();
 }
 
-test("installs from a real release through to the admin's setup link", async ({ page, urls, mock, db }) => {
+test("installs from a real release through to the admin's setup link", async ({ page, request, urls, mock, db }) => {
   await connect(page, urls.install);
   await expect(
     page.getByRole("heading", { level: 1, name: `Ready to install Deparked ${TEST_RELEASE}` }),
@@ -29,6 +29,9 @@ test("installs from a real release through to the admin's setup link", async ({ 
 
   // The local admin shares the database: the link's secret creates the password there.
   const local = new URL(setupUrl ?? "");
+  // The redirect that takes the secret out of the URL sends no referrer anywhere.
+  const redirect = await request.get(`${urls.admin}${local.pathname}${local.search}`, { maxRedirects: 0 });
+  expect(redirect.headers()["referrer-policy"]).toBe("no-referrer");
   await page.goto(`${urls.admin}${local.pathname}${local.search}`);
   await page.getByLabel("Password", { exact: true }).fill("a-long-new-password");
   await page.getByLabel("Repeat password").fill("a-long-new-password");

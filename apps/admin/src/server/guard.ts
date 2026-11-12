@@ -23,7 +23,7 @@ export const adminGuard = createMiddleware().server(async ({ request, handlerTyp
   if (isPublicApi(pathname)) return next();
 
   const nonce = createNonce();
-  const headers = securityHeaders({ nonce, dev: import.meta.env.DEV, setup: isSetupPath(pathname) });
+  const headers = securityHeaders({ nonce, dev: import.meta.env.DEV });
   const https = httpsRedirect(url);
   if (https !== null) return new Response(null, { status: 308, headers: { ...headers, Location: https } });
   if (!isAllowedOrigin(request)) return new Response("Forbidden", { status: 403, headers });
@@ -34,7 +34,9 @@ export const adminGuard = createMiddleware().server(async ({ request, handlerTyp
     return new Response(null, {
       status: 303,
       headers: {
-        ...headers,
+        // The one response whose URL carries the secret. Not on the setup page itself: under no-referrer the
+        // browser sends `Origin: null` with its form, which the origin check rightly refuses.
+        ...securityHeaders({ nonce, dev: import.meta.env.DEV, setup: true }),
         Location: setCookie === null ? SETUP_PATH : `${SETUP_PATH}?link=1`,
         ...(setCookie === null ? {} : { "Set-Cookie": setCookie }),
       },
