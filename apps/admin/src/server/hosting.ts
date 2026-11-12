@@ -1,41 +1,36 @@
 import { EmailMessage } from "cloudflare:email";
 import { env } from "cloudflare:workers";
 import { type HostingAdapter, HostingError } from "@deparked/hosting";
-import { createCloudflareHosting, type SendEmailBinding } from "@deparked/hosting-cloudflare";
+import { createCloudflareHosting } from "@deparked/hosting-cloudflare";
+import { hostingConnection } from "./hosting-env";
 
-// The names of the environment contract in the README. They are not in `wrangler.jsonc` (the installer sets
-// them), so the generated `Env` does not know them.
-type HostingEnv = {
-  CF_API_TOKEN?: string;
-  CF_ACCOUNT_ID?: string;
-  CLOUDFLARE_API_BASE?: string;
-  TURNSTILE_VERIFY_URL?: string;
-  EMAIL?: SendEmailBinding;
-} & Record<string, unknown>;
+const SITES_SCRIPT = "deparked-sites";
+const ADMIN_SCRIPT = "deparked-admin";
 
 /**
- * The one place the admin builds its hosting adapter. Call it per request, never at module scope. Throws a
- * `HostingError` when the install has no token (local dev without one, for example).
+ * The hosting adapter for one request, built from the Worker's environment. Call it inside a handler, never at
+ * module scope. `accountId` is `workspace.cf_account_id` when the caller has the row; `CF_ACCOUNT_ID` otherwise.
+ */
+export function createHosting(input: { accountId?: string | null } = {}): HostingAdapter {
+  return createCloudflareHosting({
+    ...hostingConnection(env as unknown as Record<string, unknown>, input.accountId),
+    sitesScriptName: SITES_SCRIPT,
+    adminScriptName: ADMIN_SCRIPT,
+    email: { binding: env.EMAIL, EmailMessage },
+  });
+}
+
+/**
+ * The adapter for admin actions that call the hosting API. Throws a `HostingError` the UI can show when the
+ * install has no token (local dev without one, for example).
  */
 export function getHosting(): HostingAdapter {
-  const vars = env as unknown as HostingEnv;
+  const vars = env as unknown as Record<string, unknown>;
   if (!vars.CF_API_TOKEN || !vars.CF_ACCOUNT_ID) {
     throw new HostingError(
       "credentials-rejected",
       "No Cloudflare token is stored for this install, so Cloudflare cannot be reached.",
     );
   }
-  return createCloudflareHosting({
-    token: vars.CF_API_TOKEN,
-    accountId: vars.CF_ACCOUNT_ID,
-    sitesScriptName: "deparked-sites",
-    adminScriptName: "deparked-admin",
-    getSecret: (name) => {
-      const value = vars[name];
-      return typeof value === "string" ? value : undefined;
-    },
-    ...(vars.CLOUDFLARE_API_BASE ? { baseUrl: vars.CLOUDFLARE_API_BASE } : {}),
-    ...(vars.TURNSTILE_VERIFY_URL ? { botCheckUrl: vars.TURNSTILE_VERIFY_URL } : {}),
-    ...(vars.EMAIL ? { email: { binding: vars.EMAIL, EmailMessage } } : {}),
-  });
+  return createHosting();
 }

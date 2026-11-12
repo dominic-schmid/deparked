@@ -14,6 +14,7 @@ import { Route as AdminShellRouteImport } from './routes/admin/_shell'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminLogoutRouteImport } from './routes/admin/logout'
 import { Route as AdminOffersDotcsvRouteImport } from './routes/admin/offers[.]csv'
+import { Route as ApiOfferRouteImport } from './routes/api/offer'
 import { Route as AdminShellIndexRouteImport } from './routes/admin/_shell/index'
 import { Route as AdminShellAddRouteImport } from './routes/admin/_shell/add'
 import { Route as AdminShellInboxRouteImport } from './routes/admin/_shell/inbox'
@@ -54,6 +55,11 @@ const AdminLogoutRoute = AdminLogoutRouteImport.update({
 const AdminOffersDotcsvRoute = AdminOffersDotcsvRouteImport.update({
   id: '/admin/offers.csv',
   path: '/admin/offers.csv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOfferRoute = ApiOfferRouteImport.update({
+  id: '/api/offer',
+  path: '/api/offer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminShellIndexRoute = AdminShellIndexRouteImport.update({
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/api/offer': typeof ApiOfferRoute
   '/admin/add': typeof AdminShellAddRoute
   '/admin/inbox': typeof AdminShellInboxRoute
   '/admin/settings': typeof AdminShellSettingsRouteWithChildren
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/api/offer': typeof ApiOfferRoute
   '/admin/add': typeof AdminShellAddRoute
   '/admin/inbox': typeof AdminShellInboxRoute
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
@@ -192,6 +200,7 @@ export interface FileRoutesById {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/api/offer': typeof ApiOfferRoute
   '/admin/_shell/add': typeof AdminShellAddRoute
   '/admin/_shell/inbox': typeof AdminShellInboxRoute
   '/admin/_shell/settings': typeof AdminShellSettingsRouteWithChildren
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/api/offer'
     | '/admin/add'
     | '/admin/inbox'
     | '/admin/settings'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/api/offer'
     | '/admin/add'
     | '/admin/inbox'
     | '/admin/settings/logout-everywhere'
@@ -260,6 +271,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/api/offer'
     | '/admin/_shell/add'
     | '/admin/_shell/inbox'
     | '/admin/_shell/settings'
@@ -284,6 +296,7 @@ export interface RootRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   AdminLogoutRoute: typeof AdminLogoutRoute
   AdminOffersDotcsvRoute: typeof AdminOffersDotcsvRoute
+  ApiOfferRoute: typeof ApiOfferRoute
   AdminSettingsLogoutEverywhereRoute: typeof AdminSettingsLogoutEverywhereRoute
   AdminSetupDoneRoute: typeof AdminSetupDoneRoute
   AdminSetupIndexRoute: typeof AdminSetupIndexRoute
@@ -324,6 +337,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/offers.csv'
       fullPath: '/admin/offers.csv'
       preLoaderRoute: typeof AdminOffersDotcsvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/offer': {
+      id: '/api/offer'
+      path: '/api/offer'
+      fullPath: '/api/offer'
+      preLoaderRoute: typeof ApiOfferRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/_shell/': {
@@ -502,6 +522,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   AdminLogoutRoute: AdminLogoutRoute,
   AdminOffersDotcsvRoute: AdminOffersDotcsvRoute,
+  ApiOfferRoute: ApiOfferRoute,
   AdminSettingsLogoutEverywhereRoute: AdminSettingsLogoutEverywhereRoute,
   AdminSetupDoneRoute: AdminSetupDoneRoute,
   AdminSetupIndexRoute: AdminSetupIndexRoute,

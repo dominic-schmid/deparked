@@ -53,6 +53,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@deparked/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@deparked/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -62,6 +65,9 @@ importers:
       '@deparked/hosting-cloudflare':
         specifier: workspace:*
         version: link:../../packages/hosting-cloudflare
+      '@deparked/templates':
+        specifier: workspace:*
+        version: link:../../packages/templates
       '@deparked/ui':
         specifier: workspace:*
         version: link:../../packages/ui
