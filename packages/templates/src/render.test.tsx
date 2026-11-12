@@ -26,6 +26,40 @@ describe("render", () => {
     expect(files["index.html"]).toMatchSnapshot();
   });
 
+  it.each(["gradient", "editorial", "mono", "split"] as const)("renders %s with the default config", (variant) => {
+    expect(render({ ...defaultConfig(), variant }, "example.com", options)["index.html"]).toMatchSnapshot();
+  });
+
+  it("paints Gradient with the preset the background names, its own default otherwise", () => {
+    const page = (background: string) =>
+      render({ ...defaultConfig(), variant: "gradient", background }, "example.com", options)["index.html"];
+    const dawn = catalog.gradients.find((gradient) => gradient.id === "dawn");
+    const dusk = catalog.gradients.find((gradient) => gradient.id === "dusk");
+    expect(page("dawn")).toContain(`<meta name="theme-color" content="${dawn?.color}"/>`);
+    expect(page("dawn")).toContain('<meta name="color-scheme" content="light"/>');
+    expect(page("dawn")).toContain('data-tone="light"');
+    expect(page("sky")).toContain(`<meta name="theme-color" content="${dusk?.color}"/>`);
+    expect(page("sky")).toContain('data-tone="dark"');
+    for (const background of ["dawn", "sky"]) {
+      expect(page(background)).not.toContain("<picture");
+      expect(page(background)).not.toContain("og:image");
+    }
+  });
+
+  it("sets Editorial in paper and ink, following the visitor's colour scheme, with no photo", () => {
+    const html = render({ ...defaultConfig(), variant: "editorial" }, "example.com", options)["index.html"];
+    expect(html).toContain('<meta name="color-scheme" content="light dark"/>');
+    expect(html).toContain('<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#15130f"/>');
+    expect(html).not.toContain("<picture");
+    expect(html).not.toContain("og:image");
+    const accented = render(
+      { ...defaultConfig(), variant: "editorial", accent: { primary: "#112233" } },
+      "example.com",
+      options,
+    )["index.html"];
+    expect(accented).not.toContain('media="(prefers-color-scheme: dark)"');
+  });
+
   it("puts the copy, the price floor and a working form in the HTML itself", () => {
     const html = render(defaultConfig(), "example.com", options)["index.html"];
     expect(html).toMatch(/^<!doctype html><html lang="en">/);
@@ -71,9 +105,9 @@ describe("render", () => {
     );
   });
 
-  it("self-hosts its fonts, preloads the first paint's and swaps the rest in", () => {
+  it("self-hosts its fonts and preloads the ones the first viewport needs", () => {
     const html = render(defaultConfig(), "example.com", options)["index.html"];
-    expect(html.match(/<link rel="preload" as="font"/g)).toHaveLength(2);
+    expect(html.match(/<link rel="preload" as="font"/g)).toHaveLength(4);
     expect(html.match(/@font-face/g)?.length).toBeGreaterThan(0);
     expect(html.match(/@font-face/g)?.length).toBe(html.match(/font-display:swap/g)?.length);
     expect(html).not.toMatch(/fonts\.(googleapis|gstatic)/);
@@ -182,8 +216,13 @@ describe("render", () => {
     });
     if (!longest.ok) throw new Error(JSON.stringify(longest.errors));
     const budget = 30 * 1024;
-    expect(gzipped(render(defaultConfig(), "example.com", options)["index.html"])).toBeLessThan(budget);
-    expect(gzipped(render(longest.config, `${"w".repeat(56)}.com`, options)["index.html"])).toBeLessThan(budget);
+    for (const variant of VARIANTS) {
+      expect(gzipped(render({ ...defaultConfig(), variant }, "example.com", options)["index.html"])).toBeLessThan(
+        budget,
+      );
+      const html = render({ ...longest.config, variant }, `${"w".repeat(56)}.com`, options)["index.html"];
+      expect(gzipped(html), variant).toBeLessThan(budget);
+    }
     expect(gzipped(renderPlaceholder("example.com")["index.html"])).toBeLessThan(budget);
   });
 });
@@ -246,6 +285,27 @@ describe("the catalog", () => {
     for (const folder of ["backgrounds", "fonts", "islands"]) {
       for (const name of readdirSync(`${PUBLIC}/catalog/${folder}`)) {
         if (!name.startsWith("OFL-")) expect(listed, name).toContain(`/catalog/${folder}/${name}`);
+      }
+    }
+  });
+
+  it("has gradients whose every colour stop keeps the type of their tone at 4.5:1", () => {
+    const luminance = (hex: string) => {
+      const [r = 0, g = 0, b = 0] = [1, 3, 5].map((at) => {
+        const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (a: string, b: string) => {
+      const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+      return (light + 0.05) / (dark + 0.05);
+    };
+    expect(catalog.gradients.length).toBeGreaterThan(0);
+    for (const gradient of catalog.gradients) {
+      const type = gradient.tone === "dark" ? "#ffffff" : "#1c2116";
+      for (const stop of [gradient.color, ...(gradient.css.match(/#[0-9a-f]{6}/g) ?? [])]) {
+        expect(contrast(stop, type), `${gradient.id} ${stop}`).toBeGreaterThanOrEqual(4.5);
       }
     }
   });

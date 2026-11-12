@@ -197,8 +197,12 @@ describe("offers", () => {
     expect(await q.countNewOffers(db, HOST)).toBe(1);
     expect(await q.offerStatsForHosts(db, [])).toEqual([]);
     expect(await q.offerStatsForHosts(db, [HOST, "other.example", "none.example"])).toEqual([
-      { host: HOST, total: 2, newCount: 1, bestAmountMinor: 90_000, bestCurrency: "EUR" },
-      { host: "other.example", total: 1, newCount: 1, bestAmountMinor: 1, bestCurrency: "USD" },
+      { host: HOST, total: 2, newCount: 1, recentCount: 2, bestAmountMinor: 90_000, bestCurrency: "EUR" },
+      { host: "other.example", total: 1, newCount: 1, recentCount: 1, bestAmountMinor: 1, bestCurrency: "USD" },
+    ]);
+    expect(await q.offerStatsForHosts(db, [HOST, "other.example"], NOW + 1)).toMatchObject([
+      { host: HOST, total: 2, recentCount: 1 },
+      { host: "other.example", total: 1, recentCount: 1 },
     ]);
   });
 
@@ -243,6 +247,20 @@ describe("notify addresses and Turnstile widgets", () => {
     expect(await q.releaseTurnstileSlot(db, "second")).toBe(false);
     expect((await q.listTurnstileWidgets(db)).map((widget) => widget.hostnameCount)).toEqual([9, 0]);
   });
+
+  test("a domain is assigned one slot once, and never past 10 holders", async () => {
+    const hosts = Array.from({ length: 10 }, (_, index) => `d${index}.example.com`);
+    for (const host of hosts) await q.insertDomain(db, { domain: { host, zoneId: "zone-1" }, now: NOW });
+    const assign = (host: string) => q.assignTurnstileWidget(db, { host, sitekey: SITEKEY, now: NOW + 1 });
+
+    expect(await assign("d0.example.com")).toBe(true);
+    expect(await assign("d0.example.com")).toBe(false);
+    const rest = [];
+    for (const host of hosts.slice(1)) rest.push(await assign(host));
+    expect(rest).toEqual([...Array(8).fill(true), false]);
+    expect((await q.listTurnstileWidgets(db))[0]?.hostnameCount).toBe(10);
+    expect((await q.getDomain(db, "d9.example.com"))?.turnstileWidgetId).toBeNull();
+  });
 });
 
 describe("site files", () => {
@@ -283,6 +301,19 @@ describe("deployments and the publish lock", () => {
     expect(await q.releasePublishLock(db, second.id)).toBe(true);
     expect(await q.getPublishLock(db)).toBeUndefined();
     expect(await q.acquirePublishLock(db, { deploymentId: first.id, ttlMs: 1000, now: NOW + 1001 })).toBe(true);
+  });
+
+  test("the provisioning lock has one holder until it releases or expires, and the holder can renew it", async () => {
+    expect(await q.acquireProvisionLock(db, { holder: 1, ttlMs: 1000, now: NOW })).toBe(true);
+    expect(await q.acquireProvisionLock(db, { holder: 2, ttlMs: 1000, now: NOW + 999 })).toBe(false);
+    expect(await q.acquireProvisionLock(db, { holder: 1, ttlMs: 1000, now: NOW + 999 })).toBe(true);
+    expect(await q.acquireProvisionLock(db, { holder: 2, ttlMs: 1000, now: NOW + 1998 })).toBe(false);
+    expect(await q.acquireProvisionLock(db, { holder: 2, ttlMs: 1000, now: NOW + 1999 })).toBe(true);
+    expect(await q.releaseProvisionLock(db, 1)).toBe(false);
+    expect(await q.releaseProvisionLock(db, 2)).toBe(true);
+    expect(await q.acquireProvisionLock(db, { holder: 1, ttlMs: 1000, now: NOW + 2000 })).toBe(true);
+    // Rate limit windows are pruned after a day; a live lock is never that old.
+    expect(await q.pruneRateLimits(db, NOW + 2000)).toBe(0);
   });
 
   test("a deployment finishes once; latest is by worker and status", async () => {

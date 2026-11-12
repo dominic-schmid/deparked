@@ -14,6 +14,7 @@ import { Route as AdminShellRouteImport } from './routes/admin/_shell'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminLogoutRouteImport } from './routes/admin/logout'
 import { Route as AdminOffersDotcsvRouteImport } from './routes/admin/offers[.]csv'
+import { Route as AdminWelcomeRouteImport } from './routes/admin/welcome'
 import { Route as ApiOfferRouteImport } from './routes/api/offer'
 import { Route as AdminShellIndexRouteImport } from './routes/admin/_shell/index'
 import { Route as AdminShellAddRouteImport } from './routes/admin/_shell/add'
@@ -29,6 +30,7 @@ import { Route as AdminShellSettingsDangerRouteImport } from './routes/admin/_sh
 import { Route as AdminShellSettingsPasswordRouteImport } from './routes/admin/_shell/settings.password'
 import { Route as AdminShellSettingsUpdatesRouteImport } from './routes/admin/_shell/settings.updates'
 import { Route as AdminShellDHostIndexRouteImport } from './routes/admin/_shell/d.$host.index'
+import { Route as AdminShellDHostAnalyticsRouteImport } from './routes/admin/_shell/d.$host.analytics'
 import { Route as AdminShellDHostOffersRouteImport } from './routes/admin/_shell/d.$host.offers'
 import { Route as AdminShellDHostSettingsRouteImport } from './routes/admin/_shell/d.$host.settings'
 
@@ -55,6 +57,11 @@ const AdminLogoutRoute = AdminLogoutRouteImport.update({
 const AdminOffersDotcsvRoute = AdminOffersDotcsvRouteImport.update({
   id: '/admin/offers.csv',
   path: '/admin/offers.csv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminWelcomeRoute = AdminWelcomeRouteImport.update({
+  id: '/admin/welcome',
+  path: '/admin/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOfferRoute = ApiOfferRouteImport.update({
@@ -137,6 +144,12 @@ const AdminShellDHostIndexRoute = AdminShellDHostIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminShellDHostRoute,
 } as any)
+const AdminShellDHostAnalyticsRoute =
+  AdminShellDHostAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => AdminShellDHostRoute,
+  } as any)
 const AdminShellDHostOffersRoute = AdminShellDHostOffersRouteImport.update({
   id: '/offers',
   path: '/offers',
@@ -154,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/welcome': typeof AdminWelcomeRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/add': typeof AdminShellAddRoute
   '/admin/inbox': typeof AdminShellInboxRoute
@@ -168,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/settings/': typeof AdminShellSettingsIndexRoute
+  '/admin/d/$host/analytics': typeof AdminShellDHostAnalyticsRoute
   '/admin/d/$host/offers': typeof AdminShellDHostOffersRoute
   '/admin/d/$host/settings': typeof AdminShellDHostSettingsRoute
   '/admin/d/$host/': typeof AdminShellDHostIndexRoute
@@ -177,6 +192,7 @@ export interface FileRoutesByTo {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/welcome': typeof AdminWelcomeRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/add': typeof AdminShellAddRoute
   '/admin/inbox': typeof AdminShellInboxRoute
@@ -189,6 +205,7 @@ export interface FileRoutesByTo {
   '/admin/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/settings': typeof AdminShellSettingsIndexRoute
+  '/admin/d/$host/analytics': typeof AdminShellDHostAnalyticsRoute
   '/admin/d/$host/offers': typeof AdminShellDHostOffersRoute
   '/admin/d/$host/settings': typeof AdminShellDHostSettingsRoute
   '/admin/d/$host': typeof AdminShellDHostIndexRoute
@@ -200,6 +217,7 @@ export interface FileRoutesById {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/welcome': typeof AdminWelcomeRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/_shell/add': typeof AdminShellAddRoute
   '/admin/_shell/inbox': typeof AdminShellInboxRoute
@@ -214,6 +232,7 @@ export interface FileRoutesById {
   '/admin/_shell/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/_shell/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/_shell/settings/': typeof AdminShellSettingsIndexRoute
+  '/admin/_shell/d/$host/analytics': typeof AdminShellDHostAnalyticsRoute
   '/admin/_shell/d/$host/offers': typeof AdminShellDHostOffersRoute
   '/admin/_shell/d/$host/settings': typeof AdminShellDHostSettingsRoute
   '/admin/_shell/d/$host/': typeof AdminShellDHostIndexRoute
@@ -226,6 +245,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/admin/welcome'
     | '/api/offer'
     | '/admin/add'
     | '/admin/inbox'
@@ -240,6 +260,7 @@ export interface FileRouteTypes {
     | '/admin/settings/password'
     | '/admin/settings/updates'
     | '/admin/settings/'
+    | '/admin/d/$host/analytics'
     | '/admin/d/$host/offers'
     | '/admin/d/$host/settings'
     | '/admin/d/$host/'
@@ -249,6 +270,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/admin/welcome'
     | '/api/offer'
     | '/admin/add'
     | '/admin/inbox'
@@ -261,6 +283,7 @@ export interface FileRouteTypes {
     | '/admin/settings/password'
     | '/admin/settings/updates'
     | '/admin/settings'
+    | '/admin/d/$host/analytics'
     | '/admin/d/$host/offers'
     | '/admin/d/$host/settings'
     | '/admin/d/$host'
@@ -271,6 +294,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/admin/welcome'
     | '/api/offer'
     | '/admin/_shell/add'
     | '/admin/_shell/inbox'
@@ -285,6 +309,7 @@ export interface FileRouteTypes {
     | '/admin/_shell/settings/password'
     | '/admin/_shell/settings/updates'
     | '/admin/_shell/settings/'
+    | '/admin/_shell/d/$host/analytics'
     | '/admin/_shell/d/$host/offers'
     | '/admin/_shell/d/$host/settings'
     | '/admin/_shell/d/$host/'
@@ -296,6 +321,7 @@ export interface RootRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   AdminLogoutRoute: typeof AdminLogoutRoute
   AdminOffersDotcsvRoute: typeof AdminOffersDotcsvRoute
+  AdminWelcomeRoute: typeof AdminWelcomeRoute
   ApiOfferRoute: typeof ApiOfferRoute
   AdminSettingsLogoutEverywhereRoute: typeof AdminSettingsLogoutEverywhereRoute
   AdminSetupDoneRoute: typeof AdminSetupDoneRoute
@@ -337,6 +363,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/offers.csv'
       fullPath: '/admin/offers.csv'
       preLoaderRoute: typeof AdminOffersDotcsvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/welcome': {
+      id: '/admin/welcome'
+      path: '/admin/welcome'
+      fullPath: '/admin/welcome'
+      preLoaderRoute: typeof AdminWelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/offer': {
@@ -444,6 +477,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminShellDHostIndexRouteImport
       parentRoute: typeof AdminShellDHostRoute
     }
+    '/admin/_shell/d/$host/analytics': {
+      id: '/admin/_shell/d/$host/analytics'
+      path: '/analytics'
+      fullPath: '/admin/d/$host/analytics'
+      preLoaderRoute: typeof AdminShellDHostAnalyticsRouteImport
+      parentRoute: typeof AdminShellDHostRoute
+    }
     '/admin/_shell/d/$host/offers': {
       id: '/admin/_shell/d/$host/offers'
       path: '/offers'
@@ -481,12 +521,14 @@ const AdminShellSettingsRouteWithChildren =
   AdminShellSettingsRoute._addFileChildren(AdminShellSettingsRouteChildren)
 
 interface AdminShellDHostRouteChildren {
+  AdminShellDHostAnalyticsRoute: typeof AdminShellDHostAnalyticsRoute
   AdminShellDHostOffersRoute: typeof AdminShellDHostOffersRoute
   AdminShellDHostSettingsRoute: typeof AdminShellDHostSettingsRoute
   AdminShellDHostIndexRoute: typeof AdminShellDHostIndexRoute
 }
 
 const AdminShellDHostRouteChildren: AdminShellDHostRouteChildren = {
+  AdminShellDHostAnalyticsRoute: AdminShellDHostAnalyticsRoute,
   AdminShellDHostOffersRoute: AdminShellDHostOffersRoute,
   AdminShellDHostSettingsRoute: AdminShellDHostSettingsRoute,
   AdminShellDHostIndexRoute: AdminShellDHostIndexRoute,
@@ -522,6 +564,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   AdminLogoutRoute: AdminLogoutRoute,
   AdminOffersDotcsvRoute: AdminOffersDotcsvRoute,
+  AdminWelcomeRoute: AdminWelcomeRoute,
   ApiOfferRoute: ApiOfferRoute,
   AdminSettingsLogoutEverywhereRoute: AdminSettingsLogoutEverywhereRoute,
   AdminSetupDoneRoute: AdminSetupDoneRoute,

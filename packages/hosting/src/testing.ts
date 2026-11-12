@@ -28,6 +28,7 @@ export interface FakeVersion {
   id: string;
   createdAt: string;
   files: PublishFile[];
+  headers: string | undefined;
 }
 
 export interface FakeHostingOptions {
@@ -99,12 +100,13 @@ export function createFakeHosting(options: FakeHostingOptions = {}) {
       const missing = input.files.filter(
         (file, index) => !stored.has(file.hash) && input.files.findIndex((other) => other.hash === file.hash) === index,
       );
+      const perBatch = Math.min(batchSize, input.maxFilesPerUpload ?? batchSize);
       const batches = Math.min(
-        Math.ceil(missing.length / batchSize),
+        Math.ceil(missing.length / perBatch),
         input.maxUploadBatches ?? DEFAULT_MAX_UPLOAD_BATCHES,
       );
       const uploaded: string[] = [];
-      for (const file of missing.slice(0, batches * batchSize)) {
+      for (const file of missing.slice(0, batches * perBatch)) {
         const content = await input.getContent(file.path);
         if (content.length !== file.size) {
           throw new HostingError("invalid-input", `Cannot publish ${file.path}: its content is not the size listed.`);
@@ -114,7 +116,12 @@ export function createFakeHosting(options: FakeHostingOptions = {}) {
       }
       const pending = missing.length - uploaded.length;
       if (pending > 0) return { done: false, uploaded, pending, requests: 1 + batches };
-      const version = { id: id("version"), createdAt: new Date().toISOString(), files: [...input.files] };
+      const version = {
+        id: id("version"),
+        createdAt: new Date().toISOString(),
+        files: [...input.files],
+        headers: input.headers,
+      };
       versions.push(version);
       liveVersionId = version.id;
       return { done: true, versionId: version.id, uploaded, requests: 3 + batches };

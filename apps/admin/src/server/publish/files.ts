@@ -1,0 +1,138 @@
+import { CONFIG_VERSION, migrateConfig } from "@deparked/config";
+import { type Db, getConfig, getDomain, type NewSiteFile } from "@deparked/db";
+import { contentHash } from "@deparked/hosting";
+import { type Catalog, render, renderPlaceholder, type SiteFiles } from "@deparked/templates";
+
+export type FailureReason = "credentials-rejected" | "lock-lost" | "invalid" | "hosting" | "unexpected";
+
+/** A publish that cannot go on. `message` is shown to the owner as it is: plain words, no secrets. */
+export class PublishFailure extends Error {
+  override readonly name = "PublishFailure";
+  readonly reason: FailureReason;
+
+  constructor(reason: FailureReason, message: string) {
+    super(message);
+    this.reason = reason;
+  }
+}
+
+export type HostFile = NewSiteFile & { content: Uint8Array };
+
+/** One host's pages, rendered. No files: the domain is turned off or removed and serves nothing. */
+export type HostBuild = {
+  host: string;
+  files: HostFile[];
+  /**
+   * The draft these files were rendered from, normalised, and the draft as it was stored (`rendered`). Only set
+   * for a draft publish.
+   */
+  published?: { json: string; schemaVersion: number; rendered: { json: string; schemaVersion: number } };
+  /** True when the files come from the live config again (an update, or templates that changed). */
+  rerendered?: boolean;
+};
+
+const CONTENT_TYPES: Record<keyof SiteFiles, string> = {
+  "index.html": "text/html; charset=utf-8",
+  "robots.txt": "text/plain; charset=utf-8",
+  "sitemap.xml": "application/xml; charset=utf-8",
+};
+
+const HOST_NAME = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;
+
+/** A lowercase domain name that stays one folder under `/sites/`: no slashes, no `..`, at most 253 characters. */
+export function isHostName(host: string): boolean {
+  return host.length <= 253 && HOST_NAME.test(host) && !host.includes("..");
+}
+
+function assertHostName(host: string): void {
+  if (!isHostName(host)) {
+    throw new PublishFailure("invalid", `“${host.slice(0, 80)}” is not a domain name. Remove it, then publish again.`);
+  }
+}
+
+export function sitePath(host: string, name: string): string {
+  assertHostName(host);
+  return `/sites/${host}/${name}`;
+}
+
+async function toHostFiles(host: string, files: SiteFiles): Promise<HostFile[]> {
+  const encoder = new TextEncoder();
+  return Promise.all(
+    (Object.keys(CONTENT_TYPES) as (keyof SiteFiles)[]).map(async (name) => {
+      const path = sitePath(host, name);
+      const content = encoder.encode(files[name]);
+      return {
+        path,
+        hash: await contentHash(path, content),
+        size: content.length,
+        contentType: CONTENT_TYPES[name],
+        content,
+      };
+    }),
+  );
+}
+
+/**
+ * `draft`: the saved draft. `live`: the live config again. `attach`: like `live`, for the publish an attach
+ * makes while the domain is still off.
+ */
+export type BuildSource = "draft" | "live" | "attach";
+
+/**
+ * Renders what `host` should serve. `draft`: the saved draft, which must exist and be valid. `live` and
+ * `attach`: the live config again, or the placeholder for a domain that was never published. A domain that is
+ * off or removed gets no files, except for `attach`; an unknown one never does.
+ */
+export async function buildHost(
+  input: { db: Db; catalog: Catalog },
+  host: string,
+  requested: BuildSource,
+): Promise<HostBuild> {
+  assertHostName(host);
+  const domain = await getDomain(input.db, host);
+  const off = domain?.status === "off" || domain?.status === "removed";
+  if (domain === undefined || (off && requested !== "attach")) return { host, files: [] };
+  const source = requested === "attach" ? "live" : requested;
+
+  const stored = await getConfig(input.db, host);
+  const json = source === "draft" ? stored?.draftJson : stored?.liveJson;
+  if (json === undefined || json === null) {
+    if (source === "draft") throw new PublishFailure("invalid", `${host} has no saved design to publish yet.`);
+    return { host, files: await toHostFiles(host, renderPlaceholder(host)) };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    parsed = undefined;
+  }
+  const result = migrateConfig(parsed);
+  // `live`: another domain's pages, rebuilt for this publish. Its owner has to act on it, not on this publish.
+  const fix = source === "live" ? ` Fix its design or turn it off, then publish again.` : "";
+  if (!result.ok) {
+    const [field, problem] = Object.entries(result.errors)[0] ?? ["form", "It can't be read."];
+    throw new PublishFailure("invalid", `The design of ${host} can't be published (${field}): ${problem}${fix}`);
+  }
+  if (domain.turnstileWidgetId === null) {
+    throw new PublishFailure(
+      "invalid",
+      source === "live"
+        ? `${host} has no bot check yet. Finish setting it up or turn it off, then publish again.`
+        : `${host} has no bot check yet. Finish setting the domain up, then publish.`,
+    );
+  }
+  const files = render(result.config, host, {
+    catalog: input.catalog,
+    sitekey: domain.turnstileWidgetId,
+    ...(domain.analyticsBeaconToken === null ? {} : { beaconToken: domain.analyticsBeaconToken }),
+  });
+  const built = await toHostFiles(host, files);
+  if (source === "live") return { host, files: built, rerendered: true };
+  const rendered = { json, schemaVersion: stored?.draftSchemaVersion ?? CONFIG_VERSION };
+  return {
+    host,
+    files: built,
+    published: { json: JSON.stringify(result.config), schemaVersion: CONFIG_VERSION, rendered },
+  };
+}

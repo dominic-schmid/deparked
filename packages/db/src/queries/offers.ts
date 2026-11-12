@@ -103,16 +103,18 @@ export type OfferStats = {
   host: string;
   total: number;
   newCount: number;
+  /** Offers created at or after `since` (all of them without it). */
+  recentCount: number;
   /** The largest `amount_minor` and that offer's currency. Amounts in different currencies are not converted. */
   bestAmountMinor: number;
   bestCurrency: string;
 };
 
 /**
- * Offer count, new count and best offer for each given host that has offers; hosts without offers are absent.
- * Reads only those hosts' index ranges.
+ * Offer count, new count, count since `since` and best offer for each given host that has offers; hosts without
+ * offers are absent. Reads only those hosts' index ranges.
  */
-export async function offerStatsForHosts(db: Db, hosts: readonly string[]): Promise<OfferStats[]> {
+export async function offerStatsForHosts(db: Db, hosts: readonly string[], since = 0): Promise<OfferStats[]> {
   const stats: OfferStats[] = [];
   for (let start = 0; start < hosts.length; start += HOSTS_PER_STATEMENT) {
     const rows = await db
@@ -120,6 +122,7 @@ export async function offerStatsForHosts(db: Db, hosts: readonly string[]): Prom
         host: offers.host,
         total: count(),
         newCount: sql<number>`sum(${offers.status} = 'new')`,
+        recentCount: sql<number>`sum(${offers.createdAt} >= ${since})`,
         bestAmountMinor: max(offers.amountMinor),
         // SQLite takes a bare column from the row that holds the max().
         bestCurrency: offers.currency,

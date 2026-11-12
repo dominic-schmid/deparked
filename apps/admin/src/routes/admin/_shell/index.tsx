@@ -2,12 +2,19 @@ import { Button } from "@deparked/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deparked/ui/table";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
+import {
+  AnalyticsProblemAlert,
+  formatCompactCount,
+  formatConversion,
+  VisitsSparkline,
+} from "../../../components/analytics";
 import { formatMoney } from "../../../components/format";
 import { PageError, PageHeader, PagePending } from "../../../components/page";
 import { StatusLabel } from "../../../components/status";
 import { RelativeTime } from "../../../components/time";
+import type { OverviewVisits } from "../../../server/analytics-shape";
 import type { DomainOverview } from "../../../server/domains";
-import { getAnalytics, getOverview, type Visits } from "../../../server/domains.functions";
+import { getAnalytics, getOverview } from "../../../server/domains.functions";
 
 export const Route = createFileRoute("/admin/_shell/")({
   loader: async () => {
@@ -34,13 +41,30 @@ function AddDomainButton() {
   );
 }
 
-function VisitsCell({ visits }: { visits: Visits[string] | undefined }) {
-  if (visits === undefined) return <span className="text-muted-foreground">No data yet</span>;
+function Muted({ children }: { children: string }) {
+  return <span className="text-muted-foreground">{children}</span>;
+}
+
+function VisitsCell({ visits, host }: { visits: OverviewVisits; host: string }) {
+  if (!visits.ok) return <Muted>Unavailable</Muted>;
+  const own = visits.byHost[host];
+  if (own === undefined) return <Muted>Not set up</Muted>;
+  if (own.last30 === 0) return <Muted>No visits yet</Muted>;
   return (
-    <span className="tabular-nums">
-      {visits.last7.toLocaleString("en")} / {visits.last30.toLocaleString("en")}
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="tabular-nums">
+        {formatCompactCount(own.last7)} / {formatCompactCount(own.last30)}
+      </span>
+      <VisitsSparkline daily={own.daily} />
     </span>
   );
+}
+
+function ConversionCell({ visits, domain }: { visits: OverviewVisits; domain: DomainOverview }) {
+  const own = visits.ok ? visits.byHost[domain.host] : undefined;
+  const conversion = own === undefined ? null : formatConversion(domain.recentOffers, own.last30);
+  if (conversion === null) return <Muted>None</Muted>;
+  return <span className="tabular-nums">{conversion}</span>;
 }
 
 function OffersCell({ domain }: { domain: DomainOverview }) {
@@ -89,7 +113,8 @@ function OverviewPage() {
         description={domains.length === 1 ? "1 domain" : `${domains.length} domains`}
         actions={<AddDomainButton />}
       />
-      <div className="hidden rounded-xl border md:block">
+      {visits.ok ? null : <AnalyticsProblemAlert problem={visits.problem} />}
+      <div className="hidden rounded-xl border lg:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -97,6 +122,7 @@ function OverviewPage() {
               <TableHead scope="col">Status</TableHead>
               <TableHead scope="col">Visits, 7 / 30 days</TableHead>
               <TableHead scope="col">Offers</TableHead>
+              <TableHead scope="col">Conversion, 30 days</TableHead>
               <TableHead scope="col">Best offer</TableHead>
               <TableHead scope="col">Last published</TableHead>
             </TableRow>
@@ -113,10 +139,13 @@ function OverviewPage() {
                   <StatusLabel status={domain.status} />
                 </TableCell>
                 <TableCell>
-                  <VisitsCell visits={visits[domain.host]} />
+                  <VisitsCell visits={visits} host={domain.host} />
                 </TableCell>
                 <TableCell>
                   <OffersCell domain={domain} />
+                </TableCell>
+                <TableCell>
+                  <ConversionCell visits={visits} domain={domain} />
                 </TableCell>
                 <TableCell className="max-w-48 whitespace-normal">
                   <BestCell best={domain.best} />
@@ -129,7 +158,7 @@ function OverviewPage() {
           </TableBody>
         </Table>
       </div>
-      <ul className="flex flex-col gap-3 md:hidden">
+      <ul className="flex flex-col gap-3 lg:hidden">
         {domains.map((domain) => (
           <li key={domain.host} className="rounded-xl border bg-card p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -141,11 +170,15 @@ function OverviewPage() {
             <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
               <dt className="text-muted-foreground">Visits, 7 / 30 days</dt>
               <dd>
-                <VisitsCell visits={visits[domain.host]} />
+                <VisitsCell visits={visits} host={domain.host} />
               </dd>
               <dt className="text-muted-foreground">Offers</dt>
               <dd>
                 <OffersCell domain={domain} />
+              </dd>
+              <dt className="text-muted-foreground">Conversion, 30 days</dt>
+              <dd>
+                <ConversionCell visits={visits} domain={domain} />
               </dd>
               <dt className="text-muted-foreground">Best offer</dt>
               <dd>

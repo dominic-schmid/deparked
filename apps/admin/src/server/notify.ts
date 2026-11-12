@@ -1,21 +1,42 @@
 import {
   type Db,
   deleteNotifyAddress,
+  getDomain,
   getNotifyAddress,
   hitRateLimit,
   insertNotifyAddress,
   listDomains,
   listNotifyAddresses,
   type NotifyAddress,
+  updateDomain,
   updateNotifyAddress,
 } from "@deparked/db";
-import { type NotifyAddress as HostAddress, type HostingAdapter, HostingError } from "@deparked/hosting";
+import {
+  type NotifyAddress as HostAddress,
+  type HostingAdapter,
+  HostingError,
+  type HostingErrorCode,
+} from "@deparked/hosting";
 import { z } from "zod";
 
 export const notifyEmailSchema = z.object({ email: z.string().trim().toLowerCase().pipe(z.email().max(254)) });
 
-/** `message` is written for the owner. Hosting errors already are; nothing here holds a secret. */
-export type NotifyResult = { ok: true; message: string } | { ok: false; message: string };
+/** `message` is written for the owner, in plain words; nothing here holds a secret. */
+export type NotifyResult =
+  | { ok: true; message: string }
+  | {
+      ok: false;
+      message: string;
+      /** The owner fixes it by replacing the token. */
+      credentialsRejected?: true;
+      /** What the host said, for the owner who wants the details. */
+      detail?: string;
+    };
+
+const HOST_TROUBLE: Partial<Record<HostingErrorCode, string>> = {
+  unavailable: "Cloudflare did not answer just now, so nothing was changed. Try again in a minute.",
+  "rate-limited": "Cloudflare asked Deparked to slow down, so nothing was changed. Wait a minute, then try again.",
+};
 
 const RESEND_WAIT_MS = 60_000;
 // Verification mails per address, counted across add, resend and remove-then-add: the address may be a
@@ -37,9 +58,11 @@ async function mayMail(db: Db, email: string, now: number): Promise<boolean> {
   return hit.count <= MAILS_PER_WINDOW;
 }
 
-function failed(error: unknown): NotifyResult {
-  if (error instanceof HostingError) return { ok: false, message: error.message };
-  throw error;
+export function failed(error: unknown): NotifyResult {
+  if (!(error instanceof HostingError)) throw error;
+  if (error.credentialsRejected) return { ok: false, message: error.message, credentialsRejected: true };
+  const message = HOST_TROUBLE[error.code] ?? "Cloudflare did not accept the request, so nothing was changed.";
+  return { ok: false, message, detail: error.message };
 }
 
 function verifiedAtOf(address: HostAddress, now: number): number | null {
@@ -192,4 +215,20 @@ export async function refreshNotifyAddresses(
   } catch (error) {
     return failed(error);
   }
+}
+
+/** Where a domain's offers are emailed. Only a verified address: Cloudflare delivers to no other. */
+export async function pickNotifyAddress(
+  db: Db,
+  input: { host: string; email: string; now: number },
+): Promise<NotifyResult> {
+  const address = await getNotifyAddress(db, input.email);
+  if (address === undefined) return { ok: false, message: `${input.email} is not on your list of addresses.` };
+  if (address.verifiedAt === null) {
+    return { ok: false, message: `${address.email} is not verified yet: open the link in Cloudflare's email first.` };
+  }
+  if ((await getDomain(db, input.host)) === undefined)
+    return { ok: false, message: `${input.host} is not managed here.` };
+  await updateDomain(db, { host: input.host, patch: { notifyEmail: address.email }, now: input.now });
+  return { ok: true, message: `Offers for ${input.host} go to ${address.email}.` };
 }

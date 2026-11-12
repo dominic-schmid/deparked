@@ -109,6 +109,17 @@ describe("publish", () => {
     expect(version?.metadata).not.toHaveProperty("main_module");
   });
 
+  it("sends the header rules with the version", async () => {
+    const { mock, hosting } = setup();
+    const headers = "/*\n  X-Content-Type-Options: nosniff\n";
+
+    await hosting.publish({ ...(await site(PAGES)), headers });
+
+    expect(mock.state.scripts.get(SITES)?.versions[0]?.metadata).toMatchObject({
+      assets: { config: { html_handling: "none", _headers: headers } },
+    });
+  });
+
   it("republishing an unchanged manifest uploads nothing and reads no content", async () => {
     const { mock, hosting } = setup();
     await hosting.publish(await site(PAGES));
@@ -151,6 +162,20 @@ describe("publish", () => {
     expect(rest.uploaded).toHaveLength(1);
     expect([...partial.uploaded, ...rest.uploaded].sort()).toEqual(Object.keys(PAGES).sort());
     expect(mock.deployedAssets(SITES).size).toBe(3);
+  });
+
+  it("splits one bucket into smaller uploads, and the next call asks only for the files still missing", async () => {
+    const { mock, hosting } = setup({ bucketSize: 100 });
+    const pages = await site(Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`/catalog/f${i}.css`, `f${i}`])));
+
+    const first = await hosting.publish({ ...pages, maxUploadBatches: 2, maxFilesPerUpload: 10 });
+
+    expect(first).toMatchObject({ done: false, pending: 40, requests: 3 });
+    expect(pages.read).toHaveLength(20);
+    const rest = await published(hosting.publish({ ...pages, maxUploadBatches: 4, maxFilesPerUpload: 10 }));
+    expect(rest.uploaded).toHaveLength(40);
+    expect(new Set(pages.read).size).toBe(60);
+    expect(mock.deployedAssets(SITES).size).toBe(60);
   });
 
   it("refuses content that is not the size the manifest lists", async () => {

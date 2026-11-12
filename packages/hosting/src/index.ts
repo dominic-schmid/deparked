@@ -59,11 +59,22 @@ export interface PublishInput {
    */
   getContent(path: string): Promise<Uint8Array>;
   /**
+   * Response header rules for the published files, in the `_headers` file format. They belong to the version:
+   * send them on every publish, or the new version serves none.
+   */
+  headers?: string;
+  /**
    * Upper bound of upload batches in this call (each is one request to the host). When more are needed the
    * call resolves with `done: false`; call `publish` again with the same manifest to continue.
    * Default `DEFAULT_MAX_UPLOAD_BATCHES`.
    */
   maxUploadBatches?: number;
+  /**
+   * Upper bound of files in one upload batch. The host's own grouping is split to fit, so a caller that can
+   * fetch only a few files per call still makes progress: files sent in an earlier call are not asked for again.
+   * Default: the host's grouping.
+   */
+  maxFilesPerUpload?: number;
 }
 
 export type PublishResult =
@@ -278,3 +289,21 @@ export function assertPublishFiles(files: readonly PublishFile[]): void {
     seen.add(file.path);
   }
 }
+
+export type {
+  AccountDomain,
+  AccountDomainPage,
+  DomainPreview,
+  DomainSetup,
+  HubSetup,
+  MailState,
+  ReplaceTokenResult,
+  SetupChange,
+  SetupConfirmation,
+  SetupConfirmations,
+  SetupEffect,
+  SetupState,
+  SetupStepReport,
+  TokenHealth,
+  TokenPermissionGap,
+} from "./setup";

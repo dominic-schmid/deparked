@@ -1,4 +1,5 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   createMockCloudflare,
@@ -9,9 +10,10 @@ import {
 } from "@deparked/cf/mock";
 import { applyMigrations, d1Runner } from "@deparked/db";
 import { getPlatformProxy } from "wrangler";
-import { ROOT, TMP } from "./paths";
+import { LOGS, ROOT, TMP } from "./paths";
 import { type LocalWorker, startWorker } from "./processes";
 import { startHostProxy } from "./proxy";
+import { startReleaseServer } from "./release";
 
 /** Obvious dummies. The mock accepts exactly this token; nothing here works against Cloudflare. */
 export const TEST_TOKEN = "e2e-dummy-cloudflare-token";
@@ -30,6 +32,9 @@ export const ZONES = [
 const ADMIN_CONFIG = "apps/admin/dist/server/wrangler.json";
 const SEED: MockSeed = { accountId: TEST_ACCOUNT_ID, accountName: "E2E account", token: TEST_TOKEN, zones: ZONES };
 
+/** The version of the release the harness builds and the installer installs. */
+export const TEST_RELEASE = "0.0.1-e2e";
+
 export interface Stack {
   /** Drives the mock Cloudflare the Workers talk to. A stable handle: it survives `reset()`. */
   mock: MockCloudflare;
@@ -44,11 +49,18 @@ export interface Stack {
     /** `baseUrl` for `createCloudflareClient`. */
     cloudflareApi: string;
     siteverify: string;
+    /** Serves the built release (`/v<version>/<file>`) and the catalog files it names (`/files/catalog/…`). */
+    release: string;
   };
   /** `http://<host>.localhost:<port><path>`: the managed domain as a visitor's browser sees it, through the proxy. */
   hostUrl(host: string, path?: string): string;
   /** Puts a file into the sites Worker (`sites/example.com/index.html`) and waits until it is served. */
   writeSiteFile(path: string, body: string | Uint8Array): Promise<void>;
+  /**
+   * The emails the admin sent through its `send_email` binding since the last `reset()`, as raw MIME. Local workerd
+   * writes each to a file and logs its path; the mock Cloudflare never sees them.
+   */
+  sentMail(): string[];
   /** A fresh mock with the seed, an empty database (schema kept) and no written site files. */
   reset(): Promise<void>;
   stop(): Promise<void>;
@@ -66,6 +78,8 @@ export async function startStack(): Promise<Stack> {
 
   try {
     let current = createMockCloudflare(SEED);
+    // Filled in once the binding is open: the installer's database is the one the API reaches too.
+    let attach = (_mock: MockCloudflare) => {};
     const mock = new Proxy({} as MockCloudflare, { get: (_, key) => Reflect.get(current, key) });
     const server = await startMockCloudflare({ mock });
     stops.push(() => server.close());
@@ -81,6 +95,27 @@ export async function startStack(): Promise<Stack> {
     stops.push(() => platform.dispose());
     const d1 = platform.env.DB;
     await applyMigrations(d1Runner(d1));
+    attach = (mock) => mock.attachDatabase("deparked", d1);
+    attach(current);
+
+    // A real release, built from this checkout, for the installer to download and verify.
+    const releaseDir = resolve(dir, "release");
+    const releaseServer = await startReleaseServer({ dir: releaseDir, files: resolve(ROOT, "apps/sites/public") });
+    stops.push(() => releaseServer.close());
+    execFileSync(
+      process.execPath,
+      [
+        "scripts/build-release.ts",
+        "--version",
+        TEST_RELEASE,
+        "--out",
+        releaseDir,
+        "--files-url",
+        `${releaseServer.url}/files`,
+      ],
+      { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] },
+    );
+    const releaseSha256 = readFileSync(resolve(releaseDir, "release.json.sha256"), "utf8").split(" ")[0] ?? "";
 
     cpSync(resolve(ROOT, "apps/sites/public"), assets, { recursive: true });
     const written = new Set<string>();
@@ -88,6 +123,8 @@ export async function startStack(): Promise<Stack> {
     const vars = { CLOUDFLARE_API_BASE: cloudflareApi, TURNSTILE_VERIFY_URL: siteverify };
     const adminVars = {
       ...vars,
+      // What the installer stores for the admin: the release's `catalogFilesUrl`.
+      RELEASE_FILES_URL: `${releaseServer.url}/files`,
       SESSION_KEY: TEST_SESSION_KEY,
       CF_API_TOKEN: TEST_TOKEN,
       CF_ACCOUNT_ID: TEST_ACCOUNT_ID,
@@ -104,7 +141,18 @@ export async function startStack(): Promise<Stack> {
         vars: adminVars,
         args: ["--upstream-protocol", "https"],
       }),
-      startWorker({ name: "install", config: "apps/install/wrangler.jsonc", persistTo, readyPath: "/health", vars }),
+      startWorker({
+        name: "install",
+        config: "apps/install/wrangler.jsonc",
+        persistTo,
+        readyPath: "/health",
+        vars: {
+          ...vars,
+          RELEASE_VERSION: TEST_RELEASE,
+          RELEASE_SHA256: releaseSha256,
+          RELEASE_BASE_URL: `${releaseServer.url}/v${TEST_RELEASE}`,
+        },
+      }),
       startWorker({
         name: "sites",
         config: "apps/sites/wrangler.jsonc",
@@ -133,10 +181,31 @@ export async function startStack(): Promise<Stack> {
       throw new Error(`the sites Worker did not pick up the change to ${path} within 15 s`);
     };
 
+    const mailFiles = () =>
+      ["admin", "admin-domains"].flatMap((name) => {
+        const log = resolve(LOGS, `${name}.log`);
+        return existsSync(log)
+          ? [...readFileSync(log, "utf8").matchAll(/^Email: (\S+\.eml)$/gm)].map((m) => m[1] ?? "")
+          : [];
+      });
+    let mailSeen = new Set<string>();
+
     return {
       mock,
       d1,
-      urls: { admin: admin.url, install: install.url, sites: sites.url, mock: server.url, cloudflareApi, siteverify },
+      sentMail: () =>
+        mailFiles()
+          .filter((file) => !mailSeen.has(file))
+          .map((file) => readFileSync(file, "utf8")),
+      urls: {
+        admin: admin.url,
+        install: install.url,
+        sites: sites.url,
+        mock: server.url,
+        cloudflareApi,
+        siteverify,
+        release: releaseServer.url,
+      },
       hostUrl: (host, path = "/") => `http://${host}.localhost:${proxy.port}${path}`,
       async writeSiteFile(path, body) {
         const file = resolve(assets, path);
@@ -152,7 +221,9 @@ export async function startStack(): Promise<Stack> {
         );
       },
       async reset() {
+        mailSeen = new Set(mailFiles());
         current = createMockCloudflare(SEED);
+        attach(current);
         const tables = await d1
           .prepare(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",

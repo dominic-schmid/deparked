@@ -6,6 +6,7 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 @source "./";
+@source "../shared";
 @source not "./styles.generated.ts";
 
 @theme {
@@ -381,11 +382,10 @@
     translate: 2px 0;
   }
 }
-/* starts a hair above invisible: a browser times the largest paint from the first frame an element is not fully
-   transparent, and the stagger would otherwise count against it */
+/* the content is on screen from the first frame, so the largest paint is when it really appears: the entrance
+   brings it into focus and place instead of fading it in from invisible */
 @keyframes enter {
   from {
-    opacity: 0.01;
     translate: 0 18px;
     filter: blur(6px);
   }

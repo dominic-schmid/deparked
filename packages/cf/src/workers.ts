@@ -21,6 +21,8 @@ export interface AssetsConfig {
   html_handling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
   not_found_handling?: "none" | "404-page" | "single-page-application";
   run_worker_first?: boolean | string[];
+  /** The text of a `_headers` file: response header rules for the assets of this version. */
+  _headers?: string;
 }
 
 export interface WorkerModule {
@@ -95,7 +97,11 @@ const settingsSchema = z.object({
 /** Binding names and types only: Cloudflare never returns a secret's value. */
 export type WorkerSettings = z.infer<typeof settingsSchema>;
 
+/** Native in workerd (`Uint8Array.prototype.toBase64`), about 30 times faster than the loop: it keeps uploads inside Workers Free's CPU time. */
+const nativeToBase64 = (Uint8Array.prototype as { toBase64?: (this: Uint8Array) => string }).toBase64;
+
 function toBase64(bytes: Uint8Array): string {
+  if (typeof nativeToBase64 === "function") return nativeToBase64.call(bytes);
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
@@ -347,6 +353,22 @@ export function workersApi(http: Http) {
           json: { enabled, previews_enabled: false },
         },
         z.object({ enabled: z.boolean() }),
+      );
+    },
+
+    /**
+     * Deletes the Worker with its versions, secrets and routes (`force`: also when routes still point at it).
+     * A Worker that is already gone counts as deleted. 1 request.
+     */
+    async deleteScript(scriptName: string): Promise<void> {
+      await http.requestOrNull(
+        {
+          call: `delete Worker ${scriptName}`,
+          method: "DELETE",
+          path: script(scriptName),
+          query: { force: true },
+        },
+        z.unknown(),
       );
     },
 

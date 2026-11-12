@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -12,6 +13,11 @@
   },
   "dependencies": {
     "@deparked/cf": "workspace:*",
-    "@deparked/hosting": "workspace:*"
+    "@deparked/db": "workspace:*",
+    "@deparked/hosting": "workspace:*",
+    "@deparked/provision": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261110.1"
   }
 }

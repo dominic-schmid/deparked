@@ -48,7 +48,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   setOfferStatus: [[{ id: "01", status: "replied", now: NOW }]],
   setOfferEmailStatus: [[{ id: "01", emailStatus: "sent", notifiedTo: NOTIFY, now: NOW }]],
   countNewOffers: [[], [HOST]],
-  offerStatsForHosts: [[[HOST, "other.example"]]],
+  offerStatsForHosts: [[[HOST, "other.example"]], [[HOST], NOW]],
 
   listNotifyAddresses: [[]],
   getNotifyAddress: [[NOTIFY]],
@@ -61,6 +61,8 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   findTurnstileWidgetWithFreeSlot: [[]],
   claimTurnstileSlot: [[SITEKEY]],
   releaseTurnstileSlot: [[SITEKEY]],
+  syncTurnstileHostnameCount: [[SITEKEY]],
+  assignTurnstileWidget: [[{ host: HOST, sitekey: SITEKEY, now: NOW }]],
 
   listSiteFiles: [[]],
   listSiteFilesByHost: [[HOST], [null]],
@@ -79,19 +81,44 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   insertDeployment: [[{ worker: "sites", kind: "publish", host: HOST, now: NOW }]],
   finishDeployment: [[{ id: 1, status: "done", cfVersionId: "v", now: NOW }]],
   getDeployment: [[1]],
-  listDeployments: [[{ worker: "sites" }], [{ worker: "sites", status: "done" }]],
+  listDeployments: [[{ worker: "sites" }], [{ worker: "sites", status: "done" }], [{ worker: "sites", host: HOST }]],
   latestDeployment: [[{ worker: "admin" }]],
+  latestLiveChange: [[]],
   getPublishLock: [[]],
   acquirePublishLock: [[{ deploymentId: 1, ttlMs: 60_000, now: NOW }]],
   releasePublishLock: [[1]],
+  renewPublishLock: [[{ deploymentId: 1, ttlMs: 60_000, now: NOW }]],
+  commitPublish: [
+    [
+      {
+        deploymentId: 1,
+        versionId: "v",
+        hosts: [
+          {
+            host: HOST,
+            files: [{ path: `/sites/${HOST}/index.html`, hash: "h", size: 1, contentType: "text/html" }],
+            published: { json: "{}", schemaVersion: 1, rendered: { json: "{ }", schemaVersion: 1 } },
+          },
+          { host: "other.example", files: [], rerendered: true },
+        ],
+        release: "1.0.0",
+        finish: true,
+        now: NOW,
+      },
+    ],
+  ],
 
   insertLedgerEntry: [[{ host: HOST, zoneId: "zone-1", resource: "route", cfId: "r1", action: "created", now: NOW }]],
   listLedger: [[{ host: HOST }], [{ host: null, activeOnly: true }]],
   markLedgerUndone: [[{ id: 1, now: NOW }]],
+  updateLedgerEntry: [[{ id: 1, cfId: "r1" }], [{ id: 1, previousJson: "{}" }]],
 
   hitRateLimit: [[{ key: "login:abc", windowMs: 60_000, now: NOW }]],
   clearRateLimit: [["login:abc"]],
   pruneRateLimits: [[NOW]],
+  openOwnershipProof: [[{ ttlMs: 60_000, maxOpen: 20, now: NOW }]],
+  acquireProvisionLock: [[{ holder: 1, ttlMs: 60_000, now: NOW }]],
+  releaseProvisionLock: [[1]],
 };
 
 // At most one row each, by a CHECK constraint.
@@ -109,9 +136,12 @@ const FULL_READS: Partial<Record<keyof Queries, string>> = {
 /** The tables a statement reads from start to end ("SCAN x"), according to SQLite's planner. */
 function scannedTables(sqlite: Awaited<ReturnType<typeof createTestDb>>["sqlite"], statement: ExecutedStatement) {
   const plan = sqlite.prepare(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.params as never[]));
-  return plan
-    .map((step) => /^SCAN (\S+)/.exec(String(step.detail))?.[1])
-    .filter((table) => table !== undefined && table !== "CONSTANT");
+  return (
+    plan
+      .map((step) => /^SCAN (\S+)/.exec(String(step.detail))?.[1])
+      // A `(subquery-n)` is a literal VALUES list (`commitPublish`); a subquery over a table shows that table's scan too.
+      .filter((table) => table !== undefined && table !== "CONSTANT" && !table.startsWith("(subquery-"))
+  );
 }
 
 test("the check sees a full table scan", async () => {

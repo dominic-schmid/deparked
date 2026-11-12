@@ -85,5 +85,17 @@ export function emailApi(http: Http) {
         routingSchema,
       );
     },
+    /** Turns Email Routing off for the zone. Cloudflare removes the MX records it added. */
+    disableRouting(zoneId: string): Promise<EmailRoutingSettings> {
+      return http.request(
+        {
+          call: "disable Email Routing",
+          method: "POST",
+          path: `/zones/${segment(zoneId)}/email/routing/disable`,
+          json: {},
+        },
+        routingSchema,
+      );
+    },
   };
 }

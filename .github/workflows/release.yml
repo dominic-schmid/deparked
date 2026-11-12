@@ -1,0 +1,54 @@
+name: Release
+
+# A v* tag builds the release (admin Worker, its client files, the catalog, the migrations, release.json) and
+# publishes it as a GitHub Release. It never deploys: the owner's installer downloads and verifies it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Release only what is on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::The tag points at a commit that is not on main. Tag a commit of main."
+            exit 1
+          fi
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Committed installer and lander builds are up to date
+        run: pnpm check:install-fresh && pnpm check:templates-fresh
+      - name: Build the release
+        # The version comes from the tag (v1.2.3 is 1.2.3); the script refuses anything else.
+        run: pnpm build:release
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Deparked ${TAG#v}" \
+            --notes "Install or update with the Deploy to Cloudflare button in the README. release.json SHA-256: $(cut -d' ' -f1 release/release.json.sha256)"

@@ -23,7 +23,7 @@ import type { DomainSummary } from "../server/domains";
 import { StatusDot, statusLabel } from "./status";
 import { THEME_SCRIPT, ThemeToggle } from "./theme";
 
-type ShellData = { domains: DomainSummary[]; newOffers: number };
+type ShellData = { domains: DomainSummary[]; newOffers: number; tokenRejected: boolean };
 
 const NAV_LINK =
   "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current=page]:bg-secondary aria-[current=page]:text-foreground";
@@ -272,6 +272,21 @@ export function AppShell({ data, children }: { data: ShellData; children: ReactN
         </div>
       </header>
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 outline-none sm:py-8">
+        {data.tokenRejected ? (
+          <div role="alert" className="mb-6 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm">
+            <p className="font-medium text-destructive">Cloudflare rejects the saved API token.</p>
+            <p className="mt-1 text-muted-foreground">
+              Your pages stay online, but publishing and domain changes stop until you{" "}
+              <Link
+                to="/admin/settings/cloudflare"
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                replace the token
+              </Link>
+              .
+            </p>
+          </div>
+        ) : null}
         {children}
       </main>
     </div>

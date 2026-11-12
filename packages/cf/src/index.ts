@@ -40,6 +40,8 @@ export type { DestinationAddress, EmailRoutingSettings, MxState } from "./email"
 export { classifyMx } from "./email";
 export type { ClientOptions, CloudflareErrorDetail, FetchLike, PageOptions } from "./http";
 export { CloudflareApiError } from "./http";
+export type { TokenPermission } from "./permissions";
+export { PROBE_PERMISSION_LABELS, TOKEN_PERMISSIONS, tokenTemplateUrl } from "./permissions";
 export type {
   RedirectRuleInput,
   RewriteRuleInput,

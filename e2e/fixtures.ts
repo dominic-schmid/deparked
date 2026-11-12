@@ -8,6 +8,7 @@ export { expect } from "@playwright/test";
 export {
   TEST_ACCOUNT_ID,
   TEST_PASSWORD,
+  TEST_RELEASE,
   TEST_SESSION_KEY,
   TEST_TOKEN,
   TURNSTILE_DUMMY_SITEKEY,
@@ -25,6 +26,7 @@ interface TestFixtures {
   urls: Stack["urls"];
   hostUrl: Stack["hostUrl"];
   writeSiteFile: Stack["writeSiteFile"];
+  sentMail: Stack["sentMail"];
   /** Runs before every test on its own. Call it inside a test to start over half way. */
   resetState: Stack["reset"];
   /**
@@ -87,5 +89,6 @@ export const test = base.extend<TestFixtures, { stack: Stack }>({
   urls: ({ stack }, use) => use(stack.urls),
   hostUrl: ({ stack }, use) => use(stack.hostUrl),
   writeSiteFile: ({ stack }, use) => use(stack.writeSiteFile),
+  sentMail: ({ stack }, use) => use(stack.sentMail),
   resetState: ({ stack }, use) => use(stack.reset),
 });

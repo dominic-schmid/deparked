@@ -16,6 +16,14 @@ export type MockPermission =
   | "rulesets"
   | "email_routing";
 
+/** The part of a D1 binding `attachDatabase` uses. */
+export interface MockD1 {
+  prepare(sql: string): {
+    bind(...values: unknown[]): { all(): Promise<{ results: unknown[] }> };
+    all(): Promise<{ results: unknown[] }>;
+  };
+}
+
 export interface MockZone {
   id: string;
   name: string;
@@ -27,6 +35,8 @@ export interface MockDnsRecord {
   name: string;
   content: string;
   priority?: number;
+  proxied?: boolean;
+  ttl?: number;
 }
 
 export interface MockRule {
@@ -103,6 +113,8 @@ export interface MockFailure {
   code?: number;
   message?: string;
   retryAfterSeconds?: number;
+  /** Apply the call's change first and then answer with the failure: the caller never learns it worked. */
+  applyFirst?: boolean;
 }
 
 export interface MockSeed {
@@ -130,12 +142,14 @@ export interface MockAnalyticsRow {
 export interface MockState {
   accountId: string;
   accountName: string;
+  /** Further accounts the token can see. API calls for them answer 404, like an account without access. */
+  otherAccounts: { id: string; name: string }[];
   token: string;
   tokenKind: "user" | "account";
   workersSubdomain: string | null;
   zones: MockZone[];
   dnsRecords: Map<string, MockDnsRecord[]>;
-  routes: Map<string, { id: string; pattern: string; script: string }[]>;
+  routes: Map<string, { id: string; pattern: string; script?: string }[]>;
   /** Keyed by `<zoneId>:<phase>`. */
   rulesets: Map<string, MockRuleset>;
   emailRouting: Map<string, boolean>;
@@ -231,6 +245,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
   const state: MockState = {
     accountId: seed.accountId ?? "mock-account",
     accountName: seed.accountName ?? "Mock account",
+    otherAccounts: [],
     token: seed.token ?? "mock-api-token",
     tokenKind: seed.tokenKind ?? "user",
     workersSubdomain: seed.workersSubdomain === undefined ? "mock" : seed.workersSubdomain,
@@ -253,6 +268,8 @@ export function createMockCloudflare(seed: MockSeed = {}) {
   const failures: (Required<Pick<MockFailure, "route" | "status">> & MockFailure & { seen: number })[] = [];
   const denied = new Set<MockPermission>();
   const sqlite = new Map<string, DatabaseSync>();
+  /** Databases served by a D1 binding instead of the mock's own SQLite: the API and the binding see one database. */
+  const attached = new Map<string, MockD1>();
   /** Upload tokens: a session still waiting for files, or a completion token. */
   const uploads = new Map<string, { manifest: MockVersion["manifest"]; pending: Set<string>; complete: boolean }>();
   let counter = 0;
@@ -277,6 +294,22 @@ export function createMockCloudflare(seed: MockSeed = {}) {
   function liveVersion(worker: MockScript): MockVersion | undefined {
     const versionId = worker.deployments.at(-1)?.versionId;
     return worker.versions.find((version) => version.id === versionId);
+  }
+
+  async function attachedSql(id: string, sql: string, params: SQLInputValue[]) {
+    const d1 = attached.get(id);
+    if (d1 === undefined) return undefined;
+    const results = [];
+    try {
+      for (const statement of splitStatements(sql)) {
+        const prepared = d1.prepare(statement);
+        const { results: rows } = await (params.length === 0 ? prepared : prepared.bind(...params)).all();
+        results.push({ success: true, results: rows, meta: {} });
+      }
+    } catch (error) {
+      throw new MockError(400, 7500, error instanceof Error ? error.message : "SQL error");
+    }
+    return results;
   }
 
   function database(id: string): DatabaseSync {
@@ -463,6 +496,15 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        id: "accounts.list",
+        method: "GET",
+        pattern: "/accounts",
+        handle: () => ({
+          result: [{ id: state.accountId, name: state.accountName, type: "standard" }, ...state.otherAccounts],
+          paginate: true,
+        }),
+      },
+      {
         id: "accounts.get",
         method: "GET",
         pattern: account,
@@ -492,8 +534,12 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         permission: "zones",
         handle: ({ query }) => {
           const name = query.get("name");
+          const contains = name?.startsWith("contains:") === true ? name.slice("contains:".length).toLowerCase() : null;
           const result = state.zones
-            .filter((entry) => name === null || entry.name === name)
+            .filter((entry) =>
+              contains !== null ? entry.name.includes(contains) : name === null || entry.name === name,
+            )
+            .toSorted((a, b) => (query.get("order") === "name" ? a.name.localeCompare(b.name) : 0))
             .map((entry) => ({ ...entry, status: "active", account: { id: state.accountId } }));
           return { result, paginate: true };
         },
@@ -520,6 +566,50 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        id: "dns.create",
+        method: "POST",
+        pattern: "/zones/:zone/dns_records",
+        permission: "dns",
+        handle: (context) => {
+          const zoneId = zone(context).id;
+          const record: MockDnsRecord = {
+            id: nextId("dns"),
+            type: text(context.json.type, "type"),
+            name: text(context.json.name, "name"),
+            content: text(context.json.content, "content"),
+            ...(typeof context.json.priority === "number" ? { priority: context.json.priority } : {}),
+            ...(typeof context.json.proxied === "boolean" ? { proxied: context.json.proxied } : {}),
+            ...(typeof context.json.ttl === "number" ? { ttl: context.json.ttl } : {}),
+          };
+          const list = state.dnsRecords.get(zoneId) ?? [];
+          if (
+            list.some(
+              (entry) => entry.type === record.type && entry.name === record.name && entry.content === record.content,
+            )
+          ) {
+            throw new MockError(400, 81058, "An identical record already exists.");
+          }
+          state.dnsRecords.set(zoneId, [...list, record]);
+          return { result: record };
+        },
+      },
+      {
+        id: "dns.delete",
+        method: "DELETE",
+        pattern: "/zones/:zone/dns_records/:record",
+        permission: "dns",
+        handle: (context) => {
+          const zoneId = zone(context).id;
+          const list = state.dnsRecords.get(zoneId) ?? [];
+          if (!list.some((record) => record.id === context.params.record)) throw notFound("record");
+          state.dnsRecords.set(
+            zoneId,
+            list.filter((record) => record.id !== context.params.record),
+          );
+          return { result: { id: context.params.record } };
+        },
+      },
+      {
         id: "routes.list",
         method: "GET",
         pattern: "/zones/:zone/workers/routes",
@@ -541,6 +631,26 @@ export function createMockCloudflare(seed: MockSeed = {}) {
           const route = { id: nextId("route"), pattern, script: text(context.json.script, "script") };
           state.routes.set(zoneId, [...list, route]);
           return { result: route };
+        },
+      },
+      {
+        id: "routes.update",
+        method: "PUT",
+        pattern: "/zones/:zone/workers/routes/:route",
+        permission: "routes",
+        handle: (context) => {
+          const zoneId = zone(context).id;
+          const list = state.routes.get(zoneId) ?? [];
+          const found = list.find((route) => route.id === context.params.route);
+          if (found === undefined) throw notFound("route");
+          const pattern = text(context.json.pattern, "pattern");
+          if (list.some((route) => route !== found && route.pattern === pattern)) {
+            throw new MockError(409, 10020, "A route with the same pattern already exists.");
+          }
+          found.pattern = pattern;
+          if (typeof context.json.script === "string") found.script = context.json.script;
+          else delete found.script;
+          return { result: found };
         },
       },
       {
@@ -755,6 +865,17 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        id: "workers.deleteScript",
+        method: "DELETE",
+        pattern: worker,
+        permission: "workers",
+        handle: (context) => {
+          const found = script(context);
+          state.scripts.delete(found.name);
+          return { result: null };
+        },
+      },
+      {
         id: "workers.getSettings",
         method: "GET",
         pattern: `${worker}/settings`,
@@ -770,13 +891,17 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        // Like Cloudflare's, the name filter is a search: "deparked" also finds "deparked-old".
         id: "d1.list",
         method: "GET",
         pattern: `${account}/d1/database`,
         permission: "d1",
         handle: ({ query }) => {
           const name = query.get("name");
-          return { result: state.databases.filter((entry) => name === null || entry.name === name), paginate: true };
+          return {
+            result: state.databases.filter((entry) => name === null || entry.name.includes(name)),
+            paginate: true,
+          };
         },
       },
       {
@@ -799,13 +924,12 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         method: "POST",
         pattern: `${account}/d1/database/:database/query`,
         permission: "d1",
-        handle: (context) => ({
-          result: runSql(
-            context.params.database ?? "",
-            text(context.json.sql, "sql"),
-            (context.json.params ?? []) as SQLInputValue[],
-          ),
-        }),
+        handle: async (context) => {
+          const id = context.params.database ?? "";
+          const sql = text(context.json.sql, "sql");
+          const params = (context.json.params ?? []) as SQLInputValue[];
+          return { result: (await attachedSql(id, sql, params)) ?? runSql(id, sql, params) };
+        },
       },
       {
         id: "turnstile.list",
@@ -963,6 +1087,23 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        id: "email.disableRouting",
+        method: "POST",
+        pattern: "/zones/:zone/email/routing/disable",
+        permission: "email_routing",
+        handle: (context) => {
+          const found = zone(context);
+          state.emailRouting.set(found.id, false);
+          state.dnsRecords.set(
+            found.id,
+            (state.dnsRecords.get(found.id) ?? []).filter(
+              (record) => !(record.type === "MX" && record.content.endsWith(".mx.cloudflare.net")),
+            ),
+          );
+          return { result: routingJson(found) };
+        },
+      },
+      {
         id: "turnstile.siteverify",
         method: "POST",
         pattern: "/turnstile/v0/siteverify",
@@ -1008,8 +1149,8 @@ export function createMockCloudflare(seed: MockSeed = {}) {
     );
   }
 
-  function injected(routeId: string | undefined): MockError | undefined {
-    let hit: MockError | undefined;
+  function injected(routeId: string | undefined): (MockError & { applyFirst?: boolean }) | undefined {
+    let hit: (MockError & { applyFirst?: boolean }) | undefined;
     for (const failure of failures) {
       if (failure.route !== "*" && failure.route !== routeId) continue;
       failure.seen += 1;
@@ -1021,6 +1162,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
           failure.message ?? "injected failure",
           failure.retryAfterSeconds,
         );
+        if (failure.applyFirst === true) hit.applyFirst = true;
       }
     }
     return hit;
@@ -1047,7 +1189,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
 
     try {
       const failure = injected(route?.id);
-      if (failure !== undefined) throw failure;
+      if (failure !== undefined && failure.applyFirst !== true) throw failure;
       if (route === undefined) throw new MockError(404, 7003, `No route for ${request.method} ${path}`);
       const bearer = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
       if (route.auth === undefined && bearer !== state.token) throw new MockError(401, 1000, "Invalid API Token");
@@ -1057,6 +1199,7 @@ export function createMockCloudflare(seed: MockSeed = {}) {
       const params = route.pattern.exec(path)?.groups ?? {};
       if (params.account !== undefined && params.account !== state.accountId) throw notFound("account");
       const reply = await route.handle({ params, query: url.searchParams, json: body, form, bearer });
+      if (failure !== undefined) throw failure;
       if (route.raw === true) return json(reply.status ?? 200, reply.result);
       let result = reply.result;
       let resultInfo: Record<string, number> | undefined;
@@ -1117,6 +1260,16 @@ export function createMockCloudflare(seed: MockSeed = {}) {
     addDatabase(name: string): string {
       const created = { uuid: nextId("d1"), name };
       state.databases.push(created);
+      return created.uuid;
+    },
+    /**
+     * Add a database whose API queries run on `d1`, a real or local D1 binding, as the Deploy button's database
+     * is both the installer's binding and reachable through the API. Returns its id.
+     */
+    attachDatabase(name: string, d1: MockD1): string {
+      const created = { uuid: nextId("d1"), name };
+      state.databases.push(created);
+      attached.set(created.uuid, d1);
       return created.uuid;
     },
     /** Run SQL on a mock database directly, as a Worker's D1 binding would. */

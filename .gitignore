@@ -24,3 +24,6 @@ playwright-report/
 blob-report/
 coverage/
 e2e/.tmp/
+
+# pnpm build:release output
+/release/
