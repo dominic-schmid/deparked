@@ -38,6 +38,14 @@ interface TestFixtures {
   cleanSlate: undefined;
 }
 
+/**
+ * Waits until the admin page has hydrated. Its controls are disabled until then, so Playwright's own waiting covers
+ * every fill and click; this is for checks that read the page without acting on it.
+ */
+export async function waitForHydration(page: Page): Promise<void> {
+  await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
+}
+
 export const test = base.extend<TestFixtures, { stack: Stack }>({
   stack: [
     // biome-ignore lint/correctness/noEmptyPattern: Playwright reads the fixture's dependencies from this pattern
@@ -84,6 +92,7 @@ export const test = base.extend<TestFixtures, { stack: Stack }>({
       await page.getByLabel("Password").fill(TEST_PASSWORD);
       await page.getByRole("button", { name: "Log in" }).click();
       await page.waitForURL(admin("/admin"));
+      await waitForHydration(page);
       return page;
     }),
   urls: ({ stack }, use) => use(stack.urls),
