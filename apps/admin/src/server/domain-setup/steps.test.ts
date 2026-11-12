@@ -244,7 +244,7 @@ describe("turning a domain off and removing it", () => {
 
     const view = await takeOffStep(deps, { change: "turn-off", host: HOST, state: takeDown });
     expect(view).toMatchObject({ outcome: "blocked", state: takeDown });
-    expect(view.message).toContain("stopped half-way");
+    expect(view.message).toContain("put settings back in Cloudflare while it was being turned off");
     expect(livePaths()).toContain(`/sites/${HOST}/index.html`);
 
     await drive("turn-off");
