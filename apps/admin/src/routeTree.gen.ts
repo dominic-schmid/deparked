@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminLogoutRouteImport } from './routes/admin/logout'
+import { Route as ApiOfferRouteImport } from './routes/api/offer'
 import { Route as AdminSettingsLogoutEverywhereRouteImport } from './routes/admin/settings/logout-everywhere'
 import { Route as AdminSettingsPasswordRouteImport } from './routes/admin/settings/password'
 import { Route as AdminSetupIndexRouteImport } from './routes/admin/setup/index'
@@ -36,6 +37,11 @@ const AdminLoginRoute = AdminLoginRouteImport.update({
 const AdminLogoutRoute = AdminLogoutRouteImport.update({
   id: '/admin/logout',
   path: '/admin/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOfferRoute = ApiOfferRouteImport.update({
+  id: '/api/offer',
+  path: '/api/offer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminSettingsLogoutEverywhereRoute =
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
+  '/api/offer': typeof ApiOfferRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/settings/password': typeof AdminSettingsPasswordRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
+  '/api/offer': typeof ApiOfferRoute
   '/admin': typeof AdminIndexRoute
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/settings/password': typeof AdminSettingsPasswordRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
+  '/api/offer': typeof ApiOfferRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/settings/password': typeof AdminSettingsPasswordRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/login'
     | '/admin/logout'
+    | '/api/offer'
     | '/admin/'
     | '/admin/settings/logout-everywhere'
     | '/admin/settings/password'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/login'
     | '/admin/logout'
+    | '/api/offer'
     | '/admin'
     | '/admin/settings/logout-everywhere'
     | '/admin/settings/password'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/login'
     | '/admin/logout'
+    | '/api/offer'
     | '/admin/'
     | '/admin/settings/logout-everywhere'
     | '/admin/settings/password'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminLogoutRoute: typeof AdminLogoutRoute
+  ApiOfferRoute: typeof ApiOfferRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminSettingsLogoutEverywhereRoute: typeof AdminSettingsLogoutEverywhereRoute
   AdminSettingsPasswordRoute: typeof AdminSettingsPasswordRoute
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/offer': {
+      id: '/api/offer'
+      path: '/api/offer'
+      fullPath: '/api/offer'
+      preLoaderRoute: typeof ApiOfferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/settings/logout-everywhere': {
       id: '/admin/settings/logout-everywhere'
       path: '/admin/settings/logout-everywhere'
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminLogoutRoute: AdminLogoutRoute,
+  ApiOfferRoute: ApiOfferRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminSettingsLogoutEverywhereRoute: AdminSettingsLogoutEverywhereRoute,
   AdminSettingsPasswordRoute: AdminSettingsPasswordRoute,
