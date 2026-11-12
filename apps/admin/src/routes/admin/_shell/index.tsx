@@ -10,6 +10,7 @@ import {
 } from "../../../components/analytics";
 import { formatMoney } from "../../../components/format";
 import { PageError, PageHeader, PagePending } from "../../../components/page";
+import { SetupChecklistCard } from "../../../components/setup-checklist";
 import { StatusLabel } from "../../../components/status";
 import { RelativeTime } from "../../../components/time";
 import type { OverviewVisits } from "../../../server/analytics-shape";
@@ -92,17 +93,21 @@ function PublishedCell({ time, now }: { time: number | null; now: number }) {
 }
 
 function OverviewPage() {
-  const { domains, visits, now } = Route.useLoaderData();
+  const { domains, visits, checklist, now } = Route.useLoaderData();
+  const card = checklist === null ? null : <SetupChecklistCard checklist={checklist} />;
 
   if (domains.length === 0) {
     return (
-      <div className="mx-auto mt-12 flex max-w-md flex-col items-center gap-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">No domains yet</h1>
-        <p className="text-muted-foreground">
-          Add a domain from your Cloudflare account to give it a for-sale page and an offer form.
-        </p>
-        <AddDomainButton />
-      </div>
+      <>
+        {card}
+        <div className="mx-auto mt-12 flex max-w-md flex-col items-center gap-4 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight">No domains yet</h1>
+          <p className="text-muted-foreground">
+            Add a domain from your Cloudflare account to give it a for-sale page and an offer form.
+          </p>
+          <AddDomainButton />
+        </div>
+      </>
     );
   }
 
@@ -113,6 +118,7 @@ function OverviewPage() {
         description={domains.length === 1 ? "1 domain" : `${domains.length} domains`}
         actions={<AddDomainButton />}
       />
+      {card}
       {visits.ok ? null : <AnalyticsProblemAlert problem={visits.problem} />}
       <div className="hidden rounded-xl border lg:block">
         <Table>

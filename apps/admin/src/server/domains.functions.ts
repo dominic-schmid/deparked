@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { countNewOffers, createDb } from "@deparked/db";
+import { countNewOffers, createDb, setWorkspaceMark } from "@deparked/db";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { type AnalyticsSource, loadDomainAnalytics, loadOverviewVisits, workerReportCache } from "./analytics";
@@ -7,6 +7,7 @@ import { hostSchema, loadDomain, loadDomainSummaries, loadOverview } from "./dom
 import { getHosting } from "./hosting";
 import { shellTokenRejected } from "./hub/connect";
 import { requireSession } from "./require-session";
+import { loadSetupChecklist } from "./setup-checklist";
 
 /** What every screen of the workspace needs: the domains for the switcher and the inbox badge. */
 export const getShell = createServerFn().handler(async () => {
@@ -23,7 +24,15 @@ export const getShell = createServerFn().handler(async () => {
 export const getOverview = createServerFn().handler(async () => {
   await requireSession();
   const now = Date.now();
-  return { domains: await loadOverview(createDb(env.DB), now), now };
+  const db = createDb(env.DB);
+  const [domains, checklist] = await Promise.all([loadOverview(db, now), loadSetupChecklist(db)]);
+  return { domains, checklist, now };
+});
+
+/** Hides the overview's "Finish setting up" card for good. */
+export const dismissSetupChecklist = createServerFn({ method: "POST" }).handler(async () => {
+  await requireSession();
+  await setWorkspaceMark(createDb(env.DB), { mark: "setup-checklist-dismissed", now: Date.now() });
 });
 
 export const getDomainDetail = createServerFn()

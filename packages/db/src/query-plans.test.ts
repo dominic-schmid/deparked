@@ -120,6 +120,8 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   openOwnershipProof: [[{ ttlMs: 60_000, maxOpen: 20, now: NOW }]],
   acquireProvisionLock: [[{ holder: 1, ttlMs: 60_000, now: NOW }]],
   releaseProvisionLock: [[1]],
+  getWorkspaceMark: [["offers-exported"]],
+  setWorkspaceMark: [[{ mark: "setup-checklist-dismissed", now: NOW }]],
 };
 
 // At most one row each, by a CHECK constraint.

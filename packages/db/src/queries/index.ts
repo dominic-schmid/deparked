@@ -4,6 +4,7 @@ export * from "./config";
 export * from "./domains";
 export * from "./ledger";
 export * from "./locks";
+export * from "./marks";
 export * from "./notify";
 export * from "./offers";
 export * from "./publish";
