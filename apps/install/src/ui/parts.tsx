@@ -12,7 +12,9 @@ function Wordmark() {
         <rect x="1.5" y="3.5" width="21" height="17" rx="4.5" className="fill-primary" />
         <path d="M6.5 9.5h7M6.5 14h11" className="stroke-primary-foreground" strokeWidth="2" strokeLinecap="round" />
       </svg>
-      <span className="font-serif text-[19px] font-semibold tracking-[-0.01em]">Deparked</span>
+      <span translate="no" className="font-serif text-[19px] font-semibold tracking-[-0.01em]">
+        Deparked
+      </span>
     </span>
   );
 }

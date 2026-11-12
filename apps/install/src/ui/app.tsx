@@ -137,6 +137,11 @@ function TokenField(props: {
   const hint = useId();
   const errorId = useId();
   const [visible, setVisible] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  // A refused token: the cursor goes back to the field, so the next paste replaces it.
+  useEffect(() => {
+    if (props.error !== null) input.current?.focus();
+  }, [props.error]);
   return (
     <div>
       <Label htmlFor={id} className="mb-2 text-sm font-medium">
@@ -144,6 +149,7 @@ function TokenField(props: {
       </Label>
       <div className="relative">
         <Input
+          ref={input}
           id={id}
           name="token"
           type={visible ? "text" : "password"}
@@ -157,7 +163,8 @@ function TokenField(props: {
           aria-describedby={props.error === null ? hint : `${hint} ${errorId}`}
           aria-invalid={props.error === null ? undefined : true}
           className="h-11 pr-11 font-mono text-[15px] placeholder:font-sans sm:text-sm"
-          placeholder="Paste the token you copied"
+          placeholder="Paste the token you copied…"
+          translate="no"
         />
         <Button
           type="button"
@@ -342,33 +349,44 @@ function PickAccount(props: {
         </p>
       </ScreenTitle>
       <form onSubmit={submit} className="flex max-w-xl flex-col gap-5">
-        <fieldset aria-labelledby={legend}>
+        <fieldset aria-labelledby={legend} className="min-w-0">
           <legend id={legend} className="sr-only">
             Cloudflare account
           </legend>
-          <RadioGroup value={choice} onValueChange={setChoice} className="gap-2">
+          <RadioGroup
+            value={choice}
+            onValueChange={setChoice}
+            className={cn(
+              "gap-2",
+              // A long list scrolls in its own box, so the button stays in reach.
+              props.accounts.length > 6 &&
+                "max-h-[min(28rem,60dvh)] overflow-y-auto overscroll-contain rounded-xl border p-2",
+            )}
+          >
             {props.accounts.map((account) => (
               <Label
                 key={account.id}
                 className={cn(
-                  "flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-accent/60",
+                  "flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-accent/60 [&>button]:mt-0.5",
                   choice === account.id && "border-primary/40 bg-accent/60",
                 )}
               >
                 <RadioGroupItem value={account.id} />
                 <span className="min-w-0">
                   <span className="block break-words text-sm font-medium">{account.name}</span>
-                  <span className="block truncate font-mono text-xs text-muted-foreground">{account.id}</span>
+                  <span translate="no" className="block truncate font-mono text-xs text-muted-foreground">
+                    {account.id}
+                  </span>
                 </span>
               </Label>
             ))}
           </RadioGroup>
         </fieldset>
         <ErrorNote error={error} />
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">
           <Button type="submit" size="lg" className="h-11 px-5" disabled={busy}>
             {busy ? <Spinner /> : null}
-            {busy ? "Checking…" : "Continue"}
+            {busy ? "Checking…" : "Use this account"}
           </Button>
           <Button type="button" variant="ghost" size="lg" className="h-11" onClick={props.onBack}>
             Use another token
@@ -482,16 +500,15 @@ function Review(props: { ready: Ready; onBack: () => void; onInstall: () => void
         </ol>
       )}
 
-      {ready.unchecked.length > 0 && ready.missing.length === 0 ? (
+      {ready.unchecked.length > 0 ? (
         <p className="mb-8 max-w-[62ch] text-[13px] text-muted-foreground">
           {ready.unchecked.map((gap) => gap.label).join(", ")} could not be checked yet: Cloudflare only answers for
-          them on a domain that already has such settings. They matter once you add a domain, and the admin checks them
-          then.
+          them on a domain. They matter once you add one, and the admin checks them then.
         </p>
       ) : null}
 
       {ready.missing.length > 0 ? null : (
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">
           <Button size="lg" className="h-11 px-5" disabled={blocked} onClick={props.onInstall}>
             {ready.nothingToDo ? "Finish" : "Install Deparked"} <ArrowRight aria-hidden />
           </Button>
@@ -705,7 +722,10 @@ function Done(props: { setupUrl: string; recovered: boolean }) {
       </ScreenTitle>
       <div className="rounded-xl border bg-card p-5 sm:p-6">
         <p className="text-sm font-medium">Your one-time setup link</p>
-        <p className="mt-2 break-all rounded-md bg-muted px-3 py-2.5 font-mono text-[13px] leading-relaxed">
+        <p
+          translate="no"
+          className="mt-2 break-all rounded-md bg-muted px-3 py-2.5 font-mono text-[13px] leading-relaxed"
+        >
           {props.setupUrl}
         </p>
         <div className="mt-4 flex flex-wrap gap-3">

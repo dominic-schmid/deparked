@@ -22,6 +22,7 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
     text-rendering: optimizeLegibility;
   }
   body {
