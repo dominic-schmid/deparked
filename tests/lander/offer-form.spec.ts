@@ -144,22 +144,37 @@ for (const variant of Object.keys(variants) as (keyof typeof variants)[]) {
   test.describe(`${variant}: without JavaScript`, () => {
     test.use({ javaScriptEnabled: false });
 
-    test("shows all the copy and a form that can be submitted", async ({ page }) => {
+    test("shows all the copy, and says offers need JavaScript where the button would be", async ({ page }) => {
       await open(page, page1(variant));
       await expect(page.locator("h1")).toHaveText("example.com");
       await expect(page.getByText("I'd like to buy example.com for")).toBeVisible();
       await expect(page.getByText("The owner reads every offer and replies by email.")).toBeVisible();
+      await expect(page.locator(".nojs")).toBeVisible();
+      await expect(page.locator(".nojs")).toHaveText(
+        "Offers need JavaScript for the spam check. Turn it on and reload this page to send yours.",
+      );
+      // the bot check cannot run, so no button pretends the offer can be sent
+      await expect(send(page)).toBeHidden();
       await expect(page.locator("form")).toHaveAttribute("method", "post");
       await expect(page.locator("form")).toHaveAttribute("action", "/api/offer");
       for (const field of [amount(page), name(page), email(page)]) {
         await expect(field).toBeVisible();
-        await expect(field).toBeEditable();
         await expect(field).toHaveAttribute("required", "");
       }
-      await expect(send(page)).toBeVisible();
-      await expect(send(page)).toBeEnabled();
       // nothing waits for a script to fade it in
       expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
+    });
+
+    test("offers the marketplace listing as the way to make an offer", async ({ page }) => {
+      await open(page, page1(variant, { marketplaceUrl: "https://www.example.org/listing/1" }));
+      const note = page.locator(".nojs");
+      await expect(note).toHaveText(
+        "Offers need JavaScript for the spam check. Turn it on and reload, or make your offer on example.org.",
+      );
+      await expect(note.getByRole("link", { name: "example.org" })).toHaveAttribute(
+        "href",
+        "https://www.example.org/listing/1",
+      );
     });
 
     // A real server here: a redirect answered by request interception is not followed.
@@ -180,7 +195,8 @@ for (const variant of Object.keys(variants) as (keyof typeof variants)[]) {
       try {
         await page.goto(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`);
         await fillOffer(page);
-        await send(page).click();
+        // Enter still submits: the server answers, and the static page shows its answer
+        await email(page).press("Enter");
         await expect(page.getByText("Thanks. Your offer is with the owner.")).toBeVisible();
         await expect(page.locator("form")).toBeHidden();
         expect(posted).toHaveLength(1);

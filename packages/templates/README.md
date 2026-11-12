@@ -85,7 +85,7 @@ The server validates everything again, including the minimum offer: the browser'
 - any `2xx`: the offer was taken. The body is `{ "ok": true }`.
 - any other status: `{ "ok": false, "error": "<one sentence for the buyer>", "field"?: "amount" | "name" | "email" }`. The page shows `error` as it is, on `field` when one is named. Without a readable body it shows "That didn't go through. Try again in a minute."
 
-**Without JavaScript** the browser posts `application/x-www-form-urlencoded` with the same field names (no Turnstile token: the widget needs JavaScript). Answer with `303 See Other`:
+**Without JavaScript** the bot check cannot run, so the page says so: a `<noscript>` note (`.nojs`) takes the Send button's place (hidden under `@media (scripting: none)`) and offers the marketplace listing, when the config has one, as the way to make an offer. Enter in a field still posts the form, and the browser posts `application/x-www-form-urlencoded` with the same field names (no Turnstile token: the widget needs JavaScript). Answer with `303 See Other`:
 
 - `Location: /#offer-sent` after a success,
 - `Location: /#offer-error-<reason>` otherwise, with `<reason>` one of `amount`, `name`, `email`, `check` (Turnstile), `rate` (rate limit), `failed` (anything else).

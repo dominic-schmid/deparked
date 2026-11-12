@@ -308,6 +308,22 @@ export function OfferForm({
               />
             </svg>
           </button>
+          <noscript>
+            <p className="nojs" dir="auto">
+              {"Offers need JavaScript for the spam check. "}
+              {marketplaceHost ? (
+                <>
+                  {"Turn it on and reload, or make your offer on "}
+                  <a href={marketplaceUrl} rel="noopener noreferrer">
+                    {marketplaceHost}
+                  </a>
+                  .
+                </>
+              ) : (
+                "Turn it on and reload this page to send yours."
+              )}
+            </p>
+          </noscript>
         </div>
       </form>
       <div className="sent" id={OFFER_SENT_FRAGMENT}>

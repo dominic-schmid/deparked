@@ -252,6 +252,15 @@
     }
   }
 
+  /* no JavaScript: a note where the button would be */
+  .nojs {
+    padding: 12px 16px;
+    font-size: clamp(14px, 0.85vw, 17px);
+    line-height: 1.45;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+
   /* one solid note for whatever is wrong; it takes the fine print's place in the row */
   .tag {
     flex: 0 1 auto;

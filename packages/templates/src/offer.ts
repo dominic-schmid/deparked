@@ -89,7 +89,7 @@ export function offerErrorMessages(minOffer: number, currency: Currency): Record
     amount: minOffer > 0 ? `Offers start at ${formatAmount(minOffer, currency)}` : "Add an amount",
     name: "Add your name",
     email: "Add an email we can reply to",
-    check: "The security check needs JavaScript. Turn it on and send again",
+    check: "Offers need JavaScript for the spam check. Turn it on and send again",
     rate: "Too many offers from here. Try again later",
     failed: "That didn't go through. Try again in a minute",
   };

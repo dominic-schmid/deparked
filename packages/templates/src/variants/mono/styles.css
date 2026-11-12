@@ -309,6 +309,14 @@
     }
   }
 
+  /* no JavaScript: a boxed notice where the button would be */
+  .nojs {
+    padding: 12px 14px;
+    font-size: clamp(12px, 0.75vw, 15px);
+    line-height: 1.55;
+    border: 1px solid var(--ink);
+  }
+
   /* one inverted line for whatever is wrong; it takes the fine print's place in the row */
   .tag {
     flex: 0 1 auto;
