@@ -28,6 +28,8 @@
     --warn: #b42318;
     --signal: var(--accent, var(--ink));
     --signal-ink: var(--accent-contrast, var(--paper));
+    /* the accent as a mark on the paper (the caret, focus rings, the tick), shaded until it reads there */
+    --signal-mark: var(--accent-mark, var(--ink));
     --edge: clamp(20px, 3.2vw, 56px);
     color-scheme: light;
   }
@@ -40,6 +42,7 @@
       --field: rgb(236 236 230 / 0.08);
       --field-hover: rgb(236 236 230 / 0.13);
       --warn: #ff8a7a;
+      --signal-mark: var(--accent-mark-dark, var(--ink));
       color-scheme: dark;
     }
   }
@@ -95,7 +98,7 @@
     content: "";
     width: 7px;
     height: 7px;
-    background: var(--signal);
+    background: var(--signal-mark);
   }
 
   /* the wordmark sits low in the free space above the readout, like a prompt waiting for input */
@@ -129,7 +132,7 @@
     height: 0.72em;
     margin-left: 0.08em;
     vertical-align: -0.02em;
-    background: var(--signal);
+    background: var(--signal-mark);
   }
 
   .spec {
@@ -211,10 +214,10 @@
     opacity: 1;
   }
   .slot input:focus {
-    box-shadow: inset 0 -2px 0 var(--signal);
+    box-shadow: inset 0 -2px 0 var(--signal-mark);
   }
   .slot input:focus-visible {
-    outline: 2px solid var(--signal);
+    outline: 2px solid var(--signal-mark);
     outline-offset: 2px;
   }
   .slot input[aria-invalid="true"] {
@@ -256,7 +259,7 @@
     transition: color 0.15s ease-out;
   }
   .fine a:focus-visible {
-    outline: 2px solid var(--signal);
+    outline: 2px solid var(--signal-mark);
     outline-offset: 3px;
   }
   .send {
@@ -285,7 +288,7 @@
     scale: 0.97;
   }
   .send:focus-visible {
-    outline: 2px solid var(--signal);
+    outline: 2px solid var(--signal-mark);
     outline-offset: 3px;
   }
   .send svg {
@@ -337,7 +340,7 @@
   }
   .sent h2::before {
     content: "✓ ";
-    color: var(--signal);
+    color: var(--signal-mark);
   }
   .sent p {
     margin-top: 14px;

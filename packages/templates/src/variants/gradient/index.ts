@@ -10,4 +10,5 @@ export const gradient: VariantDefinition = {
   gradient: "dusk",
   color: "#1b2430",
   contrast: "#ffffff",
+  onAccent: { ink: "#1c2116", paper: "#ffffff" },
 };

@@ -22,8 +22,22 @@
 @layer base {
   :root {
     --sky: var(--accent, #7f9fbf);
+    --on: #fff;
     --edge: clamp(20px, 3.2vw, 56px);
     --shade: 0 1px 24px rgb(40 50 30 / 0.35);
+  }
+  /* no photo: the type sits on the flat colour itself, in whichever of ink and white reads on it */
+  :root:has([data-flat]) {
+    --color-soft: color-mix(in srgb, currentColor 78%, transparent);
+    --color-line: color-mix(in srgb, currentColor 55%, transparent);
+    --shade: none;
+  }
+  :root:has([data-flat="light"]) {
+    --on: var(--accent-contrast, var(--color-ink));
+    --color-warn: #a3260b;
+  }
+  :root:has([data-flat]) body::before {
+    display: none;
   }
   * {
     box-sizing: border-box;
@@ -33,7 +47,7 @@
   html {
     overflow-x: clip;
     background: var(--sky);
-    color: #fff;
+    color: var(--on);
     font: 400 16px / 1.4 var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -webkit-text-size-adjust: 100%;
@@ -131,7 +145,7 @@
   }
   .slot input {
     font: italic 400 1em / 1 var(--font-serif);
-    color: #fff;
+    color: inherit;
     text-shadow: inherit;
     background: none;
     border: 0;
@@ -150,7 +164,7 @@
     opacity: 1;
   }
   .slot input:focus {
-    border-color: #fff;
+    border-color: currentColor;
   }
   .slot input[aria-invalid="true"] {
     border-bottom: 2px solid var(--color-warn);
@@ -195,7 +209,7 @@
     transition: color 0.15s ease-out;
   }
   .fine a:focus-visible {
-    outline: 2px solid #fff;
+    outline: 2px solid var(--on);
     outline-offset: 3px;
     border-radius: 2px;
   }
@@ -221,11 +235,15 @@
     transition-duration: 0.15s;
     transition-timing-function: ease-out;
   }
+  :root:has([data-flat="light"]) .send {
+    color: var(--sky);
+    background: var(--on);
+  }
   .send:active {
     scale: 0.96;
   }
   .send:focus-visible {
-    outline: 2px solid #fff;
+    outline: 2px solid var(--on);
     outline-offset: 3px;
   }
   .send[disabled] {
@@ -242,7 +260,7 @@
       border-color: var(--color-soft);
     }
     .fine a:hover {
-      color: #fff;
+      color: var(--on);
     }
     .send:hover {
       background: #eef3e6;

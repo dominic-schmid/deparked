@@ -6,7 +6,7 @@ import { OfferForm } from "../shared/offer-form/OfferForm";
 import type { PageProps } from "../types";
 import { fitMark } from "./mark";
 
-export function Page({ config, host, background, sitekey, offerEndpoint }: PageProps) {
+export function Page({ config, host, background, sitekey, offerEndpoint, tone }: PageProps) {
   const headline = fillDomain(config.headline, host);
   const fit = fitMark(headline);
   return (
@@ -14,7 +14,7 @@ export function Page({ config, host, background, sitekey, offerEndpoint }: PageP
       <div className="photo" aria-hidden="true">
         {background && <Photo background={background} />}
       </div>
-      <main className="panel">
+      <main className="panel" data-tone={tone}>
         <header className="bar" data-enter="">
           <span>For sale</span>
           <span>Offers by email</span>
@@ -48,7 +48,7 @@ export function Page({ config, host, background, sitekey, offerEndpoint }: PageP
             sentence: sentenceParts(config.sentence, host),
             finePrint: fillDomain(config.escrowLine, host),
             ...(config.marketplaceUrl ? { marketplaceUrl: config.marketplaceUrl } : {}),
-            turnstileTheme: "dark",
+            turnstileTheme: tone,
           }}
         />
       </main>

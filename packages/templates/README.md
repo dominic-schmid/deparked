@@ -39,7 +39,10 @@ Budgets, enforced by tests: `index.html` under 30 KB gzipped, each island bundle
 | `gradient` | No photo: a grained colour field, the sentence in Archivo with filled blanks, the domain across the foot | a catalog gradient; anything else gets `dusk` | the preset's `tone` (`dark`: white type, `light`: ink); it does not follow the visitor's |
 | `editorial` | A printed front page: double rule, the domain as a centred Newsreader masthead, a small-caps margin label | none, whatever `background` names | follows the visitor's: paper and ink, or deep ink and paper |
 
-`accent.primary` is Sky's flat colour, and the Send button's fill (plus Editorial's label and focus marks) in the others; `accent.contrast` is the button's text there. A variant without a photo never links one as its share image.
+`accent.primary` is Sky's flat colour, Split's panel, and the Send button's fill in the others (plus Editorial's label and Mono's caret, tick and focus marks); `accent.contrast` is the text on it. Readable whatever the owner picks (`src/contrast.ts`, exported for the admin's editor):
+
+- without `accent.contrast`, the text on the accent is whichever of the variant's ink and paper (`onAccent`) reads better on it, or black or white when neither reaches 4.5:1 (`contrastOn`). The favicon's letter, Sky's type on its flat colour (no photo) and Split's panel follow the same rule; a pale accent gives Split light controls and a light Turnstile.
+- where the accent itself is text or a mark on the page, it reaches the CSS as `--accent-mark` (and `--accent-mark-dark`), shaded toward black or white until it reads 4.5:1 on the variant's paper (`readableOn`, `accentMarksOn`). A variant without a photo never links one as its share image.
 
 Gradients live in `scripts/gradients.ts` and reach `catalog.json` through `pnpm build:templates`. Each names a `tone`; a test checks that every colour stop holds 4.5:1 against that tone's type.
 

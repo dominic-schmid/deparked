@@ -24,6 +24,7 @@
     --on: var(--accent-contrast, #f2ede1);
     --soft: color-mix(in srgb, var(--on) 72%, transparent);
     --line: color-mix(in srgb, var(--on) 30%, transparent);
+    --invalid: #ffa58c;
     --edge: clamp(20px, 3.4vw, 64px);
   }
   * {
@@ -47,6 +48,11 @@
   ::selection {
     background: var(--on);
     color: var(--panel);
+  }
+  /* a pale accent panel carries ink: light controls, and an error mark that reads on it */
+  :root:has(.panel[data-tone="light"]) {
+    --invalid: #a3260b;
+    color-scheme: light;
   }
 }
 
@@ -160,7 +166,7 @@
     outline-offset: 3px;
   }
   .slot input[aria-invalid="true"] {
-    border-bottom: 2px solid #ffa58c;
+    border-bottom: 2px solid var(--invalid);
   }
   .slot input[name="amount"] {
     min-width: 5ch;

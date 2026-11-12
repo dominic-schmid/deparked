@@ -65,7 +65,8 @@
   .page {
     --action: var(--accent, var(--ink));
     --on-action: var(--accent-contrast, var(--paper));
-    --mark: var(--accent, var(--red));
+    /* the accent as a label or a focus mark, shaded until it reads on the paper */
+    --mark: var(--accent-mark, var(--red));
 
     min-height: 100svh;
     display: grid;
@@ -75,6 +76,11 @@
       max(var(--edge), env(safe-area-inset-bottom)) max(var(--edge), env(safe-area-inset-left));
     container-type: inline-size;
     caret-color: var(--mark);
+  }
+  @media (prefers-color-scheme: dark) {
+    .page {
+      --mark: var(--accent-mark-dark, var(--red));
+    }
   }
 
   /* the rules draw across once, the way a page is laid out before the type goes on */
