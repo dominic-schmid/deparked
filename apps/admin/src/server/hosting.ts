@@ -1,6 +1,6 @@
 import { EmailMessage } from "cloudflare:email";
 import { env } from "cloudflare:workers";
-import type { HostingAdapter } from "@deparked/hosting";
+import { type HostingAdapter, HostingError } from "@deparked/hosting";
 import { createCloudflareHosting } from "@deparked/hosting-cloudflare";
 import { hostingConnection } from "./hosting-env";
 
@@ -18,4 +18,19 @@ export function createHosting(input: { accountId?: string | null } = {}): Hostin
     adminScriptName: ADMIN_SCRIPT,
     email: { binding: env.EMAIL, EmailMessage },
   });
+}
+
+/**
+ * The adapter for admin actions that call the hosting API. Throws a `HostingError` the UI can show when the
+ * install has no token (local dev without one, for example).
+ */
+export function getHosting(): HostingAdapter {
+  const vars = env as unknown as Record<string, unknown>;
+  if (!vars.CF_API_TOKEN || !vars.CF_ACCOUNT_ID) {
+    throw new HostingError(
+      "credentials-rejected",
+      "No Cloudflare token is stored for this install, so Cloudflare cannot be reached.",
+    );
+  }
+  return createHosting();
 }
