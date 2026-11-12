@@ -23,6 +23,11 @@ export type VariantDefinition = {
   color: string;
   /** The colour of the favicon's letter, unless the config's accent contrast overrides it. */
   contrast: string;
+  /**
+   * The `sizes` of the background image as the page lays it out, when the photo is what the visitor sees first:
+   * the document then preloads the right AVIF candidate. Must match the `sizes` the page puts on its `<img>`.
+   */
+  backgroundSizes?: (background: CatalogBackground) => string;
   /** `<meta name="color-scheme">` when the variant commits to one. */
   colorScheme?: "light" | "dark";
 };

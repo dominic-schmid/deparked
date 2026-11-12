@@ -236,9 +236,10 @@ export function OfferForm({
     <>
       <form method="post" action={endpoint} noValidate={hydrated} hidden={sent !== null} onSubmit={onSubmit}>
         <p className="say">
-          {sentence.map((part) =>
+          {sentence.map((part, index) =>
             part.type === "text" ? (
-              <span key={part.text} dir="auto">
+              // biome-ignore lint/suspicious/noArrayIndexKey: the runs of one sentence, in order; a run can repeat
+              <span key={index} dir="auto">
                 {part.text}
               </span>
             ) : (

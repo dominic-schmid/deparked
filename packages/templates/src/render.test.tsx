@@ -137,7 +137,6 @@ describe("render", () => {
       escrowLine: hostile,
       marketplaceUrl: `javascript:alert(1)//${hostile}`,
       seo: { title: hostile, description: hostile },
-      accent: { primary: hostile, contrast: hostile },
       currency: hostile,
     } as unknown as Config;
     const clean = render(defaultConfig(), "example.com", options);
@@ -158,6 +157,18 @@ describe("render", () => {
     expect(files["robots.txt"].split("\n")).toHaveLength(clean["robots.txt"].split("\n").length);
     expect(files["sitemap.xml"].match(/</g)).toHaveLength(clean["sitemap.xml"].match(/</g)?.length ?? 0);
     expect(renderPlaceholder(hostile)["index.html"]).not.toContain("<i data-x");
+  });
+
+  it("refuses an accent that is not a hex colour, so nothing else reaches the CSS or the favicon", () => {
+    for (const accent of [
+      { primary: "red;background:url(https://example.org/x)" },
+      { contrast: `#fff"/><script>alert(1)</script>` },
+      { primary: "#7F9FBF" },
+      { primary: "#fff" },
+    ]) {
+      expect(() => render({ ...defaultConfig(), accent }, "example.com", options)).toThrow(/must be a six-digit/);
+    }
+    expect(() => render({ ...defaultConfig(), accent: { contrast: "#ffeedd" } }, "example.com", options)).not.toThrow();
   });
 
   it("stays within the HTML budget, also with the longest copy the schema allows", () => {

@@ -74,5 +74,5 @@ The static page holds a message for each of these and shows it with CSS `:target
 
 ## Serving notes for `deparked-sites`
 
-- `apps/sites/public/_headers` gives the hashed catalog folders a one-year immutable cache. Wrangler reads that file at deploy and sends it as asset configuration; a deploy through the API has to pass it the same way, it is not served as a file.
+- `apps/sites/public/_headers` gives the hashed catalog folders a one-year immutable cache and every response `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`. Wrangler reads that file at deploy and sends its text as asset configuration (`assets.config._headers` in the deploy metadata); it is not uploaded or served as a file. **A publish through the API must send the same headers config with the assets on every deploy**, or the new version serves none of these headers.
 - `html_handling` stays `"none"`; the zone's rewrite rule maps `/` to `/sites/<host>/index.html` and leaves `/catalog/*` alone.

@@ -41,8 +41,8 @@ export function render(config: Config, host: string, options: RenderOptions): Si
   const origin = siteOrigin(host);
   const title = fillDomain(config.seo.title, host);
   const description = fillDomain(config.seo.description, host);
-  const color = config.accent?.primary ?? variant.color;
-  const contrast = config.accent?.contrast ?? variant.contrast;
+  const color = hexColor(config.accent?.primary, "accent.primary") ?? variant.color;
+  const contrast = hexColor(config.accent?.contrast, "accent.contrast") ?? variant.contrast;
   const shareImage = background?.formats.webp.find((image) => image.width >= 1200) ?? background?.formats.webp.at(-1);
   // WebPage, not Product/Offer: an Offer needs a real price, and the minimum is a quiet filter, not an asking price.
   const jsonLd = {
@@ -76,6 +76,16 @@ export function render(config: Config, host: string, options: RenderOptions): Si
         <meta name="theme-color" content={color} />
         {variant.colorScheme && <meta name="color-scheme" content={variant.colorScheme} />}
         <link rel="icon" href={faviconHref(host, color, contrast)} />
+        {background && variant.backgroundSizes && (
+          <link
+            rel="preload"
+            as="image"
+            type="image/avif"
+            imageSrcSet={background.formats.avif.map((image) => `${image.path} ${image.width}w`).join(", ")}
+            imageSizes={variant.backgroundSizes(background)}
+            fetchPriority="high"
+          />
+        )}
         {fonts.flatMap(({ font, preload }) => {
           const latin = font.files.find((file) => file.subset === "latin");
           return preload && latin
@@ -85,7 +95,8 @@ export function render(config: Config, host: string, options: RenderOptions): Si
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: build output and catalog data, never owner input */}
         <style dangerouslySetInnerHTML={{ __html: fontFaces(fonts.map(({ font }) => font)) + variant.css }} />
         <script src={TURNSTILE_SCRIPT} async defer />
-        {island && <script type="module" src={island.path} />}
+        {/* the page reads and posts without it: it must not compete with the photo and the fonts */}
+        {island && <script type="module" src={island.path} fetchPriority="low" />}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: JSON with every markup character escaped */}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForScript(jsonLd) }} />
       </head>
@@ -107,6 +118,17 @@ export function render(config: Config, host: string, options: RenderOptions): Si
     "robots.txt": robotsTxt(host, true),
     "sitemap.xml": sitemapXml(host, true),
   };
+}
+
+/**
+ * An accent colour goes into a style attribute and the favicon's SVG. `parseConfig` already limits it to hex;
+ * a config built without it must not be able to put anything else there.
+ */
+function hexColor(value: string | undefined, field: string): string | undefined {
+  if (value !== undefined && !/^#[0-9a-f]{6}$/.test(value)) {
+    throw new Error(`${field} must be a six-digit lowercase hex colour like #7f9fbf, got ${JSON.stringify(value)}`);
+  }
+  return value;
 }
 
 /** An accent override reaches the variant's CSS as custom properties; the schema has already limited it to hex. */
