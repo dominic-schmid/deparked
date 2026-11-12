@@ -16,6 +16,8 @@ import { startHostProxy } from "./proxy";
 /** Obvious dummies. The mock accepts exactly this token; nothing here works against Cloudflare. */
 export const TEST_TOKEN = "e2e-dummy-cloudflare-token";
 export const TEST_ACCOUNT_ID = "e2e-account";
+/** The workspace password `login()` arranges. */
+export const TEST_PASSWORD = "e2e-dummy-password";
 export const TEST_SESSION_KEY = "e2e-dummy-session-key-0123456789abcdef";
 export const TURNSTILE_DUMMY_SITEKEY = "1x00000000000000000000AA";
 /** The Worker secret every seeded Turnstile widget row should name in `turnstile_widgets.secret_name`. */
@@ -25,6 +27,7 @@ export const ZONES = [
   { id: "e2e-zone-example-org", name: "example.org" },
 ];
 
+const ADMIN_CONFIG = "apps/admin/dist/server/wrangler.json";
 const SEED: MockSeed = { accountId: TEST_ACCOUNT_ID, accountName: "E2E account", token: TEST_TOKEN, zones: ZONES };
 
 export interface Stack {
@@ -83,19 +86,23 @@ export async function startStack(): Promise<Stack> {
     const written = new Set<string>();
 
     const vars = { CLOUDFLARE_API_BASE: cloudflareApi, TURNSTILE_VERIFY_URL: siteverify };
+    const adminVars = {
+      ...vars,
+      SESSION_KEY: TEST_SESSION_KEY,
+      CF_API_TOKEN: TEST_TOKEN,
+      CF_ACCOUNT_ID: TEST_ACCOUNT_ID,
+      [TURNSTILE_SECRET_NAME]: TURNSTILE_DUMMY_SECRET_PASS,
+    };
     const started = await Promise.allSettled([
+      startWorker({ name: "admin", config: ADMIN_CONFIG, persistTo, readyPath: "/admin", vars: adminVars }),
+      // The same admin as a managed domain reaches it, behind the host proxy: it reads every request as https.
       startWorker({
-        name: "admin",
-        config: "apps/admin/dist/server/wrangler.json",
+        name: "admin-domains",
+        config: ADMIN_CONFIG,
         persistTo,
         readyPath: "/admin",
-        vars: {
-          ...vars,
-          SESSION_KEY: TEST_SESSION_KEY,
-          CF_API_TOKEN: TEST_TOKEN,
-          CF_ACCOUNT_ID: TEST_ACCOUNT_ID,
-          [TURNSTILE_SECRET_NAME]: TURNSTILE_DUMMY_SECRET_PASS,
-        },
+        vars: adminVars,
+        args: ["--upstream-protocol", "https"],
       }),
       startWorker({ name: "install", config: "apps/install/wrangler.jsonc", persistTo, readyPath: "/health", vars }),
       startWorker({
@@ -107,12 +114,12 @@ export async function startStack(): Promise<Stack> {
       }),
     ]);
     for (const result of started) if (result.status === "fulfilled") stops.push(result.value.stop);
-    const [admin, install, sites] = started.map((result) => {
+    const [admin, adminDomains, install, sites] = started.map((result) => {
       if (result.status === "rejected") throw result.reason;
       return result.value;
-    }) as [LocalWorker, LocalWorker, LocalWorker];
+    }) as [LocalWorker, LocalWorker, LocalWorker, LocalWorker];
 
-    const proxy = await startHostProxy({ admin: admin.url, sites: sites.url });
+    const proxy = await startHostProxy({ admin: adminDomains.url, sites: sites.url });
     stops.push(() => proxy.close());
 
     /** Waits until the sites Worker has picked up a change to its assets directory. */

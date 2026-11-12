@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { createWriteStream, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
@@ -40,12 +40,29 @@ export async function killGroup(pid: number): Promise<void> {
   if (alive(pid)) process.kill(-pid, "SIGKILL");
 }
 
-/** Kills every process group a crashed run left behind. */
+/** A process's start time in clock ticks since boot (Linux), or null where /proc does not exist or the pid is gone. */
+function startTime(pid: number): string | null {
+  try {
+    // Field 22 of /proc/<pid>/stat; the command in field 2 may hold spaces, so count from the last ")".
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Kills every process group a crashed run left behind. A pid file holds the start time of the process we
+ * started: a pid that now belongs to another process (or cannot be checked) is left alone.
+ */
 export async function killLeftovers(): Promise<void> {
   mkdirSync(PIDS, { recursive: true });
   for (const name of readdirSync(PIDS)) {
-    await killGroup(Number(name));
-    rmSync(resolve(PIDS, name), { force: true });
+    const file = resolve(PIDS, name);
+    const pid = /^\d+$/.test(name) ? Number(name) : 0;
+    const started = pid > 1 ? startTime(pid) : null;
+    if (started !== null && started === readFileSync(file, "utf8")) await killGroup(pid);
+    rmSync(file, { force: true });
   }
 }
 
@@ -107,7 +124,7 @@ export async function startWorker(options: {
     const pid = child.pid;
     if (pid === undefined) throw new Error(`could not spawn wrangler for ${options.name}`);
     const pidFile = resolve(PIDS, String(pid));
-    writeFileSync(pidFile, options.name);
+    writeFileSync(pidFile, startTime(pid) ?? "");
     const stop = async () => {
       await killGroup(pid);
       rmSync(pidFile, { force: true });

@@ -11,12 +11,20 @@ export interface HostProxy {
  * `http://<host>.localhost:<port>/…` goes where Cloudflare would send `https://<host>/…`:
  * `/admin*` and `/api/*` to the admin Worker, `/catalog/*` to the sites Worker as is, everything else to
  * the sites Worker under `/sites/<host>/` (`/` is `/sites/<host>/index.html`). The Workers see `<host>` as the
- * hostname, also in Origin and Referer; redirects back to `<host>` are pointed at the proxy again.
+ * hostname. `targets.admin` must be an admin that reads its requests as https (`--upstream-protocol https`),
+ * as on a real domain: over plain http the admin would redirect a non-local hostname to https. So Origin and
+ * Referer become `https://<host>`, and redirects to `<host>` are pointed at the proxy again.
  */
+const LOCAL_HOST = /^((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63})\.localhost(?::\d+)?$/;
+
 export async function startHostProxy(targets: { admin: string; sites: string }): Promise<HostProxy> {
   const server = createServer((incoming, outgoing) => {
     const local = incoming.headers.host ?? "";
-    const host = local.replace(/\.localhost(:\d+)?$/, "");
+    const host = LOCAL_HOST.exec(local)?.[1];
+    if (host === undefined) {
+      outgoing.writeHead(400).end("e2e proxy: the Host header must be <domain>.localhost:<port>");
+      return;
+    }
     const url = new URL(incoming.url ?? "/", "http://proxy");
     const toAdmin = /^\/(admin|api\/)/.test(url.pathname);
     const path =
@@ -26,13 +34,16 @@ export async function startHostProxy(targets: { admin: string; sites: string }):
     const headers = { ...incoming.headers, host };
     for (const name of ["origin", "referer"] as const) {
       const value = headers[name];
-      if (value !== undefined) headers[name] = value.replace(local, host);
+      if (value !== undefined) headers[name] = value.replace(`http://${local}`, `https://${host}`);
     }
     const upstream = request(
       new URL(path + url.search, toAdmin ? targets.admin : targets.sites),
       { method: incoming.method, headers },
       (response) => {
-        const location = response.headers.location?.replace(new RegExp(`^https?://${host}(?=/|$)`), `http://${local}`);
+        const location = response.headers.location?.replace(
+          new RegExp(`^https?://${host.replaceAll(".", "\\.")}(?=/|$)`),
+          `http://${local}`,
+        );
         outgoing.writeHead(response.statusCode ?? 502, {
           ...response.headers,
           ...(location === undefined ? {} : { location }),

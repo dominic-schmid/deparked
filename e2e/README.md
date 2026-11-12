@@ -17,6 +17,7 @@ The global setup builds the admin once (`vite build`). Each Playwright worker (t
 | -- | -- | -- |
 | Mock Cloudflare | `startMockCloudflare` from `@deparked/cf/mock`, in the test process | Seed: account `e2e-account`, zones `example.com` and `example.org`, token `e2e-dummy-cloudflare-token` |
 | `deparked-admin` | `wrangler dev` on the production build (`apps/admin/dist/server/wrangler.json`) | Variables below |
+| `deparked-admin` again, for managed domains | the same build with `--upstream-protocol https`, behind the host proxy | The admin redirects plain http to https unless the hostname is `localhost` or `127.0.0.1`, and `example.com.localhost` reaches it as `example.com`. This instance reads every request as `https://<host>/…`, as on a real domain |
 | `deparked-install` | `wrangler dev` on the committed bundle (`apps/install/dist/worker.js`) | Run `pnpm build:install` after changing the installer |
 | `deparked-sites` | `wrangler dev` on a temporary copy of `apps/sites/public` | Tests can add files, see `writeSiteFile` |
 | Host proxy | a small Node server (`harness/proxy.ts`) | Stands in for the zone's routes and rewrite rule |
@@ -68,9 +69,10 @@ test("a visitor sends an offer", async ({ page, hostUrl, db, mock, writeSiteFile
 | `urls` | `admin`, `install`, `sites` (each Worker directly, `http://127.0.0.1:<port>`), `mock`, `cloudflareApi`, `siteverify`. |
 | `hostUrl(host, path?)` | `http://<host>.localhost:<port><path>`: a managed domain as its visitor sees it. |
 | `writeSiteFile(path, body)` | Adds a file to the sites Worker and waits until it is served. |
+| `login(host?)` | Stores `TEST_PASSWORD` as the workspace password in D1, logs in through the login form and returns the page on `/admin`. Without a host: on `urls.admin`. With one: on that managed domain. A login on one does not count on the other, as in production. |
 | `resetState()` | Runs before every test already. Fresh mock (same seed), every table emptied (schema kept), written site files removed. |
 
-Constants from `../fixtures`: `TEST_TOKEN`, `TEST_ACCOUNT_ID`, `TEST_SESSION_KEY`, `ZONES`, `TURNSTILE_DUMMY_SITEKEY`, `TURNSTILE_SECRET_NAME`.
+Constants from `../fixtures`: `TEST_PASSWORD`, `TEST_TOKEN`, `TEST_ACCOUNT_ID`, `TEST_SESSION_KEY`, `ZONES`, `TURNSTILE_DUMMY_SITEKEY`, `TURNSTILE_SECRET_NAME`.
 
 ### How hosts map
 
@@ -83,10 +85,11 @@ Zone routes and rewrite rules do not exist locally. `hostUrl("example.com", "/x"
 | `/` | the sites Worker, `/sites/example.com/index.html` |
 | anything else | the sites Worker, `/sites/example.com/<path>` |
 
-The Workers see `example.com` as the hostname (`request.url` is `http://example.com/…`, plain http), also in `Origin` and `Referer`. A redirect to `http(s)://example.com/…` comes back to the proxy. So a lander's form posts same-origin to `/api/offer`, as in production.
+The admin sees `https://example.com/…` as `request.url`, and `https://example.com` in `Origin` and `Referer`, so its https redirect, `__Host-` cookies and origin check behave as on a real domain. A redirect to `http(s)://example.com/…` comes back to the proxy. So a lander's form posts same-origin to `/api/offer`, as in production. A Host header that is not `<domain>.localhost` gets a 400.
 
 - Only Chromium resolves `*.localhost` on every machine. Use `page.goto` or `page.evaluate(() => fetch(…))` for `hostUrl` addresses, not Playwright's `request` fixture. `request` is fine for `urls.admin` and the other direct addresses.
-- Chromium treats `*.localhost` as secure, so `Secure` cookies work over http there.
+- Chromium treats `*.localhost` as secure, so the admin's `Secure`, `__Host-` cookies work over http there.
+- `urls.admin` is the other admin instance, on plain http: there the cookie has no `__Host-` prefix. Both share the database.
 - Before a domain is attached, the admin is used on `urls.admin` directly, as on `workers.dev`.
 
 ### Publishing

@@ -59,3 +59,16 @@ test("state from the previous test is gone", async ({ db, mock, urls }) => {
   const stale = await fetch(`${urls.sites}/catalog/e2e-probe.txt`);
   expect(stale.status).toBe(404);
 });
+
+test("a logged-in owner sees the admin, on its own address and on a managed domain", async ({ login }) => {
+  for (const host of [undefined, "example.com"]) {
+    const page = await login(host);
+    await expect(page.getByRole("heading", { name: "Deparked admin" })).toBeVisible();
+  }
+});
+
+test("the host proxy refuses a Host header that is not <domain>.localhost", async ({ hostUrl }) => {
+  const port = new URL(hostUrl("example.com")).port;
+  const response = await fetch(`http://127.0.0.1:${port}/`);
+  expect(response.status).toBe(400);
+});

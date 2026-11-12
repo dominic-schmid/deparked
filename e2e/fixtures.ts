@@ -1,10 +1,13 @@
 import type { MockCloudflare } from "@deparked/cf/mock";
-import { test as base } from "@playwright/test";
-import { type Stack, startStack } from "./harness/stack";
+import { createDb, initWorkspace, setPassword } from "@deparked/db";
+import { test as base, type Page } from "@playwright/test";
+import { hashPassword } from "../apps/admin/src/server/auth/password";
+import { type Stack, startStack, TEST_PASSWORD } from "./harness/stack";
 
 export { expect } from "@playwright/test";
 export {
   TEST_ACCOUNT_ID,
+  TEST_PASSWORD,
   TEST_SESSION_KEY,
   TEST_TOKEN,
   TURNSTILE_DUMMY_SITEKEY,
@@ -24,6 +27,12 @@ interface TestFixtures {
   writeSiteFile: Stack["writeSiteFile"];
   /** Runs before every test on its own. Call it inside a test to start over half way. */
   resetState: Stack["reset"];
+  /**
+   * Stores `TEST_PASSWORD` as the workspace password in D1 (setup done), logs in through the login form and
+   * returns the page on `/admin`. With a host the login happens on that managed domain, otherwise on the
+   * admin's own address. Logins do not carry over between the two, as in production.
+   */
+  login(host?: string): Promise<Page>;
   cleanSlate: undefined;
 }
 
@@ -55,6 +64,25 @@ export const test = base.extend<TestFixtures, { stack: Stack }>({
             .bind(...params)
             .all<Row>()
         ).results,
+    }),
+  login: ({ stack, page }, use) =>
+    use(async (host) => {
+      const db = createDb(stack.d1);
+      const now = Date.now();
+      const password = await hashPassword(TEST_PASSWORD);
+      await initWorkspace(db, { now });
+      await setPassword(db, {
+        passwordHash: password.hash,
+        passwordSalt: password.salt,
+        passwordIterations: password.iterations,
+        now,
+      });
+      const admin = (path: string) => (host === undefined ? `${stack.urls.admin}${path}` : stack.hostUrl(host, path));
+      await page.goto(admin("/admin/login"));
+      await page.getByLabel("Password").fill(TEST_PASSWORD);
+      await page.getByRole("button", { name: "Log in" }).click();
+      await page.waitForURL(admin("/admin"));
+      return page;
     }),
   urls: ({ stack }, use) => use(stack.urls),
   hostUrl: ({ stack }, use) => use(stack.hostUrl),

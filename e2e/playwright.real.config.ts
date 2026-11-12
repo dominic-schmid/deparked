@@ -12,7 +12,9 @@ const NEEDED = {
 
 const missing = Object.keys(NEEDED).filter((name) => (process.env[name] ?? "") === "");
 const problems = [
-  ...(process.env.CI ? ["CI is set: the real-account suite never runs in CI."] : []),
+  ...(process.env.CI !== undefined || process.env.GITHUB_ACTIONS !== undefined
+    ? ["CI or GITHUB_ACTIONS is set: the real-account suite never runs in CI."]
+    : []),
   ...(process.env.DEPARKED_E2E_REAL !== undefined && process.env.DEPARKED_E2E_REAL !== "1"
     ? ["DEPARKED_E2E_REAL must be exactly 1."]
     : []),

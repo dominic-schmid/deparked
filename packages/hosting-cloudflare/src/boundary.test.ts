@@ -69,6 +69,23 @@ describe("the hosting adapter boundary", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("outside the workspace packages, only the E2E harness reaches @deparked/cf, to drive the mock", () => {
+    const root = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as PackageJson;
+    expect(root.dependencies?.["@deparked/cf"]).toBeUndefined();
+    expect(root.devDependencies?.["@deparked/cf"]).toBe("workspace:*");
+    const offenders: string[] = [];
+    for (const entry of readdirSync(ROOT, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith(".") || SKIPPED_DIRS.has(entry.name)) continue;
+      if (["apps", "packages", "e2e"].includes(entry.name)) continue;
+      for (const file of sourceFiles(join(ROOT, entry.name))) {
+        for (const match of readFileSync(file, "utf8").matchAll(SPECIFIER)) {
+          if (reachesCf(file, match[1] ?? "")) offenders.push(`${relative(ROOT, file)} imports ${match[1]}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it("@deparked/hosting has no dependencies and names nothing Cloudflare", () => {
     expect(dependencies("packages/hosting")).toEqual([]);
     const offenders: string[] = [];
