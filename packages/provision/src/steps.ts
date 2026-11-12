@@ -35,7 +35,7 @@ export interface Step {
 }
 
 export interface Plan {
-  kind: "attach" | "turn-off" | "remove" | "install" | "uninstall";
+  kind: "attach" | "turn-off" | "remove" | "install" | "uninstall" | "update" | "rollback";
   /** Null for a plan of the whole hub (install, uninstall). */
   host: string | null;
   ctx: ProvisionContext;

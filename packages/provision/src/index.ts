@@ -16,6 +16,7 @@ export {
   issueSetupSecret,
   planInstallHub,
   planUninstall,
+  releaseSteps,
   SETUP_SECRET_TTL_MS,
   UNINSTALL_LEAVES,
 } from "./hub";
@@ -57,4 +58,21 @@ export {
 } from "./steps";
 export { checkTokenPermissions, type PermissionGap } from "./token";
 export { describeRemoval, planRemoveDomain, planTurnOff, type RemovalDescription } from "./turn-off";
+export {
+  type BeginResult,
+  beginRollback,
+  beginUpdate,
+  currentChange,
+  finishReleaseChange,
+  isNewer,
+  isPin,
+  planReleaseChange,
+  previewUpdate,
+  type ReleaseChange,
+  type ReleaseChangeKind,
+  type ReleasePin,
+  rollbackTarget,
+  runReleaseStep,
+  type UpdateOptions,
+} from "./update";
 export { PLACEHOLDER_RECORD, wantedRedirectRules, wantedRewriteRules, wantedRoutes } from "./wanted";

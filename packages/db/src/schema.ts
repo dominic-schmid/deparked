@@ -1,5 +1,5 @@
-// The 13 tables of the decision doc, section 5. `migrations/0001_init.sql` is the same schema as SQL;
-// `migrations.test.ts` fails when the two drift apart.
+// The 13 tables of the decision doc, section 5, and `release_state` (migration 0002). The SQL migrations describe
+// the same schema; `migrations.test.ts` fails when the two drift apart.
 //
 // Conventions:
 // - Timestamps are INTEGER epoch milliseconds (`Date.now()`), everywhere. Callers pass `now`.
@@ -30,6 +30,7 @@ export const LEDGER_RESOURCES = [
   "secret",
 ] as const;
 export const LEDGER_ACTIONS = ["created", "changed"] as const;
+export const RELEASE_CHANGE_KINDS = ["update", "rollback"] as const;
 
 export type InstallStep = (typeof INSTALL_STEPS)[number];
 export type InstallStepStatus = (typeof INSTALL_STEP_STATUSES)[number];
@@ -42,6 +43,7 @@ export type DeploymentKind = (typeof DEPLOYMENT_KINDS)[number];
 export type DeploymentStatus = (typeof DEPLOYMENT_STATUSES)[number];
 export type LedgerResource = (typeof LEDGER_RESOURCES)[number];
 export type LedgerAction = (typeof LEDGER_ACTIONS)[number];
+export type ReleaseChangeKind = (typeof RELEASE_CHANGE_KINDS)[number];
 
 /** Cloudflare allows 10 hostnames per Turnstile widget (decision doc, section 6). */
 export const TURNSTILE_HOSTNAMES_PER_WIDGET = 10;
@@ -89,6 +91,32 @@ export const installState = sqliteTable(
     check("install_state_single_row", sql`${t.id} = 1`),
     check("install_state_step", oneOf(t.step, INSTALL_STEPS)),
     check("install_state_step_status", oneOf(t.stepStatus, INSTALL_STEP_STATUSES)),
+  ],
+);
+
+/**
+ * One row (migration 0002): which release is installed, by its pin (version in `workspace.installed_release`, the
+ * SHA-256 of its release.json here), what the last check found, and the update or rollback in progress. `previous_*`
+ * is the pin installed before the last update: the target of Rollback.
+ */
+export const releaseState = sqliteTable(
+  "release_state",
+  {
+    id: integer("id").primaryKey(),
+    installedSha256: text("installed_sha256"),
+    latestSha256: text("latest_sha256"),
+    changeKind: text("change_kind", { enum: RELEASE_CHANGE_KINDS }),
+    changeVersion: text("change_version"),
+    changeSha256: text("change_sha256"),
+    changeStartedAt: integer("change_started_at"),
+    changeVerifiedAt: integer("change_verified_at"),
+    changeFinishedAt: integer("change_finished_at"),
+    previousVersion: text("previous_version"),
+    previousSha256: text("previous_sha256"),
+  },
+  (t) => [
+    check("release_state_single_row", sql`${t.id} = 1`),
+    check("release_state_change_kind", oneOf(t.changeKind, RELEASE_CHANGE_KINDS)),
   ],
 );
 
@@ -281,6 +309,7 @@ export const rateLimits = sqliteTable(
 
 export type Workspace = typeof workspace.$inferSelect;
 export type InstallState = typeof installState.$inferSelect;
+export type ReleaseState = typeof releaseState.$inferSelect;
 export type Domain = typeof domains.$inferSelect;
 export type Config = typeof config.$inferSelect;
 export type ConfigHistoryEntry = typeof configHistory.$inferSelect;

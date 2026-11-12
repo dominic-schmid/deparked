@@ -8,5 +8,6 @@ export * from "./notify";
 export * from "./offers";
 export * from "./publish";
 export * from "./rate-limits";
+export * from "./release";
 export * from "./turnstile";
 export * from "./workspace";

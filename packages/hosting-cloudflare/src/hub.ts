@@ -1,14 +1,26 @@
 import { CloudflareApiError, type CloudflareClient, createCloudflareClient, type FetchLike } from "@deparked/cf";
-import { type Db, listDomains } from "@deparked/db";
-import type { HubSetup, SetupEffect, TokenHealth } from "@deparked/hosting";
+import { type Db, getReleaseState, getWorkspace, listDomains } from "@deparked/db";
+import type { HubSetup, SetupEffect, SetupStepReport, TokenHealth } from "@deparked/hosting";
 import {
+  beginRollback,
+  beginUpdate,
   checkTokenPermissions,
+  currentChange,
   DEFAULT_WORKERS,
   describeRemoval,
+  finishReleaseChange,
   type ProvisionContext,
+  planReleaseChange,
   planUninstall,
+  previewUpdate,
+  ReleaseError,
+  releaseFromUrl,
+  rollbackTarget,
   runNextStep,
+  runReleaseStep,
+  type StepReport,
   UNINSTALL_LEAVES,
+  type UpdateOptions,
   type WorkerNames,
 } from "@deparked/provision";
 import { cloudflare } from "./errors";
@@ -24,6 +36,10 @@ export interface CloudflareHubOptions {
   db: Db;
   now: () => number;
   workers?: WorkerNames;
+  /** Where the files of a release version are: `<url>/release.json`. Needed for Update and Rollback only. */
+  releaseUrl?: (version: string) => string;
+  /** How release files are downloaded. Defaults to `fetch`. */
+  fetchRelease?: (url: string) => Promise<Response>;
 }
 
 /** The name of the admin Worker's secret that holds the API token. */
@@ -54,7 +70,29 @@ async function health(cf: CloudflareClient): Promise<TokenHealth> {
   }
 }
 
-/** The stored token and Uninstall, on `@deparked/provision`. Build one per request. */
+function toSetupReport(report: StepReport): SetupStepReport {
+  return {
+    step: report.step,
+    outcome: report.outcome,
+    message: report.message,
+    effects: report.effects,
+    state: report.state,
+    finished: report.finished,
+    credentialsRejected: report.errorStatus === 401 || report.errorStatus === 403,
+  };
+}
+
+/** A release file that does not match its pin (or cannot be downloaded) is the owner's answer, not a crash. */
+async function released<T>(run: () => Promise<T>): Promise<T | { ok: false; message: string }> {
+  try {
+    return await cloudflare(run);
+  } catch (error) {
+    if (error instanceof ReleaseError) return { ok: false, message: error.message };
+    throw error;
+  }
+}
+
+/** The stored token, Update and Rollback, and Uninstall, on `@deparked/provision`. Build one per request. */
 export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetup {
   const client = (token: string, accountId = options.accountId) =>
     createCloudflareClient({
@@ -72,6 +110,16 @@ export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetu
     ...(options.workers === undefined ? {} : { workers: options.workers }),
   };
   const admin = (options.workers ?? DEFAULT_WORKERS).admin;
+  const update: UpdateOptions = {
+    token: options.token,
+    // Without a location every download fails with a readable "could not download".
+    release: (pin) =>
+      releaseFromUrl({
+        baseUrl: options.releaseUrl?.(pin.version) ?? "about:invalid",
+        pinnedSha256: pin.sha256,
+        ...(options.fetchRelease === undefined ? {} : { fetch: options.fetchRelease }),
+      }),
+  };
 
   return {
     tokenAccepted: () =>
@@ -157,16 +205,50 @@ export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetu
           };
         }
       }
-      const report = await runNextStep(plan, { next: index });
+      return toSetupReport(await runNextStep(plan, { next: index }));
+    },
+
+    async releaseStatus() {
+      const [workspace, state, change, rollbackTo] = await Promise.all([
+        getWorkspace(options.db),
+        getReleaseState(options.db),
+        currentChange(ctx),
+        rollbackTarget(ctx),
+      ]);
+      const version = workspace?.installedRelease ?? null;
       return {
-        step: report.step,
-        outcome: report.outcome,
-        message: report.message,
-        effects: report.effects,
-        state: report.state,
-        finished: report.finished,
-        credentialsRejected: report.errorStatus === 401 || report.errorStatus === 403,
+        installed: version === null ? null : { version, sha256: state?.installedSha256 ?? null },
+        change,
+        rollbackTo,
       };
     },
+
+    previewUpdate: (pin) =>
+      released(async () => {
+        const preview = await previewUpdate(ctx, update, pin);
+        if (!preview.ok) return preview;
+        return {
+          ok: true as const,
+          steps: preview.report.steps.map((step) => ({
+            id: step.id,
+            title: step.title,
+            status: step.status,
+            effects: step.status === "blocked" ? [{ kind: "reuse" as const, what: step.reason }] : step.effects,
+          })),
+        };
+      }),
+
+    startUpdate: (pin) => beginUpdate(ctx, pin),
+    startRollback: () => beginRollback(ctx),
+
+    releaseStepTitles: () =>
+      planReleaseChange(ctx, update, { kind: "update", pin: { version: "0.0.0", sha256: "" } }).steps.map((step) => ({
+        id: step.id,
+        title: step.title,
+      })),
+
+    releaseStep: (state) => cloudflare(async () => toSetupReport(await runReleaseStep(ctx, update, state))),
+
+    finishRelease: () => finishReleaseChange(ctx),
   };
 }

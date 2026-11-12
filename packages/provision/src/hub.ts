@@ -19,6 +19,7 @@ import {
   setSetupSecret,
   toMigration,
   updateInstallState,
+  updateReleaseState,
   updateWorkspace,
 } from "@deparked/db";
 import {
@@ -270,6 +271,8 @@ function adminStep(options: HubOptions): Step {
         { type: "send_email", name: "EMAIL" },
         { type: "plain_text", name: "CF_ACCOUNT_ID", text: ctx.cf.accountId },
         { type: "plain_text", name: "RELEASE_FILES_URL", text: release.catalogFilesUrl },
+        // What the admin's health check reports, so the browser can tell the new admin from the old one.
+        { type: "plain_text", name: "DEPARKED_RELEASE", text: release.version },
         { type: "secret_text", name: "CF_API_TOKEN", text: options.token },
         // Kept on a repeat: a new key would log the owner out everywhere.
         ...(hasSessionKey ? [] : [{ type: "secret_text" as const, name: "SESSION_KEY", text: randomSecret() }]),
@@ -305,6 +308,7 @@ function adminStep(options: HubOptions): Step {
         patch: { cfAccountId: ctx.cf.accountId, installedRelease: release.version },
         now: ctx.now(),
       });
+      await updateReleaseState(ctx.db, { installedSha256: options.release.sha256 });
       return { effects: [{ kind: "create", what: `the Worker ${admin}, reachable on its workers.dev address` }] };
     },
   };
@@ -325,6 +329,14 @@ export function planInstallHub(ctx: ProvisionContext, options: HubOptions): Plan
     ctx,
     steps: [downloadStep(options), databaseStep(options), sitesStep(options), adminStep(options)],
   };
+}
+
+/**
+ * The steps an update or a rollback shares with the install: migrate, upload the pages Worker with the release's
+ * catalog, replace the admin (its secrets and bindings kept). Each one is done once the release is in place.
+ */
+export function releaseSteps(options: HubOptions): Step[] {
+  return [databaseStep(options), sitesStep(options), adminStep(options)];
 }
 
 /** The admin's address on workers.dev, or null when the account has no workers.dev subdomain. */

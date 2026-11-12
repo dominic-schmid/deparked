@@ -149,6 +149,8 @@ export async function unpack(release: Release, pack: PackName, bytes: Uint8Array
 
 /** Where the installer gets the release from. Every value it returns is already verified. */
 export interface ReleaseSource {
+  /** The SHA-256 of release.json this source checks against: with the version, the release's pin. */
+  sha256: string;
   manifest(): Promise<Release>;
   pack(name: PackName): Promise<VerifiedFile[]>;
 }
@@ -193,6 +195,7 @@ export function releaseFromUrl(input: {
   let manifest: Promise<Release> | undefined;
   const packs = new Map<PackName, Promise<VerifiedFile[]>>();
   const source = {
+    sha256: input.pinnedSha256.toLowerCase(),
     downloads: 0,
     async download(name: string, maxBytes: number): Promise<Uint8Array> {
       source.downloads += 1;
