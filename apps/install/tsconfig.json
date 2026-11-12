@@ -2,9 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "WebWorker"],
+    "types": ["@cloudflare/workers-types", "node"],
     "paths": {
+      "@deparked/cf/mock": ["../../packages/cf/src/mock/index.ts"],
+      "@deparked/db/testing": ["../../packages/db/src/testing.ts"],
       "@deparked/*": ["../../packages/*/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/ui"]
 }
