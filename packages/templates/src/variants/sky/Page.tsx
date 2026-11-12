@@ -4,7 +4,7 @@ import type { CatalogBackground } from "../../catalog";
 import { Island } from "../../island";
 import type { PageProps } from "../types";
 import { fitMark } from "./mark";
-import { OfferForm } from "./OfferForm";
+import { OfferForm } from "../shared/offer-form/OfferForm";
 
 export function Page({ config, host, background, sitekey, offerEndpoint }: PageProps) {
   const headline = fillDomain(config.headline, host);
