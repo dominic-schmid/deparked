@@ -56,3 +56,17 @@ test("going on unverified, then skipping the domain, lands on the empty overview
   await page.waitForURL(`${urls.admin}/admin`);
   await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
 });
+
+test("when the address becomes verified it is announced and focus stays in the page", async ({ login, mock, urls }) => {
+  const page = await login();
+  await page.goto(`${urls.admin}/admin/welcome`);
+  await page.getByLabel("Email address").fill(OWNER);
+  await page.getByRole("button", { name: "Send verification email" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Check your inbox" })).toBeVisible();
+
+  mock.verifyAddress(OWNER);
+  await page.getByRole("button", { name: "I clicked the link" }).click();
+
+  await expect(page.locator("[aria-live=polite]")).toContainText("Your address is verified.");
+  await expect(page.getByRole("button", { name: "Next: add a domain" })).toBeFocused();
+});

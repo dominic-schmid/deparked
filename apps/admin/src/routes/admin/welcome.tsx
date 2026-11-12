@@ -211,6 +211,18 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
   const [result, setResult] = useState<NotifyResult | null>(null);
   const pending = props.addresses.filter((address) => address.verifiedAt === null);
   const first = pending[0] ?? props.addresses[0];
+  const next = useRef<HTMLButtonElement>(null);
+  const wasPending = useRef(pending.length > 0);
+  const [verifiedNote, setVerifiedNote] = useState(false);
+
+  // The pending buttons unmount when the address is verified: say so, and keep focus from falling to <body>.
+  useEffect(() => {
+    if (wasPending.current && pending.length === 0) {
+      setVerifiedNote(true);
+      next.current?.focus();
+    }
+    wasPending.current = pending.length > 0;
+  }, [pending.length]);
 
   async function run(kind: "check" | "resend", action: () => Promise<NotifyResult>) {
     if (busy !== null) return;
@@ -278,6 +290,15 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
         </div>
       ) : null}
       <div aria-live="polite" className="max-w-xl">
+        <p className="sr-only">
+          {busy === "check"
+            ? "Checking…"
+            : busy === "resend"
+              ? "Sending…"
+              : verifiedNote
+                ? "Your address is verified."
+                : ""}
+        </p>
         {result === NOT_YET ? (
           pending.length > 0 ? (
             <p className="mt-4 text-sm">
@@ -300,6 +321,7 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
 
       <div className="mt-10">
         <Button
+          ref={next}
           size="lg"
           className={BUTTON}
           onClick={() => void navigate({ to: "/admin/welcome", search: { step: "domain" } })}
