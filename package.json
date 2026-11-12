@@ -18,6 +18,7 @@
     "build:templates": "pnpm --filter @deparked/templates build",
     "check:templates-fresh": "pnpm build:templates && test -z \"$(git status --porcelain -- packages/templates/src apps/sites/public/catalog)\"",
     "test:layout": "playwright test --config tests/lander",
+    "test:lighthouse": "node scripts/lighthouse.ts",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "test:e2e:real": "playwright test --config e2e/playwright.real.config.ts --pass-with-no-tests",
     "build:release": "pnpm --filter @deparked/admin build && node scripts/build-release.ts"
@@ -35,7 +36,9 @@
     "@types/node": "^22.18.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "chrome-launcher": "1.2.3",
     "esbuild": "0.28.2",
+    "lighthouse": "12.8.2",
     "lucide-react": "^1.72.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

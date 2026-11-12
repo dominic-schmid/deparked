@@ -51,6 +51,8 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - name: Layout at 25 viewports, the offer form, no-JavaScript fallback
         run: pnpm test:layout
+      - name: Lighthouse on every variant, mobile and desktop (SEO 100, performance 95, LCP, CLS, fonts)
+        run: pnpm test:lighthouse
 
   e2e:
     runs-on: ubuntu-latest
