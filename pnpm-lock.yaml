@@ -91,7 +91,11 @@ importers:
         specifier: 4.160.1
         version: 4.160.1(@cloudflare/workers-types@5.20261110.1)(@types/node@22.20.5)
 
-  packages/cf: {}
+  packages/cf:
+    dependencies:
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/config:
     dependencies:
@@ -114,7 +118,14 @@ importers:
 
   packages/hosting: {}
 
-  packages/hosting-cloudflare: {}
+  packages/hosting-cloudflare:
+    dependencies:
+      '@deparked/cf':
+        specifier: workspace:*
+        version: link:../cf
+      '@deparked/hosting':
+        specifier: workspace:*
+        version: link:../hosting
 
   packages/provision: {}
 
