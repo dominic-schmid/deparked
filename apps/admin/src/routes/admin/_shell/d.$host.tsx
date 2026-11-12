@@ -90,6 +90,9 @@ function DomainLayout() {
         <Link to="/admin/d/$host/offers" params={params} className={tabLinkClass}>
           Offers
         </Link>
+        <Link to="/admin/d/$host/analytics" params={params} className={tabLinkClass}>
+          Analytics
+        </Link>
         <Link to="/admin/d/$host/settings" params={params} className={tabLinkClass}>
           Settings
         </Link>

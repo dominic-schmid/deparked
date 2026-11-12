@@ -46,7 +46,7 @@ Ruixen's registry has no plain primitives (button, input, dialog and so on); it 
 | `src/components/ui/tabs.tsx` | shadcn/ui `tabs` (new-york, `npx shadcn@latest add tabs`) | MIT | yes | formatted |
 | `src/components/ui/textarea.tsx` | shadcn/ui `textarea` (new-york, `npx shadcn@latest add textarea`) | MIT | no | formatted |
 | `src/components/ui/tooltip.tsx` | shadcn/ui `tooltip` (new-york, `npx shadcn@latest add tooltip`) | MIT | yes | formatted |
-| `src/components/ruixen/spark-chart.tsx` | <https://ruixen.com/r/spark-chart> | MIT | hover only | formatted; index reads typed for `noUncheckedIndexedAccess` |
+| `src/components/ruixen/spark-chart.tsx` | <https://ruixen.com/r/spark-chart> | MIT | hover only | formatted; index reads typed for `noUncheckedIndexedAccess`; no label room reserved without `formatValue`; draw-in only with `motion-safe` |
 | `src/components/ruixen/wizard-stepper.tsx` | <https://ruixen.com/r/wizard-stepper> | MIT | animation and click only | formatted; one prop type widened for `exactOptionalPropertyTypes` |
 
 `src/lib/utils.ts` (`cn`) is shadcn/ui's helper, MIT. `src/styles/globals.css` is written for this repo; its token names follow shadcn/ui's theme convention.

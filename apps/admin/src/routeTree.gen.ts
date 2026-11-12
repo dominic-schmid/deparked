@@ -29,6 +29,7 @@ import { Route as AdminShellSettingsDangerRouteImport } from './routes/admin/_sh
 import { Route as AdminShellSettingsPasswordRouteImport } from './routes/admin/_shell/settings.password'
 import { Route as AdminShellSettingsUpdatesRouteImport } from './routes/admin/_shell/settings.updates'
 import { Route as AdminShellDHostIndexRouteImport } from './routes/admin/_shell/d.$host.index'
+import { Route as AdminShellDHostAnalyticsRouteImport } from './routes/admin/_shell/d.$host.analytics'
 import { Route as AdminShellDHostOffersRouteImport } from './routes/admin/_shell/d.$host.offers'
 import { Route as AdminShellDHostSettingsRouteImport } from './routes/admin/_shell/d.$host.settings'
 
@@ -137,6 +138,12 @@ const AdminShellDHostIndexRoute = AdminShellDHostIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminShellDHostRoute,
 } as any)
+const AdminShellDHostAnalyticsRoute =
+  AdminShellDHostAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => AdminShellDHostRoute,
+  } as any)
 const AdminShellDHostOffersRoute = AdminShellDHostOffersRouteImport.update({
   id: '/offers',
   path: '/offers',
@@ -168,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/settings/': typeof AdminShellSettingsIndexRoute
+  '/admin/d/$host/analytics': typeof AdminShellDHostAnalyticsRoute
   '/admin/d/$host/offers': typeof AdminShellDHostOffersRoute
   '/admin/d/$host/settings': typeof AdminShellDHostSettingsRoute
   '/admin/d/$host/': typeof AdminShellDHostIndexRoute
@@ -189,6 +197,7 @@ export interface FileRoutesByTo {
   '/admin/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/settings': typeof AdminShellSettingsIndexRoute
+  '/admin/d/$host/analytics': typeof AdminShellDHostAnalyticsRoute
   '/admin/d/$host/offers': typeof AdminShellDHostOffersRoute
   '/admin/d/$host/settings': typeof AdminShellDHostSettingsRoute
   '/admin/d/$host': typeof AdminShellDHostIndexRoute
@@ -214,6 +223,7 @@ export interface FileRoutesById {
   '/admin/_shell/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/_shell/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/_shell/settings/': typeof AdminShellSettingsIndexRoute
+  '/admin/_shell/d/$host/analytics': typeof AdminShellDHostAnalyticsRoute
   '/admin/_shell/d/$host/offers': typeof AdminShellDHostOffersRoute
   '/admin/_shell/d/$host/settings': typeof AdminShellDHostSettingsRoute
   '/admin/_shell/d/$host/': typeof AdminShellDHostIndexRoute
@@ -240,6 +250,7 @@ export interface FileRouteTypes {
     | '/admin/settings/password'
     | '/admin/settings/updates'
     | '/admin/settings/'
+    | '/admin/d/$host/analytics'
     | '/admin/d/$host/offers'
     | '/admin/d/$host/settings'
     | '/admin/d/$host/'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/admin/settings/password'
     | '/admin/settings/updates'
     | '/admin/settings'
+    | '/admin/d/$host/analytics'
     | '/admin/d/$host/offers'
     | '/admin/d/$host/settings'
     | '/admin/d/$host'
@@ -285,6 +297,7 @@ export interface FileRouteTypes {
     | '/admin/_shell/settings/password'
     | '/admin/_shell/settings/updates'
     | '/admin/_shell/settings/'
+    | '/admin/_shell/d/$host/analytics'
     | '/admin/_shell/d/$host/offers'
     | '/admin/_shell/d/$host/settings'
     | '/admin/_shell/d/$host/'
@@ -444,6 +457,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminShellDHostIndexRouteImport
       parentRoute: typeof AdminShellDHostRoute
     }
+    '/admin/_shell/d/$host/analytics': {
+      id: '/admin/_shell/d/$host/analytics'
+      path: '/analytics'
+      fullPath: '/admin/d/$host/analytics'
+      preLoaderRoute: typeof AdminShellDHostAnalyticsRouteImport
+      parentRoute: typeof AdminShellDHostRoute
+    }
     '/admin/_shell/d/$host/offers': {
       id: '/admin/_shell/d/$host/offers'
       path: '/offers'
@@ -481,12 +501,14 @@ const AdminShellSettingsRouteWithChildren =
   AdminShellSettingsRoute._addFileChildren(AdminShellSettingsRouteChildren)
 
 interface AdminShellDHostRouteChildren {
+  AdminShellDHostAnalyticsRoute: typeof AdminShellDHostAnalyticsRoute
   AdminShellDHostOffersRoute: typeof AdminShellDHostOffersRoute
   AdminShellDHostSettingsRoute: typeof AdminShellDHostSettingsRoute
   AdminShellDHostIndexRoute: typeof AdminShellDHostIndexRoute
 }
 
 const AdminShellDHostRouteChildren: AdminShellDHostRouteChildren = {
+  AdminShellDHostAnalyticsRoute: AdminShellDHostAnalyticsRoute,
   AdminShellDHostOffersRoute: AdminShellDHostOffersRoute,
   AdminShellDHostSettingsRoute: AdminShellDHostSettingsRoute,
   AdminShellDHostIndexRoute: AdminShellDHostIndexRoute,

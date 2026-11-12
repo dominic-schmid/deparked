@@ -10,6 +10,7 @@ import {
   offerStatsForHosts,
 } from "@deparked/db";
 import { z } from "zod";
+import { rangeStart } from "./analytics";
 
 export const hostSchema = z.string().trim().toLowerCase().min(1).max(253);
 
@@ -42,16 +43,19 @@ export async function loadDomainSummaries(db: Db): Promise<DomainSummary[]> {
 export type DomainOverview = DomainSummary & {
   offers: number;
   newOffers: number;
+  /** Offers over the 30 days the visits cover: the conversion is these over the visits. */
+  recentOffers: number;
   /** The largest amount and that offer's currency. Null without offers. Currencies are not converted. */
   best: { amountMinor: number; currency: string } | null;
   publishedAt: number | null;
 };
 
-export async function loadOverview(db: Db): Promise<DomainOverview[]> {
+export async function loadOverview(db: Db, now: number): Promise<DomainOverview[]> {
   const [domains, verified, published] = await Promise.all([listDomains(db), verifiedEmails(db), listPublishedAt(db)]);
   const stats = await offerStatsForHosts(
     db,
     domains.map((domain) => domain.host),
+    rangeStart(now),
   );
   const statsByHost = new Map(stats.map((stat) => [stat.host, stat]));
   const publishedByHost = new Map(published.map((row) => [row.host, row.publishedAt]));
@@ -62,6 +66,7 @@ export async function loadOverview(db: Db): Promise<DomainOverview[]> {
       status: displayStatus(domain, verified),
       offers: stat?.total ?? 0,
       newOffers: stat?.newCount ?? 0,
+      recentOffers: stat?.recentCount ?? 0,
       best: stat === undefined ? null : { amountMinor: stat.bestAmountMinor, currency: stat.bestCurrency },
       publishedAt: publishedByHost.get(domain.host) ?? null,
     };

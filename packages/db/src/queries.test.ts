@@ -197,8 +197,12 @@ describe("offers", () => {
     expect(await q.countNewOffers(db, HOST)).toBe(1);
     expect(await q.offerStatsForHosts(db, [])).toEqual([]);
     expect(await q.offerStatsForHosts(db, [HOST, "other.example", "none.example"])).toEqual([
-      { host: HOST, total: 2, newCount: 1, bestAmountMinor: 90_000, bestCurrency: "EUR" },
-      { host: "other.example", total: 1, newCount: 1, bestAmountMinor: 1, bestCurrency: "USD" },
+      { host: HOST, total: 2, newCount: 1, recentCount: 2, bestAmountMinor: 90_000, bestCurrency: "EUR" },
+      { host: "other.example", total: 1, newCount: 1, recentCount: 1, bestAmountMinor: 1, bestCurrency: "USD" },
+    ]);
+    expect(await q.offerStatsForHosts(db, [HOST, "other.example"], NOW + 1)).toMatchObject([
+      { host: HOST, total: 2, recentCount: 1 },
+      { host: "other.example", total: 1, recentCount: 1 },
     ]);
   });
 
