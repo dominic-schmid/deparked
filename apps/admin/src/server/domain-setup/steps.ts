@@ -203,7 +203,7 @@ async function takeDown(
   }
   if ((await deps.setup.describeRemoval(host)).effects.length > 0) {
     return {
-      blocked: `Deparked still has settings of ${host} in Cloudflare: it is being set up, or a turn off of it stopped half-way. Turn it off again from the start.`,
+      blocked: `Adding ${host} put settings back in Cloudflare while it was being turned off, so its pages stay up. Turn it off again from the start to remove them, or continue adding it from "Add domain".`,
     };
   }
   if ((await listSiteFilesByHost(deps.db, host)).length === 0) return { outcome: "already-done" };

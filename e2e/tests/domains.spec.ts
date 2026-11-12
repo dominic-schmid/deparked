@@ -1,5 +1,5 @@
 import { createCloudflareClient } from "@deparked/cf";
-import { createDb, replaceSiteFiles } from "@deparked/db";
+import { createDb, insertDomain, insertLedgerEntry, replaceSiteFiles } from "@deparked/db";
 import { expect, TEST_ACCOUNT_ID, TEST_TOKEN, test, ZONES } from "../fixtures";
 
 const HOST = "example.com";
@@ -87,4 +87,37 @@ test("the owner adds a domain from the Cloudflare account, sees its placeholder 
   expect(zoneBefore()).toEqual(before);
   expect(await db.sql("SELECT status FROM domains WHERE host = ?", HOST)).toEqual([{ status: "off" }]);
   await expect(page.getByRole("link", { name: "Turn on…" })).toHaveAttribute("href", `/admin/add?host=${HOST}`);
+});
+
+test("a change that stopped half-way says which one it was and offers the action that finishes it", async ({
+  login,
+  db,
+  urls,
+}) => {
+  const data = createDb(db.d1);
+  const now = Date.now();
+  // Added half-way: off, never turned off, with a route Deparked created.
+  await insertDomain(data, { domain: { host: HOST, zoneId: ZONE_ID, status: "off" }, now });
+  await insertLedgerEntry(data, { host: HOST, zoneId: ZONE_ID, resource: "route", cfId: "r1", action: "created", now });
+  // Turned off half-way: still live, one of its two entries undone after both were made.
+  await insertDomain(data, { domain: { host: "example.org", zoneId: "zone-2", status: "live" }, now });
+  for (const id of ["r2", "r3"]) {
+    await insertLedgerEntry(data, { host: "example.org", resource: "route", cfId: id, action: "created", now });
+  }
+  await db.sql("UPDATE ledger SET undone_at = ? WHERE cf_id = 'r3'", now + 10);
+
+  const page = await login();
+  await page.goto(`${urls.admin}/admin/d/${HOST}`);
+  await expect(page.getByText(`Adding ${HOST} stopped half-way`)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continue adding" }).first()).toHaveAttribute(
+    "href",
+    `/admin/add?host=${HOST}`,
+  );
+  await expect(page.getByRole("link", { name: "Finish turning off" })).toHaveCount(0);
+
+  await page.goto(`${urls.admin}/admin/d/example.org`);
+  await expect(page.getByText("Turning example.org off stopped half-way")).toBeVisible();
+  await page.getByRole("link", { name: "Finish turning off" }).click();
+  await expect(page.getByRole("heading", { name: "Finish turning off" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continue adding" })).toHaveCount(0);
 });

@@ -2,6 +2,7 @@ import { Button } from "@deparked/ui/button";
 import { createFileRoute, Link, notFound, Outlet } from "@tanstack/react-router";
 import { OfferMailNotice } from "../../../components/offer-mail";
 import { PageError, PagePending, TabNav, tabLinkClass } from "../../../components/page";
+import { PendingChangeNotice } from "../../../components/pending-change";
 import { StatusLabel } from "../../../components/status";
 import { RelativeTime } from "../../../components/time";
 import { getDomainDetail } from "../../../server/domains.functions";
@@ -67,6 +68,7 @@ function DomainLayout() {
           </div>
         </dl>
       </div>
+      <PendingChangeNotice host={domain.host} pending={domain.pending} />
       {domain.status === "off" ? null : <OfferMailNotice host={domain.host} mail={domain.mail} />}
       <TabNav label="Domain">
         <Link to="/admin/d/$host" params={params} activeOptions={{ exact: true }} className={tabLinkClass}>

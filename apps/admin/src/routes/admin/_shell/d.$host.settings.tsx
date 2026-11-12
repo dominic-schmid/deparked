@@ -19,7 +19,7 @@ function DomainSettings() {
   return (
     <div className="flex flex-col gap-6">
       <NotifyPicker host={domain.host} current={domain.notifyEmail} addresses={addresses} />
-      <DomainActions host={domain.host} status={domain.status} hasPages={domain.hasPages} />
+      <DomainActions host={domain.host} status={domain.status} pending={domain.pending} />
     </div>
   );
 }

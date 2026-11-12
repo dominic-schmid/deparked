@@ -4,6 +4,7 @@ import {
   getConfig,
   getDomain,
   listDomains,
+  listLedger,
   listNotifyAddresses,
   listPublishedAt,
   listSiteFilesByHost,
@@ -14,6 +15,7 @@ import { z } from "zod";
 import { rangeStart } from "./analytics";
 import { type NoSiteReason, noSiteReason } from "./analytics-shape";
 import { type OfferMail, offerMail } from "./notify-default";
+import { type PendingChange, pendingChange } from "./pending-change";
 
 export const hostSchema = z.string().trim().toLowerCase().min(1).max(253);
 
@@ -97,16 +99,19 @@ export type DomainDetail = DomainSummary & {
   notifyEmail: string | null;
   notifyVerified: boolean;
   mail: OfferMail;
+  /** A change to the domain that stopped half-way, or null. */
+  pending: PendingChange | null;
 };
 
 /** One managed domain. Null for a host that is not managed, or was removed. */
 export async function loadDomain(db: Db, host: string): Promise<DomainDetail | null> {
   const domain = await getDomain(db, host);
   if (domain === undefined || domain.status === "removed") return null;
-  const [addresses, config, pages] = await Promise.all([
+  const [addresses, config, pages, ledger] = await Promise.all([
     listNotifyAddresses(db),
     getConfig(db, host),
     listSiteFilesByHost(db, host),
+    listLedger(db, { host }),
   ]);
   const verified = verifiedOf(addresses);
   return {
@@ -117,5 +122,6 @@ export async function loadDomain(db: Db, host: string): Promise<DomainDetail | n
     notifyEmail: domain.notifyEmail,
     notifyVerified: domain.notifyEmail !== null && verified.has(domain.notifyEmail),
     mail: offerMail(domain.notifyEmail, addresses),
+    pending: pendingChange({ ...domain, ledger, hasPages: pages.length > 0 }),
   };
 }

@@ -17,6 +17,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useState } from "react";
 import { describeChange, type SetupFailure, takeOffStep } from "../server/domain-setup/functions";
 import type { DisplayStatus } from "../server/domains";
+import type { PendingChange } from "../server/pending-change";
 import { CredentialsRejected, SetupRunner, type StepRun } from "./setup-runner";
 
 type Change = "turn-off" | "remove";
@@ -218,40 +219,59 @@ function ChangeCard(props: { host: string; change: Change; description: string; 
   );
 }
 
-/** Turn off, Turn on and Remove for one domain. */
-export function DomainActions(props: { host: string; status: DisplayStatus; hasPages: boolean }) {
-  const { host, status } = props;
+const ON_COPY = {
+  off: {
+    title: "Turned off",
+    text: (host: string) =>
+      `${host} serves what it served before Deparked. Its design and offers are kept, so turning it on again brings the page back as it was.`,
+    action: "Turn on…",
+  },
+  adding: {
+    title: "Not added yet",
+    text: (host: string) =>
+      `Adding ${host} stopped half-way: some of its settings are in Cloudflare, but the for-sale page is not on. Continuing picks up where it stopped.`,
+    action: "Continue adding…",
+  },
+  "turning-on": {
+    title: "Not on yet",
+    text: (host: string) =>
+      `Turning ${host} on again stopped half-way. Continuing picks up where it stopped; its design and offers are kept.`,
+    action: "Continue turning on…",
+  },
+};
+
+/** Turn off, Turn on and Remove for one domain, and the way to finish a change that stopped half-way. */
+export function DomainActions(props: { host: string; status: DisplayStatus; pending: PendingChange | null }) {
+  const { host, status, pending } = props;
   const off = status === "off";
+  const on = ON_COPY[pending === "adding" || pending === "turning-on" ? pending : "off"];
   return (
     <div className="flex max-w-2xl flex-col gap-4">
-      {off && props.hasPages ? (
+      {pending === "turning-off" || pending === "unclear" ? (
         <ChangeCard
           host={host}
           change="turn-off"
           title="Finish turning off"
-          description={`Turning ${host} off stopped before its pages were taken offline. Finishing checks every step again and takes them down.`}
+          description={`Turning ${host} off stopped half-way: some of Deparked's settings, or its pages, are still in place. Finishing checks every step again and removes what is left.`}
         />
       ) : null}
       {off ? (
         <Card>
           <CardHeader>
             <CardTitle>
-              <h2>Turned off</h2>
+              <h2>{on.title}</h2>
             </CardTitle>
-            <CardDescription>
-              {host} serves what it served before Deparked. Its design and offers are kept, so turning it on again
-              brings the page back as it was.
-            </CardDescription>
+            <CardDescription>{on.text(host)}</CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild>
               <Link to="/admin/add" search={{ host }}>
-                Turn on…
+                {on.action}
               </Link>
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : pending === "turning-off" ? null : (
         <ChangeCard
           host={host}
           change="turn-off"
