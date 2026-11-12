@@ -1,6 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { createDb, insertDomain, insertTurnstileWidget, replaceSiteFiles, setDomainStatus } from "@deparked/db";
+import { CONFIG_VERSION, defaultConfig } from "@deparked/config";
+import {
+  createDb,
+  insertDomain,
+  insertTurnstileWidget,
+  publishConfig,
+  replaceSiteFiles,
+  saveDraft,
+  setDomainStatus,
+} from "@deparked/db";
 import type { Page } from "@playwright/test";
 import { contentHash } from "../../packages/hosting/src/index";
 import { expect, TURNSTILE_DUMMY_SITEKEY, TURNSTILE_SECRET_NAME, test, ZONES } from "../fixtures";
@@ -190,4 +199,68 @@ test("every variant can be picked, and the gradient variant takes the gradient p
     "background-image",
     /gradient/,
   );
+});
+
+test("Publish shows old and new values, the preview's links stay put, and a wait hands focus back", async ({
+  login,
+  page,
+  db,
+  hostUrl,
+}) => {
+  const { data, now } = await seedDomain(db);
+  const live = { ...defaultConfig(), marketplaceUrl: "https://example.net/listing" };
+  await saveDraft(data, { host: HOST, json: JSON.stringify(live), schemaVersion: CONFIG_VERSION, now });
+  await publishConfig(data, {
+    host: HOST,
+    json: JSON.stringify(live),
+    schemaVersion: CONFIG_VERSION,
+    release: null,
+    now,
+  });
+
+  await login(HOST);
+  await page.goto(hostUrl(HOST, `/admin/d/${HOST}`));
+  const preview = page.frameLocator(`iframe[title="Preview of ${HOST}"]`);
+  await expect(preview.getByRole("heading", { level: 1 })).toHaveText(HOST);
+  await expect(page.getByText("The draft matches the live page.")).toBeVisible();
+
+  // A link in the preview goes nowhere and says why.
+  const link = preview.locator("a[href]").first();
+  await link.hover();
+  const frame = page.frames().find((candidate) => candidate !== page.mainFrame());
+  const hint = () =>
+    frame?.evaluate<string>('getComputedStyle(document.body, "::after").content') ?? Promise.resolve("");
+  await expect.poll(hint).toContain("This is a preview");
+  await link.click();
+  await expect(preview.getByRole("heading", { level: 1 })).toHaveText(HOST);
+  expect(frame?.url()).toBe("about:srcdoc");
+
+  await page.getByLabel("Headline").fill(HEADLINE);
+  const changes = page.getByRole("listitem").filter({ hasText: "Headline" }).first();
+  await expect(page.getByText("Publish changes 1 field:")).toBeVisible();
+  await expect(changes).toContainText(`“${live.headline}”`);
+  await expect(changes).toContainText(`“${HEADLINE}”`);
+  await expect(page.getByText("Draft saved")).toBeVisible();
+
+  // Another publish holds the lock: waiting for it ends with a notice, focus on Publish, and nothing published.
+  const [deployment] = await db.sql<{ id: number }>(
+    "INSERT INTO deployments (worker, kind, status, started_at) VALUES ('sites', 'publish', 'running', ?) RETURNING id",
+    now,
+  );
+  await db.sql(
+    "INSERT INTO publish_lock (id, deployment_id, expires_at) VALUES (1, ?, ?)",
+    deployment?.id ?? 0,
+    now + 60_000,
+  );
+  const publish = page.getByRole("button", { name: "Publish", exact: true });
+  await publish.click();
+  await expect(page.getByText("Another publish is running", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Wait until it has finished" }).click();
+  await expect(page.getByText("Waiting for the other publish to finish…")).toBeVisible();
+  await db.sql("DELETE FROM publish_lock");
+  await expect(page.getByText("The other publish has finished.", { exact: false })).toBeVisible({ timeout: 10_000 });
+  await expect(publish).toBeFocused();
+  expect(await db.sql("SELECT json_extract(live_json, '$.headline') AS headline FROM config")).toEqual([
+    { headline: live.headline },
+  ]);
 });

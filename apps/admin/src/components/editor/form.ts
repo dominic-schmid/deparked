@@ -138,6 +138,68 @@ export function changedFields(draft: Config, live: Config | null): string[] {
   return LABELS.filter(([, read]) => live === null || read(draft) !== read(live)).map(([label]) => label);
 }
 
+/** What one side of a change shows: a short text (with the whole of it for the title), or colour swatches. */
+export type ChangeValue = { text: string; full: string; colors?: string[] };
+
+/** One field Publish would change, from what is live to what the draft holds. */
+export type FieldChange = { label: string; from: ChangeValue; to: ChangeValue };
+
+/** Names for the catalog ids a config holds: the editor knows them from its data. */
+export type ChangeNames = { background: (id: string) => string };
+
+const SHORT = 40;
+
+/** At most `max` characters, cut at a word when one ends near the cut, with an ellipsis. */
+export function truncate(text: string, max = SHORT): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+export const variantLabel = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
+
+const text = (value: string, empty = "Empty"): ChangeValue => {
+  const full = value.trim() === "" ? empty : value;
+  return { text: value.trim() === "" ? empty : `“${truncate(value)}”`, full };
+};
+
+const plain = (value: string): ChangeValue => ({ text: value, full: value });
+
+function colors(config: Config): ChangeValue {
+  const { primary, contrast } = config.accent ?? {};
+  if (primary === undefined || contrast === undefined) return plain("The design's own");
+  return {
+    text: `${primary} on ${contrast}`,
+    full: `Accent ${primary}, text ${contrast}`,
+    colors: [primary, contrast],
+  };
+}
+
+const FIELDS: [string, (config: Config, names: ChangeNames) => ChangeValue][] = [
+  ["Design", (config) => plain(variantLabel(config.variant))],
+  ["Background", (config, names) => plain(names.background(config.background))],
+  ["Headline", (config) => text(config.headline)],
+  ["Offer sentence", (config) => text(config.sentence)],
+  ["Currency", (config) => plain(config.currency)],
+  ["Minimum offer", (config) => plain(`${config.minOffer.toLocaleString("en")} ${config.currency}`)],
+  ["Payment line", (config) => text(config.escrowLine)],
+  ["Marketplace link", (config) => text(config.marketplaceUrl ?? "", "None")],
+  ["Page title", (config) => text(config.seo.title)],
+  ["Search description", (config) => text(config.seo.description)],
+  ["Colours", (config) => colors(config)],
+];
+
+/** What Publish would change, old to new, for a live page. Fields that read the same both ways are left out. */
+export function describeChanges(draft: Config, live: Config, names: ChangeNames): FieldChange[] {
+  return FIELDS.flatMap(([label, read]) => {
+    const from = read(live, names);
+    const to = read(draft, names);
+    return from.full === to.full && from.text === to.text ? [] : [{ label, from, to }];
+  });
+}
+
 /** The same config, whatever object it came from: what a saved draft is compared by. */
 export function configKey(config: Config): string {
   return JSON.stringify(config);

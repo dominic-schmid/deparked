@@ -5,13 +5,16 @@ import {
   backgroundForVariant,
   changedFields,
   configKey,
+  describeChanges,
   errorsByField,
   fieldOf,
   fromForm,
   normalize,
   readAmount,
   toForm,
+  truncate,
 } from "./form";
+import { inertPreview, PREVIEW_LINK_HINT } from "./preview-html";
 import { progressText, revertWroteDraft, runPublish, STALL_STEPS, waitUntilFree } from "./publish-loop";
 
 const COLORS = { color: "#7f9fbf", contrast: "#ffffff" };
@@ -97,6 +100,35 @@ describe("the editor form", () => {
       headline: "Add a headline.",
       form: "Reload.",
     });
+  });
+
+  it("shows what Publish would change, old to new", () => {
+    const live = defaultConfig();
+    const names = { background: (id: string) => `Background ${id}` };
+    expect(describeChanges(live, live, names)).toEqual([]);
+    const draft = {
+      ...live,
+      variant: "gradient" as const,
+      headline: "A much longer headline that goes on well past the length that fits in one line",
+      marketplaceUrl: undefined,
+      accent: { primary: "#112233", contrast: "#ffffff" },
+    };
+    const changes = describeChanges(draft, { ...live, marketplaceUrl: "https://example.net/listing" }, names);
+    expect(changes.map((change) => change.label)).toEqual(["Design", "Headline", "Marketplace link", "Colours"]);
+    const [design, headline, link, colours] = changes;
+    expect(design?.to).toEqual({ text: "Gradient", full: "Gradient" });
+    expect(headline?.to.text).toBe("“A much longer headline that goes on…”");
+    expect(headline?.to.full).toBe(draft.headline);
+    expect(link).toMatchObject({ from: { text: "“https://example.net/listing”" }, to: { text: "None" } });
+    expect(colours?.from.text).toBe("The design's own");
+    expect(colours?.to).toMatchObject({ text: "#112233 on #ffffff", colors: ["#112233", "#ffffff"] });
+  });
+
+  it("truncates long text at a word, and keeps short text whole", () => {
+    expect(truncate("Short")).toBe("Short");
+    expect(truncate("one two  three\nfour", 40)).toBe("one two three four");
+    expect(truncate("abcdefghijklmnopqrstuvwxyz", 10)).toBe("abcdefghi…");
+    expect(truncate("words that are cut here", 16)).toBe("words that are…");
   });
 
   it("names what Publish would change", () => {
@@ -273,5 +305,14 @@ describe("waitUntilFree", () => {
     expect(
       await waitUntilFree({ read: async () => ({ holder: 1 }), sleep: async () => {}, signal: controller.signal }),
     ).toBe("aborted");
+  });
+});
+
+describe("the preview's HTML", () => {
+  it("makes every link open a window the sandbox refuses, first thing in the head", () => {
+    const html = inertPreview('<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body></body></html>');
+    expect(html).toMatch(/^<!doctype html><html lang="en"><head><base target="_blank"><style data-deparked-preview>/);
+    expect(html).toContain(PREVIEW_LINK_HINT);
+    expect(inertPreview("<p>no head</p>")).toMatch(/^<base target="_blank">.*<p>no head<\/p>$/s);
   });
 });
