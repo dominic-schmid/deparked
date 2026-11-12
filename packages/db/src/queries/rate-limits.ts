@@ -29,6 +29,14 @@ export async function hitRateLimit(
   return row;
 }
 
+/** Gives back one hit counted in the window that started at `windowStart`. A window that has moved on is left alone. */
+export async function refundRateLimit(db: Db, input: { key: string; windowStart: number }): Promise<void> {
+  await db
+    .update(rateLimits)
+    .set({ count: sql`${rateLimits.count} - 1` })
+    .where(and(eq(rateLimits.key, input.key), eq(rateLimits.windowStart, input.windowStart), gte(rateLimits.count, 1)));
+}
+
 /** Forgets a key, e.g. after a successful login. */
 export async function clearRateLimit(db: Db, key: string): Promise<void> {
   await db.delete(rateLimits).where(eq(rateLimits.key, key));
