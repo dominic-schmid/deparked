@@ -64,6 +64,13 @@ Be aware: **Workers Scripts · Edit covers every Worker in the account**, not on
 it to one Worker. If you rotate or delete the token, your pages keep working (they are static files); publishing and
 domain changes stop until you paste a new token.
 
+### Rotate the Cloudflare token
+
+1. On Cloudflare, create a new token with the same permissions, in the same account.
+2. In the admin, open **Settings → Cloudflare token → Replace token**, paste the new token and press **Check and
+   save**. Deparked checks it first; the old token keeps working until the new one is saved.
+3. On Cloudflare (My Profile → API Tokens), delete the old token.
+
 ## Recovery
 
 Lost your password or the setup link? Open the installer again (`deparked-install.<account>.workers.dev`) and paste a
