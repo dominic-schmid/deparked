@@ -1,5 +1,4 @@
 import {
-  CloudflareApiError,
   type CloudflareClient,
   createCloudflareClient,
   type DestinationAddress,
@@ -19,6 +18,7 @@ import {
   notificationSender,
   type RouteTarget,
 } from "@deparked/hosting";
+import { cloudflare } from "./errors";
 import { assertAddress, buildMimeMessage } from "./mime";
 
 /** The Worker's `send_email` binding (`env.EMAIL`). */
@@ -82,32 +82,6 @@ function isDate(value: string): boolean {
   if (!DATE.test(value)) return false;
   const time = Date.parse(`${value}T00:00:00Z`);
   return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === value;
-}
-
-function toHostingError(error: CloudflareApiError): HostingError {
-  const options = { cause: error };
-  // The upload of file bodies authenticates with the upload session, so a 401 there says nothing about the token.
-  if ((error.status === 401 || error.status === 403) && error.call !== "upload assets") {
-    return new HostingError(
-      "credentials-rejected",
-      `Cloudflare rejected the saved API token, or the token lacks a permission (${error.call}). Replace the token in Settings.`,
-      options,
-    );
-  }
-  if (error.status === 404) return new HostingError("not-found", error.message, options);
-  if (error.status === 409) return new HostingError("conflict", error.message, options);
-  if (error.status === 429) return new HostingError("rate-limited", error.message, options);
-  if (error.status === 0 || error.status >= 500) return new HostingError("unavailable", error.message, options);
-  return new HostingError("failed", error.message, options);
-}
-
-/** Runs Cloudflare calls and turns their errors into `HostingError`s. Other errors (the caller's own) pass through. */
-async function cloudflare<T>(run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    throw error instanceof CloudflareApiError ? toHostingError(error) : error;
-  }
 }
 
 function toNotifyAddress(address: DestinationAddress): NotifyAddress {
@@ -359,3 +333,5 @@ export function createCloudflareHosting(options: CloudflareHostingOptions): Host
     },
   };
 }
+
+export { type CloudflareSetupOptions, createCloudflareDomainSetup } from "./setup";

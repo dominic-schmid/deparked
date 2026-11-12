@@ -496,8 +496,12 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         permission: "zones",
         handle: ({ query }) => {
           const name = query.get("name");
+          const contains = name?.startsWith("contains:") === true ? name.slice("contains:".length).toLowerCase() : null;
           const result = state.zones
-            .filter((entry) => name === null || entry.name === name)
+            .filter((entry) =>
+              contains !== null ? entry.name.includes(contains) : name === null || entry.name === name,
+            )
+            .toSorted((a, b) => (query.get("order") === "name" ? a.name.localeCompare(b.name) : 0))
             .map((entry) => ({ ...entry, status: "active", account: { id: state.accountId } }));
           return { result, paginate: true };
         },

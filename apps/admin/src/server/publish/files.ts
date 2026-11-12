@@ -73,18 +73,26 @@ async function toHostFiles(host: string, files: SiteFiles): Promise<HostFile[]> 
 }
 
 /**
- * Renders what `host` should serve. `draft`: the saved draft, which must exist and be valid. `live`: the live
- * config again, or the placeholder for a domain that was never published. A domain that is off, removed or
- * unknown gets no files, whatever the source.
+ * `draft`: the saved draft. `live`: the live config again. `attach`: like `live`, for the publish an attach
+ * makes while the domain is still off.
+ */
+export type BuildSource = "draft" | "live" | "attach";
+
+/**
+ * Renders what `host` should serve. `draft`: the saved draft, which must exist and be valid. `live` and
+ * `attach`: the live config again, or the placeholder for a domain that was never published. A domain that is
+ * off or removed gets no files, except for `attach`; an unknown one never does.
  */
 export async function buildHost(
   input: { db: Db; catalog: Catalog },
   host: string,
-  source: "draft" | "live",
+  requested: BuildSource,
 ): Promise<HostBuild> {
   assertHostName(host);
   const domain = await getDomain(input.db, host);
-  if (domain === undefined || domain.status === "off" || domain.status === "removed") return { host, files: [] };
+  const off = domain?.status === "off" || domain?.status === "removed";
+  if (domain === undefined || (off && requested !== "attach")) return { host, files: [] };
+  const source = requested === "attach" ? "live" : requested;
 
   const stored = await getConfig(input.db, host);
   const json = source === "draft" ? stored?.draftJson : stored?.liveJson;

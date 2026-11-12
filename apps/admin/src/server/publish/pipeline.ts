@@ -26,7 +26,7 @@ import {
 } from "@deparked/db";
 import { contentHash, type HostingAdapter, HostingError, type PublishFile } from "@deparked/hosting";
 import type { Catalog } from "@deparked/templates";
-import { buildHost, type FailureReason, type HostBuild, PublishFailure } from "./files";
+import { type BuildSource, buildHost, type FailureReason, type HostBuild, PublishFailure } from "./files";
 import type { FetchReleaseFile } from "./release";
 
 /** Everything a publish needs. Built per request by the server functions; tests pass fakes. */
@@ -225,7 +225,8 @@ export async function startPublish(
   if (kind === "remove" && !gone) {
     return { ok: false, reason: "invalid", message: `Turn ${host} off before its pages are taken down.` };
   }
-  if (kind !== "remove" && gone) {
+  // The placeholder is published by the attach itself, while the domain is still off and nothing points at it.
+  if (kind === "draft" && gone) {
     return { ok: false, reason: "invalid", message: `${host} is turned off. Turn it on before publishing.` };
   }
   if (kind === "draft" && (await getConfig(ctx.db, host)) === undefined) {
@@ -234,7 +235,7 @@ export async function startPublish(
   return begin(ctx, { kind: KIND[kind], host });
 }
 
-type Plan = { hosts: { host: string; source: "draft" | "live" }[]; remaining: number };
+type Plan = { hosts: { host: string; source: BuildSource }[]; remaining: number };
 
 const isOff = (status: string) => status === "off" || status === "removed";
 
@@ -264,9 +265,10 @@ async function plan(ctx: PublishContext, deployment: Deployment, rows: readonly 
   if (deployment.kind === "update" && !off) {
     throw new PublishFailure("invalid", `${host} was turned on again, so its pages were not taken down.`);
   }
-  if (deployment.kind !== "update" && off) {
+  if (deployment.kind === "publish" && off) {
     throw new PublishFailure("invalid", `${host} was turned off while it was being published. Nothing was published.`);
   }
+  if (deployment.kind === "install") return { hosts: [{ host, source: "attach" }], remaining: 0 };
   return { hosts: [{ host, source: deployment.kind === "publish" ? "draft" : "live" }], remaining: 0 };
 }
 

@@ -13,7 +13,7 @@ import { createReleaseFileFetcher, parseReleaseBaseUrl } from "./release";
 const host = z.string().refine(isHostName, "Not a domain name.");
 const id = z.number().int().positive();
 
-async function publishContext(): Promise<pipeline.PublishContext> {
+export async function publishContext(): Promise<pipeline.PublishContext> {
   const db = createDb(env.DB);
   const workspace = await getWorkspace(db);
   return {

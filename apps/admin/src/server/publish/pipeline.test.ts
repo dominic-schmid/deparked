@@ -701,6 +701,24 @@ describe("placeholder and removal", () => {
     expect(await startPublish(ctx, { host: A, kind: "draft" })).toMatchObject({ ok: false, reason: "invalid" });
     await expectInSync();
   });
+  it("an attach publishes the page while the domain is still off: the placeholder, or its live design again", async () => {
+    await addDomain(A, null);
+    await setDomainStatus(db, { host: A, status: "off", now: time });
+    expect((await run(await start({ host: A, kind: "placeholder" }))).at(-1)?.status).toBe("done");
+    expect(await listSiteFilesByHost(db, A)).toHaveLength(3);
+    expect((await getDomain(db, A))?.status).toBe("off");
+
+    await addDomain(B);
+    await publish(B);
+    const live = (await listSiteFilesByHost(db, B)).find((file) => file.path.endsWith("index.html"))?.hash;
+    await setDomainStatus(db, { host: B, status: "off", now: time });
+    await run(await start({ host: B, kind: "remove" }));
+    expect(await listSiteFilesByHost(db, B)).toEqual([]);
+    await run(await start({ host: B, kind: "placeholder" }));
+    expect((await listSiteFilesByHost(db, B)).find((file) => file.path.endsWith("index.html"))?.hash).toBe(live);
+    await expectInSync();
+  });
+
   it("a removal finds the domain turned on again: fails instead of publishing it", async () => {
     await addDomain(A);
     await publish(A);
