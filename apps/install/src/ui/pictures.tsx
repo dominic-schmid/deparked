@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 function Node(props: { icon: ReactNode; title: string; detail: string; accent?: boolean }) {
   return (
     <div
-      className={`flex min-w-0 flex-1 items-center gap-3 rounded-xl border p-3.5 sm:flex-col sm:items-start sm:gap-2.5 sm:p-4 ${
-        props.accent === true ? "border-primary/25 bg-primary/[0.04] ring-1 ring-primary/10" : "bg-card"
+      className={`flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-xl border p-3.5 sm:flex-col sm:items-start sm:gap-2.5 sm:p-4 ${
+        props.accent === true ? "border-primary/30 bg-card shadow-[0_6px_20px_-12px_rgb(0_0_0/0.25)]" : "bg-card"
       }`}
     >
       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary text-secondary-foreground">
@@ -22,10 +22,10 @@ function Node(props: { icon: ReactNode; title: string; detail: string; accent?: 
 
 function Link(props: { label: string }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 py-1 pl-7 text-xs text-muted-foreground sm:w-28 sm:flex-col sm:gap-1 sm:px-0 sm:py-0 sm:text-center">
+    <div className="flex shrink-0 items-center gap-2 py-1.5 pl-7 text-xs text-muted-foreground sm:w-[7.5rem] sm:flex-col sm:justify-center sm:gap-1.5 sm:px-2 sm:py-0 sm:text-center">
       <ArrowDown aria-hidden className="size-4 sm:hidden" />
-      <span className="sm:order-2 sm:leading-snug">{props.label}</span>
       <ArrowRight aria-hidden className="hidden size-4 sm:block" />
+      <span className="text-balance sm:leading-snug">{props.label}</span>
     </div>
   );
 }
@@ -43,7 +43,7 @@ function DeparkedMark() {
 export function TokenDiagram() {
   return (
     <figure
-      className="flex flex-col sm:flex-row sm:items-center"
+      className="flex flex-col sm:flex-row sm:items-stretch"
       aria-label="You paste the token into this page once. Deparked, running in your own Cloudflare account, uses it to publish your pages and set up your domains through Cloudflare."
     >
       <Node icon={<Laptop aria-hidden className="size-[18px]" />} title="You" detail="in this browser" />
@@ -69,7 +69,7 @@ function Window(props: { children: ReactNode }) {
           dash.cloudflare.com
         </span>
       </div>
-      <div className="flex h-[132px] flex-col gap-2 p-3">{props.children}</div>
+      <div className="flex h-[140px] flex-col gap-2 p-3 pb-4">{props.children}</div>
     </div>
   );
 }

@@ -159,7 +159,7 @@ function TokenField(props: {
           inputMode="text"
           aria-describedby={props.error === null ? hint : `${hint} ${errorId}`}
           aria-invalid={props.error === null ? undefined : true}
-          className="h-11 pr-11 font-mono text-[15px] sm:text-sm"
+          className="h-11 pr-11 font-mono text-[15px] placeholder:font-sans sm:text-sm"
           placeholder="Paste the token you copied"
         />
         <Button
@@ -472,8 +472,9 @@ function Review(props: { ready: Ready; onBack: () => void; onInstall: () => void
 
       {ready.unchecked.length > 0 && ready.missing.length === 0 ? (
         <p className="mb-8 max-w-[62ch] text-[13px] text-muted-foreground">
-          {ready.unchecked.map((gap) => gap.label).join(", ")} could not be checked: they only work on a domain, and
-          this account has none yet. They matter when you add your first domain; the admin checks them then.
+          {ready.unchecked.map((gap) => gap.label).join(", ")} could not be checked yet: Cloudflare only answers for
+          them on a domain that already has such settings. They matter once you add a domain, and the admin checks them
+          then.
         </p>
       ) : null}
 
@@ -502,7 +503,7 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
       detail: step.status === "done" ? ["already done"] : [],
     })),
   );
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<{ title: string; detail: string } | null>(null);
   const [handing, setHanding] = useState(false);
   const [announce, setAnnounce] = useState("Starting the install.");
   const next = useRef(0);
@@ -526,7 +527,7 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
       const result = await runStep({ token, accountId, next: next.current });
       if (!result.ok) {
         update(id, { state: "failed" });
-        setProblem(result.message);
+        setProblem({ title: "The install stopped", detail: result.message });
         setAnnounce(`Stopped: ${result.message}`);
         running.current = false;
         return;
@@ -538,7 +539,12 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
       }
       if (report.outcome === "failed" || report.outcome === "blocked") {
         update(id, { state: "failed" });
-        setProblem(report.message);
+        const title = report.step?.title ?? "A step";
+        setProblem(
+          report.outcome === "blocked"
+            ? { title: `“${title}” needs you first`, detail: report.message }
+            : { title: `“${title}” did not finish`, detail: report.message },
+        );
         setAnnounce(`${report.step?.title ?? "A step"} stopped: ${report.message}`);
         running.current = false;
         return;
@@ -558,7 +564,7 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
     if (finished.ok) onDone(finished.setupUrl, finished.adminUrl);
     else {
       setHanding(false);
-      setProblem(finished.message);
+      setProblem({ title: "The setup link could not be made", detail: finished.message });
       setAnnounce(`Stopped: ${finished.message}`);
     }
   }, [accountId, onDone, props.ready.steps, token, update]);
@@ -632,11 +638,15 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
       ) : null}
       {problem === null ? null : (
         <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/[0.04] p-4 sm:p-5" role="alert">
-          <p className="flex gap-2 text-sm">
+          <p className="flex gap-2 text-sm font-medium">
             <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
-            <span>{problem}</span>
+            <span>{problem.title}</span>
           </p>
-          <Button ref={retryRef} className="mt-4" onClick={() => void run()}>
+          <p className="mt-1.5 pl-6 text-sm break-words text-muted-foreground">{problem.detail}</p>
+          <p className="mt-1.5 pl-6 text-[13px] text-muted-foreground">
+            Retry is safe: every step checks what is already there and repeats nothing that worked.
+          </p>
+          <Button ref={retryRef} className="mt-4 ml-6" onClick={() => void run()}>
             <RotateCw aria-hidden /> Retry
           </Button>
         </div>
