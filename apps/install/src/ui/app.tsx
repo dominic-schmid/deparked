@@ -93,10 +93,7 @@ export function App() {
         ) : null}
         {view.name === "done" ? <Done setupUrl={view.setupUrl} recovered={view.recovered} /> : null}
         {view.name === "installed" ? (
-          <Installed
-            status={view.status}
-            onLink={(setupUrl, adminUrl) => setView({ name: "done", setupUrl, adminUrl, recovered: true })}
-          />
+          <Installed onLink={(setupUrl, adminUrl) => setView({ name: "done", setupUrl, adminUrl, recovered: true })} />
         ) : null}
       </Screen>
     </Shell>
@@ -237,11 +234,9 @@ function Connect(props: {
           <AlertTitle>An install is half done</AlertTitle>
           <AlertDescription>
             <p>
-              It started {props.status.startedAt === null ? "earlier" : formatDate(props.status.startedAt)}
-              {props.status.stoppedAt === null ? "" : ` and stopped at “${props.status.stoppedAt}”`}. Paste your token
-              again: the install continues where it stopped and repeats nothing.
+              Paste your token again: once it is checked you see where the install stopped, and it continues from there
+              without repeating anything.
             </p>
-            {props.status.lastError === null ? null : <p className="mt-1">Last problem: {props.status.lastError}</p>}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -440,6 +435,23 @@ function Review(props: { ready: Ready; onBack: () => void; onInstall: () => void
           <p>Nothing has changed in your account yet. This is what the install does, one step at a time.</p>
         )}
       </ScreenTitle>
+
+      {ready.progress?.startedAt == null ? null : (
+        <Alert role="note" className="mb-8">
+          <RotateCw aria-hidden />
+          <AlertTitle>Continuing an install</AlertTitle>
+          <AlertDescription>
+            <p>
+              It started {formatDate(ready.progress.startedAt)}
+              {ready.progress.stoppedAt === null ? "" : ` and stopped at “${ready.progress.stoppedAt}”`}. Finished steps
+              show as already done.
+            </p>
+            {ready.progress.lastError === null ? null : (
+              <p className="mt-1 break-words">Last problem: {ready.progress.lastError}</p>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {ready.missing.length > 0 ? (
         <div className="mb-8 rounded-xl border border-destructive/30 bg-destructive/[0.04] p-4 sm:p-5">
@@ -713,7 +725,15 @@ function Done(props: { setupUrl: string; recovered: boolean }) {
   );
 }
 
-function Installed(props: { status: Status; onLink: (setupUrl: string, adminUrl: string) => void }) {
+/** The installer's own address `deparked-install.<account>.workers.dev` names the admin's. */
+function adminUrlFromHere(): string | null {
+  const labels = window.location.hostname.split(".");
+  if (labels.length !== 4 || labels[2] !== "workers" || labels[3] !== "dev") return null;
+  return `https://deparked-admin.${labels[1]}.workers.dev/admin`;
+}
+
+function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void }) {
+  const adminUrl = adminUrlFromHere();
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -743,12 +763,12 @@ function Installed(props: { status: Status; onLink: (setupUrl: string, adminUrl:
 
   return (
     <>
-      <ScreenTitle eyebrow={`Deparked ${props.status.installedRelease ?? ""}`} title="Deparked is installed">
+      <ScreenTitle title="Deparked is installed">
         <p>Your admin panel runs as its own Worker. This installer only helps you back in if you lose access.</p>
       </ScreenTitle>
-      {props.status.adminUrl === null ? null : (
+      {adminUrl === null ? null : (
         <Button asChild size="lg" className="mb-10 h-11 px-5">
-          <a href={props.status.adminUrl}>
+          <a href={adminUrl}>
             Open the admin <ArrowRight aria-hidden />
           </a>
         </Button>

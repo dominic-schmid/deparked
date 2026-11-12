@@ -887,13 +887,17 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        // Like Cloudflare's, the name filter is a search: "deparked" also finds "deparked-old".
         id: "d1.list",
         method: "GET",
         pattern: `${account}/d1/database`,
         permission: "d1",
         handle: ({ query }) => {
           const name = query.get("name");
-          return { result: state.databases.filter((entry) => name === null || entry.name === name), paginate: true };
+          return {
+            result: state.databases.filter((entry) => name === null || entry.name.includes(name)),
+            paginate: true,
+          };
         },
       },
       {

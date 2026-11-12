@@ -9,6 +9,7 @@ export {
 export {
   adminUrl,
   DATABASE_NAME,
+  findDatabase,
   type HubOptions,
   hubInstalled,
   issueSetupSecret,
@@ -19,6 +20,7 @@ export {
 } from "./hub";
 export { type DomainInspection, inspectDomain } from "./inspect";
 export {
+  MAX_RELEASE_JSON_BYTES,
   PACKS,
   type PackName,
   packFileName,
@@ -28,9 +30,11 @@ export {
   ReleaseError,
   type ReleaseFile,
   type ReleaseSource,
+  readAtMost,
   releaseFromUrl,
   sha256Hex,
   unpack,
+  VERSION,
   type VerifiedFile,
   versionAtLeast,
 } from "./release";

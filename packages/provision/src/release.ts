@@ -10,7 +10,37 @@ export const PACKS = ["catalog", "admin-modules", "admin-assets", "migrations"] 
 export type PackName = (typeof PACKS)[number];
 
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
-const version = z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+/** A release version: also part of download URLs, so nothing but digits, letters, dots and hyphens. */
+export const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const version = z.string().regex(VERSION);
+
+/** release.json is refused beyond this size before it is read in full. */
+export const MAX_RELEASE_JSON_BYTES = 1024 * 1024;
+
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+function filesUrlAllowed(value: string): boolean {
+  const url = new URL(value);
+  return url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK.has(url.hostname));
+}
+
+const SAFE_PATH = /^[A-Za-z0-9._/-]+$/;
+const noDotDot = (path: string) => !path.split("/").includes("..") && !path.split("/").includes(".");
+
+/** Where each pack's files may point: a catalog file under /catalog/, a module name without a way out. */
+function pathAllowed(pack: PackName, path: string): boolean {
+  if (!SAFE_PATH.test(path) || !noDotDot(path) || path.includes("//")) return false;
+  switch (pack) {
+    case "catalog":
+      return path.startsWith("/catalog/");
+    case "admin-assets":
+      return path.startsWith("/admin/");
+    case "admin-modules":
+      return !path.startsWith("/");
+    case "migrations":
+      return /^[\w.-]+\.sql$/.test(path);
+  }
+}
 
 const fileSchema = z.object({
   pack: z.enum(PACKS),
@@ -30,7 +60,7 @@ const releaseSchema = z.object({
   /** The oldest installer that can install this release. */
   minInstallerVersion: version,
   /** Base URL that serves each catalog file at `<base><path>` without a redirect: the admin's `RELEASE_FILES_URL`. */
-  catalogFilesUrl: z.url({ protocol: /^https?$/ }),
+  catalogFilesUrl: z.url({ protocol: /^https?$/ }).refine(filesUrlAllowed, "https only (http on this machine)"),
   tokenPermissions: z.array(z.object({ key: z.string(), type: z.enum(["read", "edit"]) })),
   packs: z.array(z.object({ name: z.enum(PACKS), size: z.number().int().nonnegative(), sha256 })),
   workers: z.object({
@@ -72,6 +102,10 @@ export async function parseRelease(bytes: Uint8Array, pinnedSha256: string): Pro
     parsed = releaseSchema.parse(JSON.parse(new TextDecoder().decode(bytes)));
   } catch {
     throw new ReleaseError("release.json matches its checksum but cannot be read: the release is broken.");
+  }
+  for (const file of parsed.files) {
+    if (!pathAllowed(file.pack, file.path))
+      throw new ReleaseError(`release.json names a file Deparked refuses: ${file.path.slice(0, 80)}`);
   }
   for (const pack of parsed.packs) {
     let offset = 0;
@@ -117,6 +151,36 @@ export interface ReleaseSource {
   pack(name: PackName): Promise<VerifiedFile[]>;
 }
 
+/** Reads a body up to `maxBytes`, stopping as soon as it is larger: null then. Nothing beyond is buffered. */
+export async function readAtMost(response: Response, maxBytes: number): Promise<Uint8Array | null> {
+  const declared = Number(response.headers.get("content-length") ?? "0");
+  if (declared > maxBytes) {
+    await response.body?.cancel();
+    return null;
+  }
+  if (response.body === null) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.length;
+    if (length > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
+}
+
 /** A `ReleaseSource` over a fetch of `<baseUrl>/<file name>`. Each pack is downloaded at most once per source. */
 export function releaseFromUrl(input: {
   baseUrl: string;
@@ -128,7 +192,7 @@ export function releaseFromUrl(input: {
   const packs = new Map<PackName, Promise<VerifiedFile[]>>();
   const source = {
     downloads: 0,
-    async download(name: string): Promise<Uint8Array> {
+    async download(name: string, maxBytes: number): Promise<Uint8Array> {
       source.downloads += 1;
       let response: Response;
       try {
@@ -140,10 +204,15 @@ export function releaseFromUrl(input: {
         await response.body?.cancel();
         throw new ReleaseError(`Could not download ${name} (status ${response.status}). Retry in a moment.`);
       }
-      return new Uint8Array(await response.arrayBuffer());
+      const bytes = await readAtMost(response, maxBytes);
+      if (bytes === null)
+        throw new ReleaseError(`${name} is larger than release.json says. Nothing was installed from it.`);
+      return bytes;
     },
     manifest() {
-      manifest ??= source.download("release.json").then((bytes) => parseRelease(bytes, input.pinnedSha256));
+      manifest ??= source
+        .download("release.json", MAX_RELEASE_JSON_BYTES)
+        .then((bytes) => parseRelease(bytes, input.pinnedSha256));
       manifest.catch(() => {
         manifest = undefined;
       });
@@ -152,9 +221,10 @@ export function releaseFromUrl(input: {
     pack(name: PackName) {
       let files = packs.get(name);
       if (files === undefined) {
-        files = source
-          .manifest()
-          .then(async (release) => unpack(release, name, await source.download(packFileName(release, name))));
+        files = source.manifest().then(async (release) => {
+          const size = release.packs.find((entry) => entry.name === name)?.size ?? 0;
+          return unpack(release, name, await source.download(packFileName(release, name), size));
+        });
         files.catch(() => packs.delete(name));
         packs.set(name, files);
       }

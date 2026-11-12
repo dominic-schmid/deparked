@@ -23,7 +23,7 @@ export const adminGuard = createMiddleware().server(async ({ request, handlerTyp
   if (isPublicApi(pathname)) return next();
 
   const nonce = createNonce();
-  const headers = securityHeaders({ nonce, dev: import.meta.env.DEV });
+  const headers = securityHeaders({ nonce, dev: import.meta.env.DEV, setup: isSetupPath(pathname) });
   const https = httpsRedirect(url);
   if (https !== null) return new Response(null, { status: 308, headers: { ...headers, Location: https } });
   if (!isAllowedOrigin(request)) return new Response("Forbidden", { status: 403, headers });

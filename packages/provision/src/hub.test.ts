@@ -192,6 +192,14 @@ describe("installing the hub", () => {
     });
   });
 
+  it("takes only the database with exactly the installer's name: the API's filter is a search", async () => {
+    const context = await setup();
+    const database = context.mock.state.databases[0];
+    if (database !== undefined) database.name = "deparked-old";
+    const reports = await install(context);
+    expect(reports.at(-1)).toMatchObject({ outcome: "blocked", step: { id: "migrate" } });
+  });
+
   it("asks for a workers.dev address when the account has none", async () => {
     const context = await setup();
     context.mock.state.workersSubdomain = null;

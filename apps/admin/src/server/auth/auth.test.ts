@@ -530,6 +530,10 @@ describe("security headers", () => {
     });
   });
 
+  it("sends no referrer at all from the setup screens, whose link carries the secret", () => {
+    expect(securityHeaders({ nonce: "N0NCE", dev: false, setup: true })["Referrer-Policy"]).toBe("no-referrer");
+  });
+
   it("allows scripts only from self and this response's nonce", () => {
     expect(csp).toContain("script-src 'self' 'nonce-N0NCE'");
     expect(csp.split("; ").find((directive) => directive.startsWith("script-src"))).not.toMatch(/unsafe|https?:|\*/);

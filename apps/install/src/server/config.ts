@@ -1,3 +1,4 @@
+import { VERSION } from "@deparked/provision";
 import packageJson from "../../package.json" with { type: "json" };
 
 /** The release this installer installs: one version and the SHA-256 of its release.json (decision doc, section 13). */
@@ -52,7 +53,10 @@ export function apiBase(env: Env): string | undefined {
 export function releasePin(env: Env): Pin | null {
   if (env.RELEASE_VERSION !== undefined && env.RELEASE_VERSION !== "") {
     const sha256 = env.RELEASE_SHA256?.toLowerCase() ?? "";
-    return /^[0-9a-f]{64}$/.test(sha256) ? { version: env.RELEASE_VERSION, sha256 } : null;
+    // Both go into a download URL: anything but a plain version and a hex hash counts as no pin.
+    return VERSION.test(env.RELEASE_VERSION) && /^[0-9a-f]{64}$/.test(sha256)
+      ? { version: env.RELEASE_VERSION, sha256 }
+      : null;
   }
   return PINNED_RELEASE;
 }

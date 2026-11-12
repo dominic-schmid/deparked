@@ -25,13 +25,16 @@ export interface ApiError {
   message: string;
 }
 
+/** What anyone who opens the page may learn: whether there is an install, and what this installer installs. */
 export interface Status {
   phase: "fresh" | "in-progress" | "installed";
   /** The release this installer installs, or null when it was built before the first release. */
   pinnedRelease: string | null;
+}
+
+/** Where an earlier install stands. Only answered to a token that proved it owns this installer. */
+export interface InstallProgress {
   installedRelease: string | null;
-  /** `https://deparked-admin.<account>.workers.dev` when the installer runs on workers.dev. */
-  adminUrl: string | null;
   startedAt: number | null;
   /** The step an unfinished install stopped at, and why. */
   stoppedAt: string | null;
@@ -75,6 +78,8 @@ export type CheckResponse =
       unchecked: PermissionGap[];
       steps: PlanStep[];
       nothingToDo: boolean;
+      /** Absent when the token lacks the permissions to prove ownership. */
+      progress?: InstallProgress;
     }
   | ApiError;
 

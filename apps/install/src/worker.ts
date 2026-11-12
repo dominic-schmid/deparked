@@ -1,3 +1,4 @@
+import { readAtMost } from "@deparked/provision";
 import type { CheckRequest, FinishRequest, StepRequest } from "./api";
 import type { Env } from "./server/config";
 import { check, finish, status, step } from "./server/install";
@@ -28,9 +29,11 @@ function checkMutation(request: Request, url: URL): Response | null {
   return null;
 }
 
+/** Reads at most `MAX_BODY` bytes from the stream, whatever `content-length` says. */
 async function readBody(request: Request): Promise<Record<string, unknown> | null> {
-  const text = await request.text();
-  if (text.length > MAX_BODY) return null;
+  const bytes = await readAtMost(new Response(request.body), MAX_BODY);
+  if (bytes === null) return null;
+  const text = new TextDecoder().decode(bytes);
   try {
     const value: unknown = JSON.parse(text);
     return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -59,20 +62,22 @@ const NOT_A_TOKEN =
 async function api(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === "/api/status") {
     if (request.method !== "GET") return refuse(405, "Use GET.");
-    return json(await status(env, url.hostname));
+    return json(await status(env));
   }
   if (request.method !== "POST") return refuse(405, "Use POST.");
   const refused = checkMutation(request, url);
   if (refused !== null) return refused;
   const body = await readBody(request);
-  if (body === null) return refuse(400, "The request could not be read.");
+  if (body === null) return refuse(400, "The request could not be read, or it is too large.");
   const pasted = token(body);
   if (pasted === null) return json({ ok: false, error: "invalid-token", message: NOT_A_TOKEN }, 400);
   const account = accountId(body);
+  // Only for the per-address throttle, hashed there. Local runs have no such header.
+  const clientIp = request.headers.get("cf-connecting-ip") ?? "local";
   switch (url.pathname) {
     case "/api/check": {
       const input: CheckRequest = account === null ? { token: pasted } : { token: pasted, accountId: account };
-      return json(await check(env, input));
+      return json(await check(env, input, clientIp));
     }
     case "/api/step": {
       const next = body.next;
@@ -80,12 +85,12 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
         return refuse(400, "The request is missing the account or the step.");
       }
       const input: StepRequest = { token: pasted, accountId: account, next };
-      return json(await step(env, input));
+      return json(await step(env, input, clientIp));
     }
     case "/api/finish": {
       if (account === null) return refuse(400, "The request is missing the account.");
       const input: FinishRequest = { token: pasted, accountId: account };
-      return json(await finish(env, input));
+      return json(await finish(env, input, clientIp));
     }
     default:
       return refuse(404, "No such call.");

@@ -86,13 +86,99 @@ describe("the installer API", () => {
     const workspace = await getWorkspace(createDb(d1.d1));
     expect(workspace?.setupSecretHash).toBe(await sha256Hex(new TextEncoder().encode(secret)));
 
+    // Anyone may open the page: it learns that there is an install, nothing about it.
     const status = await (await worker.fetch(new Request(`${ORIGIN}/api/status`), env)).json();
-    expect(status).toMatchObject({
-      phase: "installed",
-      installedRelease: "1.0.0",
-      adminUrl: "https://deparked-admin.owner.workers.dev/admin",
+    expect(status).toEqual({ phase: "installed", pinnedRelease: "1.0.0" });
+    // No ownership proof is left behind.
+    expect(await d1.d1.prepare("SELECT key FROM rate_limits WHERE key LIKE 'install-proof:%'").all()).toMatchObject({
+      results: [],
     });
-    expect(JSON.stringify(status)).not.toContain(TOKEN);
+  });
+
+  it("lets a stranger's token change nothing, and not disturb the owner's check running at the same time", async () => {
+    // The stranger's own account, with its own database of the same name: a valid token, the wrong account.
+    const stranger = await startMockCloudflare({ token: "strangers-token-0123456789", accountId: "stranger" });
+    stranger.mock.addDatabase("deparked");
+    const strangerEnv = { ...env, CLOUDFLARE_API_BASE: `${stranger.url}/client/v4` };
+    const call2 = async <T>(target: Env, body: unknown) =>
+      (await (
+        await worker.fetch(
+          new Request(`${ORIGIN}/api/check`, {
+            method: "POST",
+            headers: { origin: ORIGIN, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+          target,
+        )
+      ).json()) as T;
+    try {
+      await call<CheckResponse>("/api/check", { token: TOKEN });
+      const tables = ["install_state", "workspace", "ledger", "site_files", "domains"];
+      const snapshot = async () =>
+        Promise.all(tables.map(async (table) => (await d1.d1.prepare(`SELECT * FROM ${table}`).all()).results));
+      const before = await snapshot();
+
+      const [foreign, owner] = await Promise.all([
+        call2<CheckResponse>(strangerEnv, { token: "strangers-token-0123456789" }),
+        call2<CheckResponse>(env, { token: TOKEN }),
+      ]);
+      expect(foreign).toMatchObject({ ok: false, error: "foreign-account" });
+      expect(owner).toMatchObject({ ok: true, status: "ready" });
+
+      const alone = await call2<CheckResponse>(strangerEnv, { token: "strangers-token-0123456789" });
+      expect(alone).toMatchObject({ ok: false, error: "foreign-account" });
+      expect(await snapshot()).toEqual(before);
+      const proofs = await d1.d1.prepare("SELECT key FROM rate_limits WHERE key LIKE 'install-proof:%'").all();
+      expect(proofs.results).toEqual([]);
+      expect(mock.mock.state.scripts.size).toBe(0);
+    } finally {
+      await stranger.close();
+    }
+  });
+
+  it("writes nothing but its throttle before the proof, on a database the Deploy button just made", async () => {
+    mock.mock.state.databases = [];
+    await call<CheckResponse>("/api/check", { token: TOKEN });
+    const tables = await d1.d1.prepare("SELECT count(*) AS n FROM install_state").all();
+    expect(tables.results).toEqual([{ n: 0 }]);
+  });
+
+  it("throttles proofs per address", async () => {
+    let last: FinishResponse | undefined;
+    for (let attempt = 0; attempt <= 60; attempt += 1) {
+      last = await call<FinishResponse>("/api/finish", { token: TOKEN, accountId: mock.mock.state.accountId });
+    }
+    expect(last).toMatchObject({ ok: false, error: "busy" });
+  });
+
+  it("takes only the database with exactly the installer's name", async () => {
+    const id = mock.mock.state.databases[0]?.uuid ?? "";
+    mock.mock.state.databases = [{ uuid: id, name: "deparked-old" }];
+    expect(await call<CheckResponse>("/api/check", { token: TOKEN })).toMatchObject({ error: "foreign-account" });
+  });
+
+  it("refuses a body over the cap even without a length header", async () => {
+    const big = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({ token: TOKEN, pad: "x".repeat(10_000) })));
+        controller.close();
+      },
+    });
+    const response = await worker.fetch(
+      new Request(`${ORIGIN}/api/check`, {
+        method: "POST",
+        headers: { origin: ORIGIN, "content-type": "application/json" },
+        body: big,
+        duplex: "half",
+      } as RequestInit),
+      env,
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("ignores a pinned version that is not a plain version", async () => {
+    env = { ...env, RELEASE_VERSION: "1.0.0/../../evil" };
+    expect(await call<CheckResponse>("/api/check", { token: TOKEN })).toMatchObject({ error: "no-release" });
   });
 
   it("names missing permissions in plain words and does not start", async () => {

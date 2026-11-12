@@ -46,8 +46,9 @@ function foreignWorker(name: string): string {
   return `A Worker named ${name} already exists in this account, and Deparked did not create it. Rename or delete it in Cloudflare (Workers & Pages), then retry.`;
 }
 
-async function findDatabase(ctx: ProvisionContext, name: string): Promise<string | null> {
-  const [database] = await ctx.cf.d1.list({ name });
+export async function findDatabase(ctx: ProvisionContext, name: string): Promise<string | null> {
+  // The API's name filter is a search: only the exact name is the installer's database.
+  const database = (await ctx.cf.d1.list({ name })).find((entry) => entry.name === name);
   return database?.uuid ?? null;
 }
 

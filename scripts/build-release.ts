@@ -16,7 +16,8 @@ const ROOT = resolve(import.meta.dirname, "..");
 const FORMAT = 1;
 /** Bump when a release needs installer code that older installers lack. */
 const MIN_INSTALLER_VERSION = "0.1.0";
-const REPOSITORY = process.env.GITHUB_REPOSITORY ?? "dominic-schmid/deparked";
+/** Fixed, not the CI's repository: the same tag builds the same release.json, so its pinned hash is reproducible. */
+const REPOSITORY = "dominic-schmid/deparked";
 
 const { values } = parseArgs({
   options: {
@@ -60,7 +61,7 @@ function walk(dir: string): string[] {
       const path = join(dir, name);
       return statSync(path).isDirectory() ? walk(path) : [path];
     })
-    .sort();
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 function readJsonc(path: string): Record<string, unknown> {
@@ -123,7 +124,9 @@ mkdirSync(out, { recursive: true });
 const files = [];
 const packs = [];
 for (const pack of PACKS) {
-  const members = entries.filter((entry) => entry.pack === pack).sort((a, b) => a.path.localeCompare(b.path));
+  const members = entries
+    .filter((entry) => entry.pack === pack)
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   if (members.length === 0) throw new Error(`Nothing for the ${pack} pack: build the admin first.`);
   let offset = 0;
   for (const entry of members) {
