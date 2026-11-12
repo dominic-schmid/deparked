@@ -112,6 +112,11 @@ export interface DomainSetup {
     state: SetupState,
     confirmations: SetupConfirmations,
   ): Promise<SetupStepReport>;
+  /**
+   * Runs `work` while no step of any change runs, so work that belongs to a change (its publish) cannot interleave
+   * with an attach or a turn off. `busy` when a step holds the lock: nothing ran.
+   */
+  withLock<T>(work: () => Promise<T>): Promise<{ status: "ran"; value: T } | { status: "busy" }>;
   /** What Turn off and Remove delete or put back, and what stays. No request to the host. */
   describeRemoval(host: string): Promise<{ effects: SetupEffect[]; keeps: string[] }>;
 }

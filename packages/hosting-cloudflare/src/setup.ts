@@ -20,6 +20,7 @@ import {
   planTurnOff,
   runNextStep,
   type WorkerNames,
+  withProvisionLock,
 } from "@deparked/provision";
 import { cloudflare } from "./errors";
 
@@ -56,19 +57,12 @@ const MAIL: Record<"none" | "cloudflare" | "external", MailState> = {
 
 /** The add-domain flow, Turn off and Remove, on `@deparked/provision`. Build one per request. */
 export function createCloudflareDomainSetup(options: CloudflareSetupOptions): DomainSetup {
-  // Whether Cloudflare refused the token during the current step: `runNextStep` keeps only the error's words.
-  let rejected = false;
-  const fetchImpl: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
   const cf = createCloudflareClient({
     token: options.token,
     accountId: options.accountId,
     ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
     ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
-    fetch: async (input, init) => {
-      const response = await fetchImpl(input, init);
-      if (response.status === 401 || response.status === 403) rejected = true;
-      return response;
-    },
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
   const ctx: ProvisionContext = {
     cf,
@@ -141,7 +135,6 @@ export function createCloudflareDomainSetup(options: CloudflareSetupOptions): Do
     stepTitles: (change, host) => plan(change, host).steps.map((step) => ({ id: step.id, title: step.title })),
 
     async step(change, host, state, confirmations) {
-      rejected = false;
       const report = await runNextStep(plan(change, host, confirmations), state);
       return {
         step: report.step,
@@ -150,9 +143,11 @@ export function createCloudflareDomainSetup(options: CloudflareSetupOptions): Do
         effects: report.effects,
         state: report.state,
         finished: report.finished,
-        credentialsRejected: report.outcome === "failed" && rejected,
+        credentialsRejected: report.errorStatus === 401 || report.errorStatus === 403,
       };
     },
+
+    withLock: (work) => withProvisionLock(ctx, work),
 
     describeRemoval: (host) => describeRemoval(ctx, host),
   };

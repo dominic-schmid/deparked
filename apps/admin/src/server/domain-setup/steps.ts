@@ -1,4 +1,4 @@
-import { type Db, getDeployment, listDomains, listSiteFilesByHost } from "@deparked/db";
+import { type Db, getDeployment, getDomain, listDomains, listSiteFilesByHost } from "@deparked/db";
 import type {
   AccountDomainPage,
   DomainPreview,
@@ -51,13 +51,13 @@ class PublishStopped extends Error {
   }
 }
 
-const DEPLOYMENT_KIND = { placeholder: "install", remove: "update" } as const;
+const DEPLOYMENT_KIND = { attach: "install", remove: "update" } as const;
 
 /**
  * Starts the host's publish of this kind, or continues the one that already runs for it. Another publish that
  * holds the lock is `PublishBusy`.
  */
-async function startOrContinue(ctx: PublishContext, host: string, kind: "placeholder" | "remove"): Promise<number> {
+async function startOrContinue(ctx: PublishContext, host: string, kind: "attach" | "remove"): Promise<number> {
   const started = await startPublish(ctx, { host, kind: kind satisfies StartKind });
   if (started.ok) return started.deploymentId;
   if (started.reason === "busy") {
@@ -71,7 +71,7 @@ async function startOrContinue(ctx: PublishContext, host: string, kind: "placeho
 }
 
 /** One bounded piece of the host's publish. Resolves once it is live and recorded in `site_files`. */
-async function publishOnce(ctx: PublishContext, host: string, kind: "placeholder" | "remove"): Promise<void> {
+async function publishOnce(ctx: PublishContext, host: string, kind: "attach" | "remove"): Promise<void> {
   const result = await stepPublish(ctx, await startOrContinue(ctx, host, kind));
   if (result.status === "done") return;
   if (result.status === "running") throw new PublishContinues(result.message);
@@ -80,10 +80,12 @@ async function publishOnce(ctx: PublishContext, host: string, kind: "placeholder
 
 /** `ProvisionContext.publishPlaceholder` for the admin: the attach's publish, one request at a time. */
 export function placeholderPublisher(ctx: PublishContext): (host: string) => Promise<void> {
-  return (host) => publishOnce(ctx, host, "placeholder");
+  return (host) => publishOnce(ctx, host, "attach");
 }
 
 const TAKE_DOWN = { id: "take-down", title: "Take the pages offline" };
+const PUBLISH_STEP = "publish-placeholder";
+const BUSY = "Another change to your domains is running. Trying again in a moment.";
 
 /** The steps of a change, for the progress list before the first one runs. No request. */
 export function listSteps(deps: Pick<SetupDeps, "setup">, change: SetupChange, host: string) {
@@ -155,31 +157,77 @@ async function hostingStep(
   }
 }
 
-/** One step of attaching (or turning on again) a domain. The browser calls it until `finished`. */
-export function attachStep(
-  deps: SetupDeps,
-  input: { host: string; confirmations: SetupConfirmations; state: SetupState },
-): Promise<StepView> {
-  return hostingStep(deps, "attach", input.host, input.state, input.confirmations);
+const isOff = (status: string | undefined) => status === "off" || status === "removed";
+
+/** The attach's placeholder publish, under the lock of the changes. */
+async function publishStep(deps: SetupDeps, host: string, state: SetupState): Promise<StepView> {
+  try {
+    const locked = await deps.setup.withLock(() => publishOnce(deps.publish, host, "attach"));
+    if (locked.status === "busy") return view(deps, "attach", host, state, "busy", { message: BUSY });
+    return view(deps, "attach", host, state, "ran", { effects: [{ kind: "create", what: `the page of ${host}` }] });
+  } catch (error) {
+    return publishOutcome(deps, "attach", host, state, error);
+  }
 }
 
 /**
- * One step of Turn off or Remove: the hosting's steps undo what Deparked changed, then, once nothing routes
- * visitors to the pages any more, a publish takes the domain's files out.
+ * One step of attaching (or turning on again) a domain. The browser calls it until `finished`.
+ *
+ * While the domain is off its placeholder step always publishes: rows left by a turn off that stopped half-way
+ * do not prove the page is live. Publishing again sends only what the host lacks.
+ */
+export async function attachStep(
+  deps: SetupDeps,
+  input: { host: string; confirmations: SetupConfirmations; state: SetupState },
+): Promise<StepView> {
+  const { host, state } = input;
+  const step = listSteps(deps, "attach", host)[state.next];
+  if (step?.id === PUBLISH_STEP && isOff((await getDomain(deps.db, host))?.status)) {
+    return publishStep(deps, host, state);
+  }
+  return hostingStep(deps, "attach", host, state, input.confirmations);
+}
+
+/** Takes the domain's pages out, once nothing of Deparked is left for it at the host. Runs under the lock. */
+async function takeDown(
+  deps: SetupDeps,
+  host: string,
+): Promise<{ outcome: "ran" | "already-done" } | { blocked: string }> {
+  if (!isOff((await getDomain(deps.db, host))?.status)) {
+    return { blocked: `${host} was turned on again, so its pages stay.` };
+  }
+  if ((await deps.setup.describeRemoval(host)).effects.length > 0) {
+    return {
+      blocked: `Deparked still has settings of ${host} in Cloudflare: it is being set up, or a turn off of it stopped half-way. Turn it off again from the start.`,
+    };
+  }
+  if ((await listSiteFilesByHost(deps.db, host)).length === 0) return { outcome: "already-done" };
+  await publishOnce(deps.publish, host, "remove");
+  return { outcome: "ran" };
+}
+
+/**
+ * One step of Turn off or Remove: the hosting's steps undo what Deparked changed, then, once nothing of it is left
+ * at the host, a publish takes the domain's files out.
  */
 export async function takeOffStep(
   deps: SetupDeps,
   input: { change: "turn-off" | "remove"; host: string; state: SetupState },
 ): Promise<StepView> {
   const { change, host, state } = input;
+  if ((await getDomain(deps.db, host)) === undefined) {
+    return view(deps, change, host, state, "blocked", { message: `${host} is not a domain Deparked manages.` });
+  }
   const hostingSteps = deps.setup.stepTitles(change, host).length;
   if (state.next < hostingSteps) return hostingStep(deps, change, host, state, {});
   if (state.next > hostingSteps) return view(deps, change, host, state, "finished");
-  if ((await listSiteFilesByHost(deps.db, host)).length === 0) return view(deps, change, host, state, "already-done");
   try {
-    await publishOnce(deps.publish, host, "remove");
-    return view(deps, change, host, state, "ran", {
-      effects: [{ kind: "remove", what: `the pages of ${host}` }],
+    const locked = await deps.setup.withLock(() => takeDown(deps, host));
+    if (locked.status === "busy") return view(deps, change, host, state, "busy", { message: BUSY });
+    const result = locked.value;
+    if ("blocked" in result) return view(deps, change, host, state, "blocked", { message: result.blocked });
+    return view(deps, change, host, state, result.outcome, {
+      effects: result.outcome === "ran" ? [{ kind: "remove", what: `the pages of ${host}` }] : [],
     });
   } catch (error) {
     return publishOutcome(deps, change, host, state, error);

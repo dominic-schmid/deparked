@@ -222,7 +222,62 @@ describe("turning a domain off and removing it", () => {
     expect((await listAccountDomains(deps, { search: "exa", page: 1 })).domains.map((d) => d.name)).toEqual([HOST]);
   });
 
+  it("refuses a domain Deparked does not manage", async () => {
+    expect(await takeOffStep(deps, { change: "turn-off", host: HOST, state: { next: 0 } })).toMatchObject({
+      outcome: "blocked",
+      message: `${HOST} is not a domain Deparked manages.`,
+    });
+  });
+
+  it("does not take the pages down while an attach is half-way, or while a step holds the lock", async () => {
+    const attach = listSteps(deps, "attach", HOST).findIndex((step) => step.id === "routes");
+    let state = { next: 0 };
+    while (state.next < attach) state = (await attachStep(deps, { host: HOST, confirmations: {}, state })).state;
+    const takeDown = { next: listSteps(deps, "turn-off", HOST).length - 1 };
+
+    const view = await takeOffStep(deps, { change: "turn-off", host: HOST, state: takeDown });
+    expect(view).toMatchObject({ outcome: "blocked", state: takeDown });
+    expect(view.message).toContain("stopped half-way");
+    expect(livePaths()).toContain(`/sites/${HOST}/index.html`);
+
+    await drive("turn-off");
+    await drive("attach");
+    expect(await takeOffStep(deps, { change: "turn-off", host: HOST, state: takeDown })).toMatchObject({
+      outcome: "blocked",
+      message: `${HOST} was turned on again, so its pages stay.`,
+    });
+    await acquireProvisionLock(db, { holder: 9, ttlMs: 120_000, now: clock });
+    expect(await takeOffStep(deps, { change: "turn-off", host: HOST, state: takeDown })).toMatchObject({
+      outcome: "busy",
+    });
+  });
+
+  it("turn on after a turn off that stopped before the take-down publishes the page again", async () => {
+    await drive("attach");
+    const turnOff = listSteps(deps, "turn-off", HOST);
+    let state = { next: 0 };
+    while (state.next < turnOff.length - 1) {
+      state = (await takeOffStep(deps, { change: "turn-off", host: HOST, state })).state;
+    }
+    // The rows are still there, but the live version lacks the page (it went out in a deploy D1 never recorded).
+    expect(await listSiteFilesByHost(db, HOST)).toHaveLength(3);
+    const font = {
+      path: FONT,
+      hash: await contentHash(FONT, FONT_BYTES),
+      size: FONT_BYTES.length,
+      contentType: "font/woff2",
+    };
+    await hosting.publish({ files: [font], getContent: async () => FONT_BYTES });
+    expect(livePaths()).toEqual([FONT]);
+
+    const views = await drive("attach");
+    expect(views.find((view) => view.step?.id === "publish-placeholder")).toMatchObject({ outcome: "ran" });
+    expect(views.at(-1)).toMatchObject({ finished: true });
+    expect(livePaths()).toContain(`/sites/${HOST}/index.html`);
+  });
+
   it("a state past the end is finished", async () => {
+    await drive("attach");
     const total = listSteps(deps, "turn-off", HOST).length;
     expect(await takeOffStep(deps, { change: "turn-off", host: HOST, state: { next: total + 1 } })).toMatchObject({
       outcome: "finished",
