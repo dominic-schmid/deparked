@@ -31,7 +31,14 @@ const BEACON_SCRIPT = "https://static.cloudflareinsights.com/beacon.min.js";
 export function render(config: Config, host: string, options: RenderOptions): SiteFiles {
   const { catalog, sitekey, beaconToken, offerEndpoint = OFFER_ENDPOINT } = options;
   const { id, definition: variant } = resolveVariant(config.variant);
-  const background = catalog.backgrounds.find((candidate) => candidate.id === config.background);
+  // A variant without a photo ignores a photo background, also for the share image.
+  const background = variant.backgroundSizes
+    ? catalog.backgrounds.find((candidate) => candidate.id === config.background)
+    : undefined;
+  const gradient = variant.gradient
+    ? (catalog.gradients.find((candidate) => candidate.id === config.background) ??
+      catalog.gradients.find((candidate) => candidate.id === variant.gradient))
+    : undefined;
   const island = catalog.islands[id];
   const fonts = variant.fonts.flatMap(({ id, preload }) => {
     const font = catalog.fonts.find((candidate) => candidate.id === id);
@@ -41,8 +48,10 @@ export function render(config: Config, host: string, options: RenderOptions): Si
   const origin = siteOrigin(host);
   const title = fillDomain(config.seo.title, host);
   const description = fillDomain(config.seo.description, host);
-  const color = hexColor(config.accent?.primary, "accent.primary") ?? variant.color;
-  const contrast = hexColor(config.accent?.contrast, "accent.contrast") ?? variant.contrast;
+  const color = hexColor(config.accent?.primary, "accent.primary") ?? gradient?.color ?? variant.color;
+  // a light gradient carries ink, not the variant's white, in the favicon too
+  const contrast =
+    hexColor(config.accent?.contrast, "accent.contrast") ?? (gradient?.tone === "light" ? "#1c2116" : variant.contrast);
   const shareImage = background?.formats.webp.find((image) => image.width >= 1200) ?? background?.formats.webp.at(-1);
   // WebPage, not Product/Offer: an Offer needs a real price, and the minimum is a quiet filter, not an asking price.
   const jsonLd = {
@@ -74,7 +83,12 @@ export function render(config: Config, host: string, options: RenderOptions): Si
         <meta name="twitter:description" content={description} />
         {shareImage && <meta name="twitter:image" content={`${origin}${shareImage.path}`} />}
         <meta name="theme-color" content={color} />
-        {variant.colorScheme && <meta name="color-scheme" content={variant.colorScheme} />}
+        {variant.darkColor && !config.accent?.primary && (
+          <meta name="theme-color" media="(prefers-color-scheme: dark)" content={variant.darkColor} />
+        )}
+        {(variant.colorScheme ?? gradient?.tone) && (
+          <meta name="color-scheme" content={variant.colorScheme ?? gradient?.tone} />
+        )}
         <link rel="icon" href={faviconHref(host, color, contrast)} />
         {background && variant.backgroundSizes && (
           <link
@@ -105,6 +119,7 @@ export function render(config: Config, host: string, options: RenderOptions): Si
           config={config}
           host={host}
           background={background}
+          gradient={gradient}
           sitekey={sitekey}
           offerEndpoint={offerEndpoint}
         />

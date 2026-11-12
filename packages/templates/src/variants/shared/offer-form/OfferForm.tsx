@@ -14,7 +14,7 @@ import {
   type OfferResponse,
   offerErrorFragment,
   offerErrorMessages,
-} from "../../offer";
+} from "../../../offer";
 
 export type OfferFormProps = {
   endpoint: string;

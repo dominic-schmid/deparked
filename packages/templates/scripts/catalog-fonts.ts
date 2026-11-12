@@ -74,6 +74,18 @@ const FACES: Face[] = [
     },
     axes: { opsz: { min: 16, max: 72 } },
   },
+  {
+    id: "jetbrains-mono",
+    family: "JetBrains Mono",
+    style: "normal",
+    weight: "400 700",
+    license: "OFL-1.1",
+    sources: {
+      latin: "jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+      "latin-ext": "jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwhsk.woff2",
+    },
+    axes: { wght: { min: 400, max: 700 } },
+  },
 ];
 
 function textOf(unicodeRange: string): string {
@@ -109,7 +121,7 @@ for (const { sources, axes, ...face } of FACES) {
   }
   fonts.push({ ...face, files });
 }
-for (const family of ["archivo", "newsreader"]) {
+for (const family of ["archivo", "newsreader", "jetbrainsmono"]) {
   await writeFile(`${OUT}OFL-${family}.txt`, await download(`${LICENSES}/${family}/OFL.txt`));
 }
 await updateCatalog({ fonts });

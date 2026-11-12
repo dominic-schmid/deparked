@@ -16,7 +16,8 @@ import { GRADIENTS } from "./gradients.ts";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const tailwind = `${root}node_modules/.bin/tailwindcss`;
 const variants = (await readdir(`${root}src/variants`, { withFileTypes: true }))
-  .filter((entry) => entry.isDirectory())
+  // `shared/` holds pieces the variants import, not a variant
+  .filter((entry) => entry.isDirectory() && entry.name !== "shared")
   .map((entry) => entry.name)
   .sort();
 

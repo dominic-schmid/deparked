@@ -31,17 +31,34 @@ All of it is committed, because Tailwind, esbuild and sharp cannot run in the ad
 
 Budgets, enforced by tests: `index.html` under 30 KB gzipped, each island bundle under 90 KB gzipped.
 
+## The variants
+
+| Variant | Look | Background | Colour scheme |
+| -- | -- | -- | -- |
+| `sky` | The port of wrappr.app: full-bleed photo, condensed wordmark on top, the sentence in Newsreader below | a catalog photo | its own (white type on the photo) |
+| `gradient` | No photo: a grained colour field, the sentence in Archivo with filled blanks, the domain across the foot | a catalog gradient; anything else gets `dusk` | the preset's `tone` (`dark`: white type, `light`: ink); it does not follow the visitor's |
+| `editorial` | A printed front page: double rule, the domain as a centred Newsreader masthead, a small-caps margin label | none, whatever `background` names | follows the visitor's: paper and ink, or deep ink and paper |
+
+`accent.primary` is Sky's flat colour, and the Send button's fill (plus Editorial's label and focus marks) in the others; `accent.contrast` is the button's text there. A variant without a photo never links one as its share image.
+
+Gradients live in `scripts/gradients.ts` and reach `catalog.json` through `pnpm build:templates`. Each names a `tone`; a test checks that every colour stop holds 4.5:1 against that tone's type.
+
 ## Adding a variant
 
 1. Create `src/variants/<id>/` (`<id>` is one of `VARIANTS` in `@deparked/config`) with:
    - `Page.tsx`: everything inside `<body>`, a component of `PageProps`. Plain markup; wrap whatever needs client JavaScript in `<Island name component props>`.
-   - `styles.css`: copy the first lines of `sky/styles.css` (the Tailwind imports and the two `@source` lines), then your `@theme` tokens and styles. Only classes used in this folder end up in the page.
-   - `index.ts`: `export const <id>: VariantDefinition = { Page, css, fonts, color, contrast }`, with `css` imported from `./styles.generated`.
-   - `client.ts`, only if the variant has islands: `hydrateIslands({ "<name>": Component })` with the same names the page uses. The offer form of Sky (`sky/OfferForm.tsx`) can be imported or copied.
+   - `styles.css`: copy the first lines of `gradient/styles.css` (the Tailwind imports and the three `@source` lines), then your `@theme` tokens and styles. Only classes used in this folder and in `shared/` end up in the page.
+   - `index.ts`: `export const <id>: VariantDefinition = { Page, css, fonts, color, contrast }`, with `css` imported from `./styles.generated`. Optional: `backgroundSizes` (a photo variant), `gradient` (a gradient variant's default preset), `colorScheme` and `darkColor`.
+   - `client.ts`: `hydrateIslands({ "offer-form": OfferForm })`, as in `gradient/client.ts`.
 2. Add one line to the registry in `src/variants/index.ts`.
-3. Run `pnpm build:templates`, then `pnpm check` and `pnpm test:layout`. The layout gate, the form tests and the no-JavaScript tests pick the variant up from the registry.
+3. Run `pnpm build:templates`, then `pnpm check` and `pnpm test:layout`. The layout gate, the form tests and the no-JavaScript tests pick the variant up from the registry. Add the variant to the snapshot test in `render.test.tsx`.
 
 A variant's form must keep the offer form contract below, and the page must read and submit without JavaScript.
+
+### Shared pieces (`src/variants/shared/`)
+
+- `offer-form/OfferForm.tsx`: the offer sentence as a form, the island every variant uses. Props: `endpoint`, `sitekey`, `currency`, `minOffer`, `sentence` (from `sentenceParts`), `finePrint`, `marketplaceUrl?`. It brings no styles; a variant styles its class names: `.say` (the sentence), `.slot` and `.slot input` (the blanks, `aria-invalid` on error), `.hp` (honeypot, keep it off-screen), `.row` (holds `.fine`, the `.tag`s, `.cf-turnstile` and `.send`, in that order), `.fine` (fine print and the marketplace link), `.tag` (the one error message: `#e-form` while hydrated, `#offer-error-<reason>` without JavaScript), `.send`, `.sent` (the thank-you), `.shake` (replayed on a field with an error), `.sr-only`. Copy the `:target` rules, the `.tag` hiding rules and the `@keyframes` from any variant's `styles.css`. Its Turnstile widget (shown only when Cloudflare needs a click) is always `theme: "dark"`. Changing this file changes every variant's island bundle, and so Sky's snapshot.
+- `wordmark/fit.ts`: `fitWordmark(headline, face, options)` sizes a headline so it spans its container (in `cqi`), on one line or on balanced lines. A variant gives it its font's advance widths and kerning (`sky/mark.ts`, `gradient/mark.ts`, `editorial/masthead.ts`).
 
 ## The offer form contract
 

@@ -1,3 +1,5 @@
+import { fitWordmark, type WordmarkFit } from "../shared/wordmark/fit";
+
 // Advance widths of U+0020..U+007E in the catalog's Archivo at width 62, weight 800, in thousandths of an em.
 // Measured once from the subset file with canvas `measureText`; re-measure if `archivo-condensed` changes.
 const ADVANCES = [
@@ -112,78 +114,15 @@ const KERNING: Record<string, number> = {
   "-8": 30,
   "-9": 20,
 };
-const LETTER_SPACING = -20;
-// The share of the body's width a line may span. wrappr.app's ten glyphs are 3.638em and were set at 27cqi.
-const SPAN_CQI = 27 * 3.638;
-// Below this size one line stops reading as a wordmark, so a longer headline is set on several lines.
-const MIN_ONE_LINE_CQI = 10.5;
-// A short name would otherwise grow taller than the phone it is on.
-const MAX_CQI = 42;
+const FACE = { advances: ADVANCES, kerning: KERNING, letterSpacing: -20 };
+const OPTIONS = {
+  // wrappr.app's ten glyphs are 3.638em and were set at 27cqi.
+  spanCqi: 27 * 3.638,
+  minOneLineCqi: 10.5,
+  maxCqi: 42,
+};
 
-/** `lines` are the headline cut into rows (a trailing space stays with its row), never wrapped by the browser; `null` leaves an unmeasurable headline to wrap itself. */
-export type MarkFit = { fontSizeCqi: number; lines: string[] | null };
+export type MarkFit = WordmarkFit;
 
-/**
- * Sizes the wordmark so the headline spans the page at every width: on one line when that stays readable,
- * otherwise on the fewest even lines, broken after a hyphen, before a dot or at a space where one is near.
- */
-export function fitMark(headline: string): MarkFit {
-  const glyphs = [...headline];
-  if (!glyphs.every((glyph) => glyph.length === 1 && ADVANCES[glyph.charCodeAt(0) - 32] !== undefined)) {
-    // Glyphs from a fallback font: assume they are wide, and let the browser break the lines.
-    const em = glyphs.length * 0.7;
-    const lines = Math.max(1, Math.ceil((em * MIN_ONE_LINE_CQI) / SPAN_CQI));
-    return { fontSizeCqi: round(Math.min((SPAN_CQI * lines * 0.85) / em, MAX_CQI)), lines: null };
-  }
-  const total = width(headline);
-  const count = Math.max(1, Math.ceil((total * MIN_ONE_LINE_CQI) / SPAN_CQI));
-  const lines =
-    count === 1 ? [headline] : (balance(headline, count, true) ?? balance(headline, count, false) ?? [headline]);
-  const widest = Math.max(...lines.map((line) => width(line.trim())), 0.1);
-  return { fontSizeCqi: round(Math.min(SPAN_CQI / widest, MAX_CQI)), lines };
-}
-
-/** The set width of a run of measurable text, in em. */
-function width(text: string): number {
-  let units = 0;
-  for (let index = 0; index < text.length; index++) {
-    units +=
-      (ADVANCES[text.charCodeAt(index) - 32] ?? 0) + (KERNING[text.slice(index, index + 2)] ?? 0) + LETTER_SPACING;
-  }
-  return units / 1000;
-}
-
-/**
- * Splits text into `count` lines with the narrowest possible widest line. With `natural`, only at the places a
- * reader expects; it gives up (`undefined`) when those leave one line much wider than an even split would.
- */
-function balance(text: string, count: number, natural: boolean): string[] | undefined {
-  const breaks = [];
-  for (let index = 1; index < text.length; index++) {
-    const before = text[index - 1];
-    if (!natural || before === "-" || before === " " || text[index] === ".") breaks.push(index);
-  }
-  // best[k][j]: the narrowest widest line when the text up to breaks[j] is set on k + 1 lines
-  const ends = [...breaks, text.length];
-  const line = (from: number, to: number) => width(text.slice(from, to).trim());
-  let best = ends.map((end) => ({ widest: line(0, end), cuts: [] as number[] }));
-  for (let k = 1; k < count; k++) {
-    best = ends.map((end, j) => {
-      let choice = { widest: Number.POSITIVE_INFINITY, cuts: [] as number[] };
-      for (let i = 0; i < j; i++) {
-        const previous = best[i];
-        const cut = ends[i];
-        if (!previous || cut === undefined) continue;
-        const widest = Math.max(previous.widest, line(cut, end));
-        if (widest < choice.widest) choice = { widest, cuts: [...previous.cuts, cut] };
-      }
-      return choice;
-    });
-  }
-  const result = best.at(-1);
-  if (!result || !Number.isFinite(result.widest)) return undefined;
-  if (natural && result.widest > (width(text) / count) * 1.3) return undefined;
-  return [0, ...result.cuts].map((from, index) => text.slice(from, result.cuts[index] ?? text.length));
-}
-
-const round = (value: number) => Math.floor(value * 100) / 100;
+/** Sizes Sky's condensed wordmark so the headline spans the page at every width. */
+export const fitMark = (headline: string): MarkFit => fitWordmark(headline, FACE, OPTIONS);
