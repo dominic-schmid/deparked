@@ -1,4 +1,4 @@
-import type { ReleaseChange, ReleasePin, SetupEffect } from "@deparked/hosting";
+import type { ReleaseChange, ReleasePin, ReleaseStatus, SetupEffect } from "@deparked/hosting";
 import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
 import {
   AlertDialog,
@@ -12,13 +12,11 @@ import {
 } from "@deparked/ui/alert-dialog";
 import { Button } from "@deparked/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
-import { Checkbox } from "@deparked/ui/checkbox";
-import { Label } from "@deparked/ui/label";
 import { cn } from "@deparked/ui/lib/utils";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ExternalLink } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { runPublish } from "../../../components/editor/publish-loop";
 import { PageError, PagePending } from "../../../components/page";
 import { CredentialsRejected, type RowStatus, StatusIcon } from "../../../components/setup-runner";
@@ -48,7 +46,7 @@ export const Route = createFileRoute("/admin/_shell/settings/updates")({
 const VERSION_BUTTON = "h-auto min-h-9 py-2 whitespace-normal text-left [overflow-wrap:anywhere]";
 
 const DATABASE_NOTE =
-  "Database changes only go forward. If you roll back later, the database stays as the newer version left it; Deparked's database changes only add, so the earlier version keeps working with it. Your offers and settings stay either way.";
+  "Database changes only go forward: Deparked offers a rollback only while the earlier version can still run on your database. Your offers and settings stay either way.";
 
 function Checksum({ value, label }: { value: string; label: string }) {
   return (
@@ -102,7 +100,7 @@ function ChangeProgress(props: {
   view: UpdatesView;
   change: Pick<ReleaseChange, "kind" | "pin">;
   autoStart: boolean;
-  rollbackTo: ReleasePin | null;
+  rollback: ReleaseStatus["rollback"];
   onRollback: () => void;
 }) {
   const { view, change } = props;
@@ -178,7 +176,7 @@ function ChangeProgress(props: {
     const result = await runChange({
       target: version,
       running: view.running,
-      step: (state) => step({ data: { state } }),
+      step: (state) => step({ data: { state, expected: { kind: change.kind, pin: change.pin } } }),
       health,
       republish: () =>
         runPublish({
@@ -202,7 +200,20 @@ function ChangeProgress(props: {
     setOutcome(result);
     setRunning(false);
     await router.invalidate();
-  }, [finish, initialRows, mark, onEvent, publishStep, router, start, step, version, view.running]);
+  }, [
+    change.kind,
+    change.pin,
+    finish,
+    initialRows,
+    mark,
+    onEvent,
+    publishStep,
+    router,
+    start,
+    step,
+    version,
+    view.running,
+  ]);
 
   const once = useRef(false);
   useEffect(() => {
@@ -278,12 +289,15 @@ function ChangeProgress(props: {
         {!running && outcome?.status !== "done" ? (
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void go()}>{outcome === null ? "Continue" : "Retry"}</Button>
-            {props.rollbackTo !== null ? (
+            {props.rollback?.possible === true ? (
               <Button className={VERSION_BUTTON} variant="outline" onClick={props.onRollback}>
-                Roll back to {props.rollbackTo.version}
+                Roll back to {props.rollback.pin.version}
               </Button>
             ) : null}
           </div>
+        ) : null}
+        {!running && failed !== null && props.rollback !== null && !props.rollback.possible ? (
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{props.rollback.reason}</p>
         ) : null}
       </CardContent>
     </Card>
@@ -302,9 +316,8 @@ function UpdateAvailable(props: {
   const start = useServerFn(startUpdate);
   const [review, setReview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
-  const [checked, setChecked] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<{ message: string; credentialsRejected: boolean } | null>(null);
-  const checkboxId = useId();
   const pin = { version: latest.version, sha256: latest.sha256 };
 
   async function onReview() {
@@ -322,14 +335,11 @@ function UpdateAvailable(props: {
   }
 
   async function onInstall() {
-    if (!checked) {
-      setError({ message: "Tick the box once the checksum matches the release notes.", credentialsRejected: false });
-      return;
-    }
+    setConfirming(false);
     setBusy(true);
     setError(null);
     try {
-      const answer = await start({ data: pin });
+      const answer = await start({ data: { ...pin, confirm: true } });
       if (!answer.ok) setError(answer);
       else if (!answer.value.ok) setError({ message: answer.value.message, credentialsRejected: false });
       else props.onStarted(answer.value.change);
@@ -383,28 +393,56 @@ function UpdateAvailable(props: {
                 The admin is replaced while you use it. You stay logged in; the page reloads once the new version
                 answers.
               </p>
-              <p className="mt-2 text-muted-foreground">{DATABASE_NOTE}</p>
             </div>
-            {blocked ? null : (
-              <>
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    id={checkboxId}
-                    checked={checked}
-                    onCheckedChange={(value) => setChecked(value === true)}
-                    className="mt-0.5"
-                  />
-                  <Label htmlFor={checkboxId} className="text-sm leading-snug font-normal">
-                    The checksum above is the one in the release notes on GitHub.
-                  </Label>
-                </div>
-                <div>
-                  <Button className={VERSION_BUTTON} onClick={() => void onInstall()} aria-disabled={busy}>
-                    {busy ? "Starting…" : `Install Deparked ${latest.version}`}
-                  </Button>
-                </div>
-              </>
+            {review.rollback.possible ? (
+              <p className="text-sm text-muted-foreground">
+                You can roll back to {props.installed} afterwards. {DATABASE_NOTE}
+              </p>
+            ) : (
+              <Alert role="note">
+                <AlertTitle>No way back</AlertTitle>
+                <AlertDescription className="[overflow-wrap:anywhere]">{review.rollback.reason}</AlertDescription>
+              </Alert>
             )}
+            {blocked ? null : (
+              <div>
+                <Button className={VERSION_BUTTON} onClick={() => setConfirming(true)} aria-disabled={busy}>
+                  {busy ? "Starting…" : `Install Deparked ${latest.version}`}
+                </Button>
+              </div>
+            )}
+            <AlertDialog open={confirming} onOpenChange={setConfirming}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Install Deparked {latest.version}?</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="flex flex-col gap-2">
+                      <p>
+                        Deparked downloads it from the Deparked repository on GitHub and checks every file against the
+                        checksum above. That catches a download that was corrupted or altered on its way. It cannot tell
+                        whether the repository itself was compromised: install updates you trust.
+                      </p>
+                      <p>
+                        {review.rollback.possible
+                          ? `You can roll back to ${props.installed} afterwards.`
+                          : "This update cannot be rolled back."}
+                      </p>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Not now</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void onInstall();
+                    }}
+                  >
+                    Install {latest.version}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         ) : (
           <Problem title="This release cannot be installed" message={review.message} credentialsRejected={false} />
@@ -454,8 +492,8 @@ function RollbackDialog(props: {
           <AlertDialogTitle>Roll back to Deparked {props.target.version}?</AlertDialogTitle>
           <AlertDialogDescription>
             {props.target.version} is installed again in place of {props.installed}, and every page is published again
-            with it. The database stays as {props.installed} left it: Deparked's database changes only add, so{" "}
-            {props.target.version} keeps working with it. Offers and settings stay.
+            with it. The database stays as it is: {props.installed} did not change it in a way {props.target.version}{" "}
+            cannot run on. Offers and settings stay.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error === null ? null : (
@@ -513,10 +551,8 @@ function UpdatesPage() {
     view.running === unfinished.pin.version &&
     status.installed?.version === unfinished.pin.version;
 
-  // An update started on this page made the installed release the rollback target; the loaded view predates it.
-  const installedPin =
-    status.installed?.sha256 == null ? null : { version: status.installed.version, sha256: status.installed.sha256 };
-  const rollbackTo = started?.kind === "update" ? installedPin : status.rollbackTo;
+  // Fresh after every run: the page reloads its data when a change stops or ends.
+  const { rollback } = status;
 
   async function onCheck() {
     setChecking(true);
@@ -581,39 +617,45 @@ function UpdatesPage() {
           view={view}
           change={change}
           autoStart={started !== null || resume}
-          rollbackTo={change.kind === "update" ? rollbackTo : null}
+          rollback={change.kind === "update" ? rollback : null}
           onRollback={() => setRollbackOpen(true)}
         />
       ) : view.available && latest !== null && status.installed !== null ? (
         <UpdateAvailable latest={latest} installed={status.installed.version} onStarted={onStarted} />
       ) : null}
 
-      {status.rollbackTo !== null && change === null ? (
+      {rollback !== null && change === null ? (
         <Card>
           <CardHeader>
             <CardTitle>
               <h2>Roll back</h2>
             </CardTitle>
             <CardDescription>
-              Go back to Deparked {status.rollbackTo.version}, the version you had before the last update.
+              Go back to Deparked {rollback.pin.version}, the version you had before the last update.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <p className="text-sm text-muted-foreground">{DATABASE_NOTE}</p>
-            <div>
-              <Button className={VERSION_BUTTON} variant="outline" onClick={() => setRollbackOpen(true)}>
-                Roll back to {status.rollbackTo.version}
-              </Button>
-            </div>
+            {rollback.possible ? (
+              <>
+                <p className="text-sm text-muted-foreground">{DATABASE_NOTE}</p>
+                <div>
+                  <Button className={VERSION_BUTTON} variant="outline" onClick={() => setRollbackOpen(true)}>
+                    Roll back to {rollback.pin.version}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm [overflow-wrap:anywhere]">{rollback.reason}</p>
+            )}
           </CardContent>
         </Card>
       ) : null}
 
-      {rollbackTo !== null && status.installed !== null ? (
+      {rollback?.possible === true && status.installed !== null ? (
         <RollbackDialog
           open={rollbackOpen}
           onOpenChange={setRollbackOpen}
-          target={rollbackTo}
+          target={rollback.pin}
           installed={status.installed.version}
           onStarted={onStarted}
         />

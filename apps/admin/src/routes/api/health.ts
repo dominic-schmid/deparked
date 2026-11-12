@@ -4,8 +4,9 @@ import { readSession } from "../../server/request";
 
 const NO_STORE = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 
-// The health check an update waits for: a plain path every version serves the same way, so the page of the old
-// admin can ask the new one. It reads the database, and tells only a logged-in owner which release answers.
+// The health check an update waits for. A plain path, not a server function, so the page an older admin served
+// can still call it once a newer admin has replaced it, and learn which release answers. It reads the workspace
+// row (the database works), and tells the release only to a logged-in owner.
 export const Route = createFileRoute("/api/health")({
   server: {
     handlers: {

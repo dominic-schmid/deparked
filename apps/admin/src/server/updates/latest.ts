@@ -43,9 +43,54 @@ const text = (vars: Vars, name: string) => (typeof vars[name] === "string" ? (va
 
 /** Where releases are looked up and downloaded. The variables exist for tests on this machine only. */
 export function releaseLocation(vars: Vars) {
-  const latest = loopbackOverride(text(vars, "RELEASE_LATEST_URL")) ?? LATEST_URL;
+  const override = loopbackOverride(text(vars, "RELEASE_LATEST_URL"));
   const download = (loopbackOverride(text(vars, "RELEASE_DOWNLOAD_URL")) ?? DOWNLOAD_URL).replace(/\/+$/, "");
-  return { latest, releaseUrl: (version: string) => `${download}/v${version}` };
+  return {
+    latest: override ?? LATEST_URL,
+    /** True for the test override: asset links may then point at this machine. */
+    local: override !== undefined,
+    releaseUrl: (version: string) => `${download}/v${version}`,
+  };
+}
+
+/** GitHub's own hosts for release assets, or this machine under the test override. */
+function assetHostAllowed(value: string, local: boolean): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (local) return loopbackOverride(value) !== undefined;
+  return (
+    url.protocol === "https:" && (url.hostname === "github.com" || url.hostname.endsWith(".githubusercontent.com"))
+  );
+}
+
+/** GitHub's answer about one release, with its notes: far below this. */
+const MAX_RELEASE_JSON_BYTES = 1024 * 1024;
+
+/** The body as text, or null when it is larger than `maxBytes`. Nothing beyond is buffered. */
+async function readTextAtMost(response: Response, maxBytes: number): Promise<string | null> {
+  if (Number(response.headers.get("content-length") ?? "0") > maxBytes) {
+    await response.body?.cancel();
+    return null;
+  }
+  if (response.body === null) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let length = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    length += value.length;
+    if (length > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
 }
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;
@@ -55,8 +100,11 @@ const UNREADABLE = "GitHub's answer about the newest release could not be read. 
 
 async function hashFromFile(url: string, fetchFile: Fetch): Promise<string | null> {
   const response = await fetchFile(url, { headers: { "user-agent": "deparked-admin" } });
-  if (!response.ok) return null;
-  const line = (await response.text()).slice(0, MAX_SHA_FILE_BYTES);
+  if (!response.ok) {
+    await response.body?.cancel();
+    return null;
+  }
+  const line = (await readTextAtMost(response, MAX_SHA_FILE_BYTES)) ?? "";
   const hash = line.split(/\s/)[0]?.toLowerCase() ?? "";
   return SHA256.test(hash) ? hash : null;
 }
@@ -66,9 +114,10 @@ async function hashFromFile(url: string, fetchFile: Fetch): Promise<string | nul
  * one, the release's own release.json.sha256. Only reads; one or two requests.
  */
 export async function fetchLatestRelease(
-  url: string,
+  location: { latest: string; local: boolean },
   fetchFile: Fetch = (u, init) => fetch(u, init),
 ): Promise<LatestResult> {
+  const url = location.latest;
   let response: Response;
   try {
     response = await fetchFile(url, {
@@ -81,7 +130,8 @@ export async function fetchLatestRelease(
   if (!response.ok) return { ok: false, message: UNREACHABLE };
   let parsed: z.infer<typeof githubRelease>;
   try {
-    parsed = githubRelease.parse(await response.json());
+    const body = await readTextAtMost(response, MAX_RELEASE_JSON_BYTES);
+    parsed = githubRelease.parse(JSON.parse(body ?? ""));
   } catch {
     return { ok: false, message: UNREADABLE };
   }
@@ -92,6 +142,9 @@ export async function fetchLatestRelease(
   let sha256 = /^sha256:([0-9a-f]{64})$/.exec(manifest.digest ?? "")?.[1] ?? null;
   if (sha256 === null) {
     const file = parsed.assets.find((asset) => asset.name === "release.json.sha256");
+    if (file !== undefined && !assetHostAllowed(file.browser_download_url, location.local)) {
+      return { ok: false, message: UNREADABLE };
+    }
     try {
       sha256 = file === undefined ? null : await hashFromFile(file.browser_download_url, fetchFile);
     } catch {

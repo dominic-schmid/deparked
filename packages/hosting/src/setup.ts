@@ -193,6 +193,8 @@ export interface HubSetup {
     | {
         ok: true;
         steps: { id: string; title: string; status: "done" | "needed" | "blocked"; effects: SetupEffect[] }[];
+        /** Whether this update could be rolled back afterwards, and why not. */
+        rollback: { possible: boolean; reason: string };
       }
     | { ok: false; message: string }
   >;

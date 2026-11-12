@@ -38,7 +38,7 @@ async function view(force: boolean): Promise<updates.UpdatesView> {
     db,
     now,
     force,
-    fetchLatest: () => fetchLatestRelease(releaseLocation(vars()).latest),
+    fetchLatest: () => fetchLatestRelease(releaseLocation(vars())),
   });
   return {
     status,
@@ -63,18 +63,21 @@ export const checkForUpdates = createServerFn({ method: "POST" }).handler(async 
   return guarded(() => view(true));
 });
 
-/** What updating to the pin changes, step by step. Downloads and checks release.json only. */
+/**
+ * What updating to the shown pin changes, step by step, and whether it could be rolled back. The pin must be the
+ * newest release this admin found. Downloads and checks release.json only.
+ */
 export const previewUpdate = createServerFn({ method: "POST" })
   .validator(updates.pinSchema)
   .handler(async ({ data }) => {
     await requireSession();
-    return guarded(async () => (await hub()).previewUpdate(data));
+    return guarded(async () => updates.previewUpdate({ db: createDb(env.DB), hub: await hub(), pin: data }));
   });
 
-/** Starts the update to the pin the owner confirmed: it must be the newest release this admin found. */
+/** Starts the update the owner confirmed: its pin must be the newest release this admin found. */
 export const startUpdate = createServerFn({ method: "POST" })
-  .validator(updates.pinSchema)
-  .handler(async ({ data }) => {
+  .validator(updates.pinSchema.extend({ confirm: z.literal(true) }))
+  .handler(async ({ data: { confirm: _, ...data } }) => {
     await requireSession();
     return guarded(async () => updates.startUpdate({ db: createDb(env.DB), hub: await hub(), pin: data }));
   });
@@ -88,10 +91,15 @@ export const startRollback = createServerFn({ method: "POST" })
 
 /** One step of the running update or rollback per request. The order is the server's. */
 export const releaseStep = createServerFn({ method: "POST" })
-  .validator(z.object({ state: stateSchema }))
+  .validator(
+    z.object({
+      state: stateSchema,
+      expected: z.object({ kind: z.enum(["update", "rollback"]), pin: updates.pinSchema }),
+    }),
+  )
   .handler(async ({ data }) => {
     await requireSession();
-    return guarded(async () => (await hub()).releaseStep(data.state));
+    return guarded(async () => (await hub()).releaseStep(data.state, data.expected));
   });
 
 /** The end: only once the new admin answers this request and every page was published again by it. */
@@ -100,7 +108,7 @@ export const finishRelease = createServerFn({ method: "POST" }).handler(async ()
   return guarded(async () => {
     const setup = await hub();
     const { change } = await setup.releaseStatus();
-    const blocker = await updates.finishBlocker({ db: createDb(env.DB), change, running: running() });
+    const blocker = updates.finishBlocker(change, running());
     if (blocker !== null) return { ok: false as const, message: blocker };
     return setup.finishRelease();
   });

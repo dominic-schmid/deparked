@@ -6,11 +6,13 @@ import {
   type Db,
   d1Runner,
   getInstallState,
+  getReleaseState,
   getWorkspace,
   hitRateLimit,
   initInstallState,
   openOwnershipProof,
   updateInstallState,
+  updateReleaseState,
 } from "@deparked/db";
 import {
   adminUrl,
@@ -23,6 +25,7 @@ import {
   type Plan,
   type ProvisionContext,
   planInstallHub,
+  type Release,
   ReleaseError,
   releaseFromUrl,
   runNextStep,
@@ -148,11 +151,16 @@ interface Session {
   cf: CloudflareClient;
   ctx: ProvisionContext;
   plan: Plan;
+  /** The release this installer pins, already checked against the pin. */
+  release: Release;
+  sha256: string;
 }
 
-async function openSession(env: Env, input: { token: string; accountId: string; clientIp: string }): Promise<Session> {
-  const pin = releasePin(env);
-  if (pin === null) throw new Refusal("no-release", NO_RELEASE);
+/** The token is this account's and the owner's: the database is open to it. Needs no release. */
+async function openOwnerSession(
+  env: Env,
+  input: { token: string; accountId: string; clientIp: string },
+): Promise<{ db: Db; cf: CloudflareClient; ctx: ProvisionContext }> {
   const cf = client(env, input.token, input.accountId);
   const guard = await ensureRateLimits(env);
   await throttle(guard, input.clientIp);
@@ -163,7 +171,13 @@ async function openSession(env: Env, input: { token: string; accountId: string; 
     throw error;
   }
   const db = await prepareDatabase(env);
-  const ctx: ProvisionContext = { cf, db, now: Date.now };
+  return { db, cf, ctx: { cf, db, now: Date.now } };
+}
+
+async function openSession(env: Env, input: { token: string; accountId: string; clientIp: string }): Promise<Session> {
+  const pin = releasePin(env);
+  if (pin === null) throw new Refusal("no-release", NO_RELEASE);
+  const { db, cf, ctx } = await openOwnerSession(env, input);
   const release = releaseFromUrl({ baseUrl: releaseBaseUrl(env, pin), pinnedSha256: pin.sha256 });
   const manifest = await release.manifest();
   if (manifest.version !== pin.version) {
@@ -175,7 +189,14 @@ async function openSession(env: Env, input: { token: string; accountId: string; 
       `Deparked ${manifest.version} needs installer ${manifest.minInstallerVersion} or newer; this one is ${INSTALLER_VERSION}. Update your copy of the installer from the Deparked repository.`,
     );
   }
-  return { db, cf, ctx, plan: planInstallHub(ctx, { release, token: input.token }) };
+  return {
+    db,
+    cf,
+    ctx,
+    plan: planInstallHub(ctx, { release, token: input.token }),
+    release: manifest,
+    sha256: pin.sha256,
+  };
 }
 
 /** Turns what went wrong into an answer for the page. Unknown errors stay generic: they may name internals. */
@@ -276,7 +297,8 @@ export async function step(env: Env, input: StepRequest, clientIp: string): Prom
  */
 export async function rollback(env: Env, input: StepRequest, clientIp: string): Promise<StepResponse> {
   try {
-    const session = await openSession(env, { token: input.token, accountId: input.accountId, clientIp });
+    // The release to go back to is the one recorded in the database, not this installer's own.
+    const session = await openOwnerSession(env, { token: input.token, accountId: input.accountId, clientIp });
     if (input.next === 0) {
       const started = await beginRollback(session.ctx);
       if (!started.ok) return fail("release", started.message);
@@ -315,6 +337,18 @@ export async function finish(env: Env, input: FinishRequest, clientIp: string): 
     const url = await adminUrl(session.ctx);
     if (url === null)
       return fail("cloudflare", "Your account has no workers.dev address, so the admin cannot be reached.");
+    // An install from before the pin was recorded: this installer's pin is the installed release when the versions
+    // match, so Update can offer a rollback to it.
+    const installed = await getReleaseState(session.db);
+    if (
+      installed?.installedSha256 == null &&
+      (await getWorkspace(session.db))?.installedRelease === session.release.version
+    ) {
+      await updateReleaseState(session.db, {
+        installedSha256: session.sha256,
+        installedSchema: session.release.schema,
+      });
+    }
     const secret = await issueSetupSecret(session.ctx);
     await updateInstallState(session.db, { step: "done", stepStatus: "done", lastError: null, finishedAt: Date.now() });
     return { ok: true, adminUrl: `${url}/admin`, setupUrl: `${url}/admin/setup?secret=${secret}` };

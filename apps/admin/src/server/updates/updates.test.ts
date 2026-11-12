@@ -1,11 +1,12 @@
-import { finishDeployment, initWorkspace, insertDeployment } from "@deparked/db";
+import { initWorkspace } from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
 import type { HubSetup } from "@deparked/hosting";
 import { describe, expect, it } from "vitest";
 import { fetchLatestRelease, releaseLocation } from "./latest";
-import { finishBlocker, LATEST_TTL_MS, newer, refreshLatest, startUpdate } from "./updates";
+import { finishBlocker, LATEST_TTL_MS, newer, previewUpdate, refreshLatest, startUpdate } from "./updates";
 
 const SHA = "ab".repeat(32);
+const GITHUB = { latest: "https://api.github.com/repos/dominic-schmid/deparked/releases/latest", local: false };
 
 function github(body: unknown, status = 200) {
   const calls: string[] = [];
@@ -31,7 +32,7 @@ const asset = (name: string, digest?: string | null) => ({
 describe("the newest release", () => {
   it("takes the version from the tag and the hash from GitHub's digest of release.json", async () => {
     const { fetch, calls } = github(release([asset("release.json", `sha256:${SHA}`)]));
-    expect(await fetchLatestRelease("https://api.test/latest", fetch)).toEqual({
+    expect(await fetchLatestRelease(GITHUB, fetch)).toEqual({
       ok: true,
       release: { version: "1.2.0", sha256: SHA, notesUrl: expect.stringContaining("v1.2.0") },
     });
@@ -40,7 +41,7 @@ describe("the newest release", () => {
 
   it("falls back to the release's release.json.sha256 when GitHub has no digest", async () => {
     const { fetch, calls } = github(release([asset("release.json", null), asset("release.json.sha256")]));
-    expect(await fetchLatestRelease("https://api.test/latest", fetch)).toMatchObject({
+    expect(await fetchLatestRelease(GITHUB, fetch)).toMatchObject({
       ok: true,
       release: { sha256: SHA },
     });
@@ -48,22 +49,37 @@ describe("the newest release", () => {
   });
 
   it("says so in plain words when there is no release, no checksum or no answer", async () => {
-    expect(await fetchLatestRelease("u", github({}, 404).fetch)).toMatchObject({
+    expect(await fetchLatestRelease(GITHUB, github({}, 404).fetch)).toMatchObject({
       ok: false,
       message: expect.stringContaining("No Deparked release"),
     });
-    expect(await fetchLatestRelease("u", github(release([asset("release.json")])).fetch)).toMatchObject({
+    expect(await fetchLatestRelease(GITHUB, github(release([asset("release.json")])).fetch)).toMatchObject({
       ok: false,
       message: expect.stringContaining("no checksum"),
     });
-    expect(await fetchLatestRelease("u", github({ ...release([]), tag_name: "v1.2.0/../x" }).fetch)).toMatchObject({
+    expect(await fetchLatestRelease(GITHUB, github({ ...release([]), tag_name: "v1.2.0/../x" }).fetch)).toMatchObject({
       ok: false,
     });
     expect(
-      await fetchLatestRelease("u", async () => {
+      await fetchLatestRelease(GITHUB, async () => {
         throw new TypeError("offline");
       }),
     ).toMatchObject({ ok: false, message: expect.stringContaining("Could not reach GitHub") });
+  });
+
+  it("takes the checksum file only from GitHub's hosts, and refuses an oversized answer", async () => {
+    const elsewhere = {
+      ...asset("release.json.sha256"),
+      browser_download_url: "https://evil.example.com/release.json.sha256",
+    };
+    const { fetch, calls } = github(release([asset("release.json", null), elsewhere]));
+    expect(await fetchLatestRelease(GITHUB, fetch)).toMatchObject({ ok: false });
+    expect(calls).toHaveLength(1);
+    const huge = async () => new Response("x".repeat(2 * 1024 * 1024));
+    expect(await fetchLatestRelease(GITHUB, huge)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("could not be read"),
+    });
   });
 
   it("is looked up upstream; the variables only point at this machine", () => {
@@ -89,6 +105,8 @@ describe("the newest release", () => {
     expect(newer("1.10.0", "1.9.0")).toBe(true);
     expect(newer("1.2.0", "1.2.0")).toBe(false);
     expect(newer("0.0.2-e2e", "0.0.1-e2e")).toBe(true);
+    expect(newer("1.2.0", "1.2.0-rc.3")).toBe(true);
+    expect(newer("1.2.0-rc.3", "1.2.0")).toBe(false);
     expect(newer("1.0.0", "1.2.0")).toBe(false);
   });
 });
@@ -140,17 +158,32 @@ describe("checking and starting", () => {
     expect(started).toEqual([{ version: "1.2.0", sha256: SHA }]);
   });
 
-  it("finishes only once the new admin answers and every page was published again after the start", async () => {
-    const { db } = await createTestDb();
+  it("finishes only once the new admin answers the request itself", () => {
     const change = { kind: "update" as const, pin: { version: "1.2.0", sha256: SHA }, startedAt: 100, finished: false };
-    expect(await finishBlocker({ db, change: null, running: null })).toContain("No update");
-    expect(await finishBlocker({ db, change, running: "1.1.0" })).toContain("still runs 1.1.0");
-    expect(await finishBlocker({ db, change, running: "1.2.0" })).toContain("published again");
-    const before = await insertDeployment(db, { worker: "sites", kind: "update", now: 50 });
-    await finishDeployment(db, { id: before.id, status: "done", now: 60 });
-    expect(await finishBlocker({ db, change, running: "1.2.0" })).toContain("published again");
-    const after = await insertDeployment(db, { worker: "sites", kind: "update", now: 150 });
-    await finishDeployment(db, { id: after.id, status: "done", now: 160 });
-    expect(await finishBlocker({ db, change, running: "1.2.0" })).toBeNull();
+    expect(finishBlocker(null, null)).toContain("No update");
+    expect(finishBlocker(change, "1.1.0")).toContain("still runs 1.1.0");
+    expect(finishBlocker(change, "1.2.0")).toBeNull();
+    expect(finishBlocker(change, null)).toBeNull();
+  });
+
+  it("previews only the pin this admin found", async () => {
+    const { db } = await createTestDb();
+    await refreshLatest({
+      db,
+      now: 1,
+      force: true,
+      fetchLatest: async () => ({ ok: true, release: { version: "1.2.0", sha256: SHA, notesUrl: "u" } }),
+    });
+    const previewed: unknown[] = [];
+    const hub = {
+      previewUpdate: async (pin: unknown) => {
+        previewed.push(pin);
+        return { ok: false as const, message: "stub" };
+      },
+    } as unknown as HubSetup;
+    expect(await previewUpdate({ db, hub, pin: { version: "1.2.1", sha256: SHA } })).toMatchObject({ ok: false });
+    expect(previewed).toEqual([]);
+    await previewUpdate({ db, hub, pin: { version: "1.2.0", sha256: SHA } });
+    expect(previewed).toEqual([{ version: "1.2.0", sha256: SHA }]);
   });
 });
