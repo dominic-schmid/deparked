@@ -30,8 +30,7 @@ if (version === undefined || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version
   throw new Error("Pass --version x.y.z (or run on a v* tag).");
 }
 const out = resolve(ROOT, values.out);
-const filesUrl =
-  values["files-url"] ?? `https://raw.githubusercontent.com/${REPOSITORY}/v${version}/apps/sites/public`;
+const filesUrl = values["files-url"] ?? `https://raw.githubusercontent.com/${REPOSITORY}/v${version}/apps/sites/public`;
 
 const TYPES: Record<string, string> = {
   avif: "image/avif",
@@ -139,8 +138,9 @@ for (const pack of PACKS) {
     });
     offset += entry.content.length;
   }
-  writeFileSync(join(out, `deparked-${version}-${pack}.pack`), Buffer.concat(members.map((entry) => entry.content)));
-  packs.push({ name: pack, size: offset });
+  const bytes = Buffer.concat(members.map((entry) => entry.content));
+  writeFileSync(join(out, `deparked-${version}-${pack}.pack`), bytes);
+  packs.push({ name: pack, size: offset, sha256: createHash("sha256").update(bytes).digest("hex") });
 }
 
 const release = {
@@ -170,5 +170,7 @@ writeFileSync(join(out, "release.json"), json);
 const sha256 = createHash("sha256").update(json).digest("hex");
 writeFileSync(join(out, "release.json.sha256"), `${sha256}  release.json\n`);
 const total = packs.reduce((sum, pack) => sum + pack.size, 0);
-console.log(`Deparked ${version}: ${files.length} files, ${packs.length} packs, ${total} bytes in ${relative(ROOT, out)}/`);
-console.log(`release.json SHA-256 (pin this in apps/install/src/pin.ts): ${sha256}`);
+console.log(
+  `Deparked ${version}: ${files.length} files, ${packs.length} packs, ${total} bytes in ${relative(ROOT, out)}/`,
+);
+console.log(`release.json SHA-256 (pin it in apps/install/src/server/config.ts): ${sha256}`);

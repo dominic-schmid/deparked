@@ -55,7 +55,7 @@ export async function buildFakeRelease(version = "1.0.0", files = FAKE_FILES) {
       joined.set(bytes, at);
       at += bytes.length;
     }
-    packs.push({ name: pack, size: offset });
+    packs.push({ name: pack, size: offset, sha256: await sha256Hex(joined) });
     assets.set(packFileName({ version }, pack), joined);
   }
   const release: Release = {

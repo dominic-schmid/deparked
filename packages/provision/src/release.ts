@@ -32,7 +32,7 @@ const releaseSchema = z.object({
   /** Base URL that serves each catalog file at `<base><path>` without a redirect: the admin's `RELEASE_FILES_URL`. */
   catalogFilesUrl: z.url({ protocol: /^https?$/ }),
   tokenPermissions: z.array(z.object({ key: z.string(), type: z.enum(["read", "edit"]) })),
-  packs: z.array(z.object({ name: z.enum(PACKS), size: z.number().int().nonnegative() })),
+  packs: z.array(z.object({ name: z.enum(PACKS), size: z.number().int().nonnegative(), sha256 })),
   workers: z.object({
     sites: z.object({ compatibilityDate: z.string(), headers: z.string() }),
     admin: z.object({
@@ -92,24 +92,23 @@ export interface VerifiedFile extends ReleaseFile {
   content: Uint8Array;
 }
 
-/** Splits a downloaded pack into its files and checks each one's size and SHA-256 against `release.json`. */
+/**
+ * Checks a downloaded pack's size and SHA-256 against `release.json`, then splits it into its files. The files
+ * tile the pack (`parseRelease`), so the one hash covers every byte of every file: one digest instead of one per
+ * file keeps the admin's 2 MB inside Workers Free's CPU time.
+ */
 export async function unpack(release: Release, pack: PackName, bytes: Uint8Array): Promise<VerifiedFile[]> {
   const listed = release.packs.find((entry) => entry.name === pack);
   if (listed === undefined) throw new ReleaseError(`This release has no ${pack} files.`);
-  if (bytes.length !== listed.size) {
-    throw new ReleaseError(`${packFileName(release, pack)} has the wrong size: the download was cut short or altered.`);
+  const name = packFileName(release, pack);
+  if (bytes.length !== listed.size || (await sha256Hex(bytes)) !== listed.sha256) {
+    throw new ReleaseError(
+      `${name} does not match release.json: the download was cut short or altered. Retry; if it fails again, the release is broken.`,
+    );
   }
-  const files: VerifiedFile[] = [];
-  for (const file of release.files.filter((entry) => entry.pack === pack)) {
-    const content = bytes.subarray(file.offset, file.offset + file.size);
-    if ((await sha256Hex(content)) !== file.sha256) {
-      throw new ReleaseError(
-        `${file.path} in ${packFileName(release, pack)} does not match release.json: it was altered.`,
-      );
-    }
-    files.push({ ...file, content });
-  }
-  return files;
+  return release.files
+    .filter((entry) => entry.pack === pack)
+    .map((file) => ({ ...file, content: bytes.subarray(file.offset, file.offset + file.size) }));
 }
 
 /** Where the installer gets the release from. Every value it returns is already verified. */

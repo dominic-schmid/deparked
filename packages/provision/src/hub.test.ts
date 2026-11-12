@@ -178,7 +178,7 @@ describe("installing the hub", () => {
     const reports = await install(context);
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ outcome: "failed", step: { id: "download" } });
-    expect(reports[0]?.message).toContain("index.js in deparked-1.0.0-admin-modules.pack does not match release.json");
+    expect(reports[0]?.message).toContain("deparked-1.0.0-admin-modules.pack does not match release.json");
     expect(mutatingCalls(context.mock)).toEqual([]);
     expect(context.mock.state.scripts.size).toBe(0);
   });
