@@ -60,12 +60,16 @@ export function rateLimitSubject(ip: string): string {
 }
 
 /**
- * `login:<HMAC-SHA256(SESSION_KEY, subject)>`: the database never sees an IP address, and the hash cannot be
+ * `<scope>:<HMAC-SHA256(SESSION_KEY, subject)>`: the database never sees an IP address, and the hash cannot be
  * reversed by trying all addresses without the Worker secret.
  */
-export async function loginRateLimitKey(sessionKey: string, ip: string): Promise<string> {
+export async function rateLimitKey(scope: "login" | "offer", sessionKey: string, ip: string): Promise<string> {
   const mac = await crypto.subtle.sign("HMAC", await hmacKey(sessionKey), utf8(`ip\n${rateLimitSubject(ip)}`));
-  return `login:${toHex(new Uint8Array(mac))}`;
+  return `${scope}:${toHex(new Uint8Array(mac))}`;
+}
+
+export function loginRateLimitKey(sessionKey: string, ip: string): Promise<string> {
+  return rateLimitKey("login", sessionKey, ip);
 }
 
 export type SetupResult = { ok: true; token: string } | { ok: false; reason: "invalid_secret" };

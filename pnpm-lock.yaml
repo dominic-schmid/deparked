@@ -62,6 +62,9 @@ importers:
       '@deparked/hosting':
         specifier: workspace:*
         version: link:../../packages/hosting
+      '@deparked/hosting-cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/hosting-cloudflare
       '@deparked/templates':
         specifier: workspace:*
         version: link:../../packages/templates

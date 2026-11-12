@@ -207,6 +207,7 @@ export function OfferForm({
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify(body),
       });
+      // Cast, not annotated: under the Workers runtime types (the admin imports this package) `json()` is unknown.
       const result = (await response.json().catch(() => ({}))) as Partial<OfferResponse>;
       if (!response.ok) {
         const failed = result.ok === false ? result : undefined;

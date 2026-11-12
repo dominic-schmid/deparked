@@ -17,6 +17,7 @@
     "@deparked/config": "workspace:*",
     "@deparked/db": "workspace:*",
     "@deparked/hosting": "workspace:*",
+    "@deparked/hosting-cloudflare": "workspace:*",
     "@deparked/templates": "workspace:*",
     "@deparked/ui": "workspace:*",
     "@tanstack/react-router": "^1.170.46",

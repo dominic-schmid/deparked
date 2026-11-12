@@ -12,9 +12,17 @@
       "database_name": "deparked"
     }
   ],
-  // The session-signing key (HMAC). Local dev reads it from .dev.vars; the installer sets the real one.
+  // Offer emails. No fixed destination: the Worker may send to any verified Email Routing address of the account.
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
+  // Everything the Worker reads besides its bindings (README "Environment contract"). Local dev loads only the
+  // names listed here from .dev.vars; a missing one is a warning. The installer sets the real values, and one
+  // TURNSTILE_SECRET_<n> per widget.
   "secrets": {
-    "required": ["SESSION_KEY"]
+    "required": ["SESSION_KEY", "CF_API_TOKEN", "CF_ACCOUNT_ID", "TURNSTILE_SECRET_1"]
   },
   // Invocation logs record every request URL. The setup link carries its one-time secret in the query, so they
   // stay off; our own console logs are still collected.
