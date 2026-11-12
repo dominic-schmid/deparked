@@ -156,3 +156,38 @@ test("the owner edits a domain's headline, sees it in the preview and publishes 
   await page.goto(hostUrl(HOST));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(SHOWN);
 });
+
+test("every variant can be picked, and the gradient variant takes the gradient presets as backgrounds", async ({
+  login,
+  page,
+  db,
+  urls,
+}) => {
+  await seedDomain(db);
+  await login();
+  await page.goto(`${urls.admin}/admin/d/${HOST}`);
+  const designs = page.getByRole("radiogroup", { name: "Design" });
+  for (const name of ["Sky", "Gradient", "Editorial", "Mono", "Split"]) {
+    await expect(designs.getByRole("radio", { name })).toBeEnabled();
+  }
+  const backgrounds = page.getByRole("radiogroup", { name: "Background" });
+  await designs.getByRole("radio", { name: "Gradient" }).click();
+  // Sky's photo is not drawn by this design: the variant's own gradient replaces it.
+  await expect(backgrounds.getByRole("radio", { name: /^Dusk/ })).toBeChecked();
+  await expect(backgrounds.getByRole("radio", { name: /^Sky/ })).toBeDisabled();
+  for (const name of ["Dawn", "Tide", "Meadow", "Ember", "Dusk"]) {
+    await backgrounds.getByText(name, { exact: true }).click();
+    await expect(backgrounds.getByRole("radio", { name: new RegExp(`^${name}`) })).toBeChecked();
+  }
+  await expect
+    .poll(async () => {
+      const [stored] = await db.sql<{ draft_json: string }>("SELECT draft_json FROM config WHERE host = ?", HOST);
+      const draft = JSON.parse(stored?.draft_json ?? "{}");
+      return [draft.variant, draft.background];
+    })
+    .toEqual(["gradient", "dusk"]);
+  await expect(page.frameLocator(`iframe[title="Preview of ${HOST}"]`).locator(".field")).toHaveCSS(
+    "background-image",
+    /gradient/,
+  );
+});

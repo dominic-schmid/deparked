@@ -1,4 +1,5 @@
 import { type Config, type ConfigErrors, parseConfig } from "@deparked/config";
+import type { BackgroundOption, BackgroundUse } from "../../server/editor/editor";
 
 /** The editor's inputs, as the owner types them. `fromForm` turns them into a config for `parseConfig`. */
 export type EditorForm = {
@@ -140,4 +141,14 @@ export function changedFields(draft: Config, live: Config | null): string[] {
 /** The same config, whatever object it came from: what a saved draft is compared by. */
 export function configKey(config: Config): string {
   return JSON.stringify(config);
+}
+
+/**
+ * The background to keep when the owner picks a variant: the current one if the variant draws that kind, else the
+ * variant's own. A variant that draws none keeps it, so switching back restores it.
+ */
+export function backgroundForVariant(current: string, backgrounds: BackgroundOption[], uses: BackgroundUse): string {
+  if (uses === null) return current;
+  const kind = backgrounds.find((background) => background.id === current)?.kind;
+  return kind === uses.kind ? current : uses.fallback;
 }

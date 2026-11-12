@@ -110,6 +110,7 @@ export function EditorFields(props: FieldsProps) {
   const accentId = useId();
   const primaryId = useId();
   const contrastId = useId();
+  const uses = variants.find((variant) => variant.id === form.variant)?.uses ?? null;
 
   return (
     <fieldset disabled={props.disabled} className="flex min-w-0 flex-col gap-8 disabled:opacity-70">
@@ -147,40 +148,52 @@ export function EditorFields(props: FieldsProps) {
 
       <FieldSet>
         <FieldLegend>Background</FieldLegend>
+        {uses === null ? (
+          <FieldDescription>
+            This design draws no background: the one picked here is kept for other designs.
+          </FieldDescription>
+        ) : null}
         <RadioGroup
           aria-label="Background"
           value={form.background}
           onValueChange={(value) => onChange("background", value)}
           className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3 2xl:grid-cols-5"
         >
-          {backgrounds.map((background) => (
-            <label
-              key={background.id}
-              htmlFor={`${pickerId}-background-${background.id}`}
-              className="flex cursor-pointer flex-col gap-2 rounded-md border p-2 text-sm has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50"
-            >
-              <span
-                aria-hidden
-                className="block aspect-[16/9] w-full rounded-sm"
-                style={{ background: background.swatch }}
-              />
-              <span className="flex min-w-0 items-center gap-2">
-                <RadioGroupItem
-                  id={`${pickerId}-background-${background.id}`}
-                  value={background.id}
-                  className="sr-only"
+          {backgrounds.map((background) => {
+            const unused = uses !== null && uses.kind !== background.kind;
+            return (
+              <label
+                key={background.id}
+                htmlFor={`${pickerId}-background-${background.id}`}
+                className={cn(
+                  "flex flex-col gap-2 rounded-md border p-2 text-sm has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50",
+                  unused ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className="block aspect-[16/9] w-full rounded-sm"
+                  style={{ background: background.swatch }}
                 />
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate" title={background.label}>
-                    {background.label}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {background.kind === "image" ? "Photo" : "Gradient"}
+                <span className="flex min-w-0 items-center gap-2">
+                  <RadioGroupItem
+                    id={`${pickerId}-background-${background.id}`}
+                    value={background.id}
+                    disabled={unused}
+                    className="sr-only"
+                  />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate" title={background.label}>
+                      {background.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {unused ? "Not used by this design" : background.kind === "image" ? "Photo" : "Gradient"}
+                    </span>
                   </span>
                 </span>
-              </span>
-            </label>
-          ))}
+              </label>
+            );
+          })}
         </RadioGroup>
         <Problem id="background-error" message={shown.has("background") ? errors.background : undefined} />
       </FieldSet>

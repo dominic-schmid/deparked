@@ -66,7 +66,18 @@ function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 }
 
-export type VariantOption = { id: Variant; available: boolean; color: string; contrast: string };
+/**
+ * The kind of background a variant draws and the one it falls back to; null for a variant that draws none. A
+ * background of another kind is ignored by `render()`.
+ */
+export type BackgroundUse = { kind: "image" | "gradient"; fallback: string } | null;
+export type VariantOption = {
+  id: Variant;
+  available: boolean;
+  color: string;
+  contrast: string;
+  uses: BackgroundUse;
+};
 export type BackgroundOption = {
   id: string;
   kind: "image" | "gradient";
@@ -110,16 +121,16 @@ function readStored(json: string | null | undefined): Config | null | "unreadabl
 const titleCase = (id: string) => id.charAt(0).toUpperCase() + id.slice(1).replaceAll("-", " ");
 
 /** Every variant the schema names; `available` when this release's templates implement it. */
-export function variantOptions(): VariantOption[] {
-  const fallback = variants.sky;
+export function variantOptions(catalog: Catalog): VariantOption[] {
+  const photo = catalog.backgrounds[0]?.id;
   return VARIANTS.map((id) => {
-    const definition = variants[id];
-    return {
-      id,
-      available: definition !== undefined,
-      color: (definition ?? fallback).color,
-      contrast: (definition ?? fallback).contrast,
-    };
+    const definition = variants[id] ?? variants.sky;
+    const uses: BackgroundUse = definition.gradient
+      ? { kind: "gradient", fallback: definition.gradient }
+      : definition.backgroundSizes && photo !== undefined
+        ? { kind: "image", fallback: photo }
+        : null;
+    return { id, available: variants[id] !== undefined, color: definition.color, contrast: definition.contrast, uses };
   });
 }
 
@@ -186,7 +197,7 @@ export async function loadEditor(
       draft === "unreadable"
         ? `The saved draft could not be read, so the editor starts from ${liveConfig ? "the live page" : "the defaults"}. Your next change replaces it.`
         : null,
-    variants: variantOptions(),
+    variants: variantOptions(input.catalog),
     backgrounds: backgroundOptions(input.catalog),
     history: entries.flatMap((entry): HistoryItem[] => {
       const config = readStored(entry.json);

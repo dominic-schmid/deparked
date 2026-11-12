@@ -88,11 +88,25 @@ describe("loadEditor", () => {
   it("offers every variant of the schema and marks the ones this release renders", async () => {
     const editor = await loadEditor({ db, catalog, now }, HOST);
     expect(editor?.variants.map((variant) => variant.id)).toEqual([...VARIANTS]);
-    expect(editor?.variants.find((variant) => variant.id === "sky")?.available).toBe(true);
+    expect(editor?.variants.every((variant) => variant.available)).toBe(true);
     expect(editor?.backgrounds.map((background) => background.id)).toEqual([
       ...catalog.backgrounds.map((background) => background.id),
       ...catalog.gradients.map((gradient) => gradient.id),
     ]);
+  });
+
+  it("says which backgrounds each variant uses, so the gradient variant picks the gradient presets", async () => {
+    const editor = await loadEditor({ db, catalog, now }, HOST);
+    const uses = Object.fromEntries(editor?.variants.map((variant) => [variant.id, variant.uses]) ?? []);
+    expect(uses).toEqual({
+      sky: { kind: "image", fallback: "sky" },
+      gradient: { kind: "gradient", fallback: "dusk" },
+      editorial: null,
+      mono: null,
+      split: { kind: "image", fallback: "sky" },
+    });
+    const gradients = editor?.backgrounds.filter((background) => background.kind === "gradient").map(({ id }) => id);
+    expect(gradients).toEqual(["dawn", "tide", "meadow", "ember", "dusk"]);
   });
 
   it("returns null for a host that is not managed", async () => {

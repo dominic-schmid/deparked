@@ -20,6 +20,7 @@ import { revertTo, saveDraft, startPublish, stepPublish } from "../../server/pub
 import type { StartResult } from "../../server/publish/pipeline";
 import { EditorFields } from "./fields";
 import {
+  backgroundForVariant,
   changedFields,
   configKey,
   type EditorForm,
@@ -209,6 +210,10 @@ export function Editor(props: { data: EditorData }) {
   function update<K extends FormField>(field: K, value: EditorForm[K]) {
     setForm((previous) => {
       const next = { ...previous, [field]: value };
+      if (field === "variant") {
+        const uses = data.variants.find((candidate) => candidate.id === value)?.uses ?? null;
+        next.background = backgroundForVariant(previous.background, data.backgrounds, uses);
+      }
       if (field === "variant" && !previous.accentOn) {
         const colors = colorsOf(data, value as string);
         next.accentPrimary = colors.color;

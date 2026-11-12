@@ -1,13 +1,37 @@
 import { CONFIG_VERSION, defaultConfig, parseConfig } from "@deparked/config";
 import { describe, expect, it } from "vitest";
 import type { StartResult, StepResult } from "../../server/publish/pipeline";
-import { changedFields, configKey, errorsByField, fieldOf, fromForm, normalize, readAmount, toForm } from "./form";
+import {
+  backgroundForVariant,
+  changedFields,
+  configKey,
+  errorsByField,
+  fieldOf,
+  fromForm,
+  normalize,
+  readAmount,
+  toForm,
+} from "./form";
 import { progressText, revertWroteDraft, runPublish, STALL_STEPS, waitUntilFree } from "./publish-loop";
 
 const COLORS = { color: "#7f9fbf", contrast: "#ffffff" };
 const PROGRESS = { uploaded: 0, pending: 0, remainingHosts: 0, requests: 0 };
 
 describe("the editor form", () => {
+  it("swaps the background for one the picked variant draws, and keeps it for a variant that draws none", () => {
+    const backgrounds = [
+      { id: "sky", kind: "image" as const, label: "Sky", swatch: "" },
+      { id: "dawn", kind: "gradient" as const, label: "Dawn", swatch: "" },
+      { id: "tide", kind: "gradient" as const, label: "Tide", swatch: "" },
+    ];
+    const gradient = { kind: "gradient" as const, fallback: "dawn" };
+    const photo = { kind: "image" as const, fallback: "sky" };
+    expect(backgroundForVariant("sky", backgrounds, gradient)).toBe("dawn");
+    expect(backgroundForVariant("tide", backgrounds, gradient)).toBe("tide");
+    expect(backgroundForVariant("tide", backgrounds, photo)).toBe("sky");
+    expect(backgroundForVariant("tide", backgrounds, null)).toBe("tide");
+  });
+
   it("round-trips a config without changing it", () => {
     const config = { ...defaultConfig(), marketplaceUrl: "https://example.net/listing" };
     const parsed = parseConfig(fromForm(toForm(config, COLORS), CONFIG_VERSION));
