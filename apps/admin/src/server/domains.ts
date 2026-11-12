@@ -12,6 +12,7 @@ import {
 } from "@deparked/db";
 import { z } from "zod";
 import { rangeStart } from "./analytics";
+import { type NoSiteReason, noSiteReason } from "./analytics-shape";
 import { type OfferMail, offerMail } from "./notify-default";
 
 export const hostSchema = z.string().trim().toLowerCase().min(1).max(253);
@@ -48,6 +49,8 @@ export async function loadDomainSummaries(db: Db): Promise<DomainSummary[]> {
 export type DomainOverview = DomainSummary & {
   /** Whether its offers are emailed, and if not why. */
   mail: OfferMail;
+  /** Why it has no Web Analytics site; null when it has one. */
+  noSite: NoSiteReason | null;
   offers: number;
   newOffers: number;
   /** Offers over the 30 days the visits cover: the conversion is these over the visits. */
@@ -77,6 +80,7 @@ export async function loadOverview(db: Db, now: number): Promise<DomainOverview[
       host: domain.host,
       status: displayStatus(domain, verified),
       mail: offerMail(domain.notifyEmail, addresses),
+      noSite: domain.analyticsSiteTag === null ? noSiteReason(domain) : null,
       offers: stat?.total ?? 0,
       newOffers: stat?.newCount ?? 0,
       recentOffers: stat?.recentCount ?? 0,
