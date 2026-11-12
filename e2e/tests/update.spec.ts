@@ -67,14 +67,16 @@ test("updates from one release to the next from Settings, republishes every page
   await expect(page.getByText(releases[TEST_RELEASE_NEXT] ?? "missing", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Review the update" }).click();
   await expect(page.getByRole("heading", { name: "What will change" })).toBeVisible();
-  await expect(page.getByText(/Database changes only go forward/)).toBeVisible();
+  // Same schema as A: the preview says the update can be rolled back.
+  await expect(page.getByText(`You can roll back to ${TEST_RELEASE} afterwards.`)).toBeVisible();
 
-  const install = page.getByRole("button", { name: `Install Deparked ${TEST_RELEASE_NEXT}` });
-  await install.click();
-  await expect(page.getByRole("alert")).toContainText("Tick the box");
+  await page.getByRole("button", { name: `Install Deparked ${TEST_RELEASE_NEXT}` }).click();
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toContainText("cannot tell whether the repository itself was compromised");
+  await confirm.getByRole("button", { name: "Not now" }).click();
   expect(await db.sql("SELECT change_kind FROM release_state")).toEqual([{ change_kind: null }]);
-  await page.getByLabel("The checksum above is the one in the release notes on GitHub.").check();
-  await install.click();
+  await page.getByRole("button", { name: `Install Deparked ${TEST_RELEASE_NEXT}` }).click();
+  await confirm.getByRole("button", { name: `Install ${TEST_RELEASE_NEXT}` }).click();
 
   const started = Date.now();
   await expect(page.getByText(`Deparked ${TEST_RELEASE_NEXT} is installed`)).toBeVisible({ timeout: 60_000 });
@@ -97,7 +99,7 @@ test("updates from one release to the next from Settings, republishes every page
     await page.getByRole("button", { name: `Roll back to ${TEST_RELEASE}` }).click();
     await expect(dialog).toBeVisible({ timeout: 1000 });
   }).toPass();
-  await expect(dialog).toContainText("The database stays as");
+  await expect(dialog).toContainText("The database stays as it is");
   await dialog.getByRole("button", { name: "Roll back" }).click();
   await expect(page.getByText(`Deparked ${TEST_RELEASE} is installed`)).toBeVisible({ timeout: 60_000 });
   expect(release()).toBe(TEST_RELEASE);
