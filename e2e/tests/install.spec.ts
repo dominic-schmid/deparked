@@ -36,7 +36,7 @@ test("installs from a real release through to the admin's setup link", async ({ 
   await page.getByLabel("Password", { exact: true }).fill("a-long-new-password");
   await page.getByLabel("Repeat password").fill("a-long-new-password");
   await page.getByRole("button", { name: "Create password" }).click();
-  await page.waitForURL(`${urls.admin}/admin`);
+  await page.waitForURL(`${urls.admin}/admin/welcome`);
 
   // Afterwards the installer says so, and offers a new link instead of a second install.
   await page.goto(urls.install);

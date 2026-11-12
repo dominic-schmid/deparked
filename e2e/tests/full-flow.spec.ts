@@ -1,7 +1,7 @@
 import { expect, TEST_RELEASE, TEST_TOKEN, test } from "../fixtures";
 
 // The v1 acceptance flow, one piece handing over to the next with nothing seeded in between: install, password,
-// notify address, add a domain, edit and publish, a visitor's offer, the inbox and the mail.
+// the first-run wizard (notify address, first domain), edit and publish, a visitor's offer, the inbox and the mail.
 const HOST = "example.com";
 const OWNER = "owner@example.com";
 const PASSWORD = "a-long-new-password";
@@ -48,35 +48,48 @@ test("install, set up, add a domain, publish it, take an offer and read it in th
     await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await page.getByLabel("Repeat password").fill(PASSWORD);
     await page.getByRole("button", { name: "Create password" }).click();
-    await page.waitForURL(`${urls.admin}/admin`);
-    await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
+    await page.waitForURL(`${urls.admin}/admin/welcome`);
   });
 
-  await test.step("add a notify address and verify it", async () => {
-    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Settings" }).click();
+  await test.step("the wizard: where offers go, verified while it waits", async () => {
+    await expect(page.getByRole("heading", { level: 1, name: "Where should offers go?" })).toBeVisible();
     await page.getByLabel("Email address").fill(OWNER);
-    await page.getByRole("button", { name: "Add address" }).click();
-    await expect(page.getByText(`Verification email sent to ${OWNER}`)).toBeVisible();
+    await page.getByRole("button", { name: "Send verification email" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Check your inbox" })).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: OWNER })).toContainText("Pending");
+    // A reload resumes the wizard where it was.
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Check your inbox" })).toBeVisible();
     mock.verifyAddress(OWNER);
-    await page.getByRole("button", { name: "Check now" }).click();
-    await expect(page.getByRole("listitem").filter({ hasText: OWNER })).not.toContainText("Pending");
+    await page.getByRole("button", { name: "I clicked the link" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Offers will reach you" })).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: OWNER })).toContainText("Verified");
+    await page.getByRole("button", { name: "Next: add a domain" }).click();
   });
 
-  await test.step("add the domain from the Cloudflare account", async () => {
-    await page.goto(`${urls.admin}/admin`);
-    await page.getByRole("main").getByRole("link", { name: "Add domain" }).click();
+  await test.step("the wizard: add the first domain from the Cloudflare account", async () => {
+    await expect(page.getByRole("heading", { level: 1, name: "Add your first domain" })).toBeVisible();
     await page
       .getByRole("list", { name: "Domains you can add" })
       .getByRole("button", { name: /example\.com/ })
       .click();
     await page.getByRole("button", { name: `Add ${HOST}` }).click();
     await expect(page.getByRole("heading", { name: `${HOST} is set up` })).toBeVisible({ timeout: 30_000 });
+    // With a domain the wizard is over.
+    await page.goto(`${urls.admin}/admin/welcome`);
+    await page.waitForURL(`${urls.admin}/admin`);
+    await expect(page.getByRole("heading", { name: "All domains" })).toBeVisible();
   });
 
   await test.step("send the domain's offers to the verified address", async () => {
     await page.goto(`${urls.admin}/admin/d/${HOST}/settings`);
-    await page.getByLabel("Send offers to").click();
-    await page.getByRole("option", { name: OWNER }).click();
+    // A click before the page hydrates opens nothing: click until the list is open.
+    const option = page.getByRole("option", { name: OWNER });
+    await expect(async () => {
+      if (!(await option.isVisible())) await page.getByLabel("Send offers to").click();
+      await expect(option).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+    await option.click();
     await expect(page.getByText(`Offers for ${HOST} go to ${OWNER}.`)).toBeVisible();
   });
 

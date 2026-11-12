@@ -7,6 +7,7 @@ import { NEW_PASSWORD_ERRORS, oneOf, PASSWORD_HINT } from "../../../components/m
 import { completeSetup } from "../../../server/auth/account";
 import { checkNewPassword, PASSWORD_MIN_LENGTH } from "../../../server/auth/password";
 import { clearedSetupSecretCookie, readSetupSecret, sessionCookie } from "../../../server/auth/session";
+import { afterSetupPath, loadOnboarding } from "../../../server/onboarding";
 import { authRequest, badForm, readForm, readSession, seeOther } from "../../../server/request";
 
 const ERRORS = {
@@ -36,7 +37,11 @@ export const Route = createFileRoute("/admin/setup/")({
         }
         const { db, sessionKey, url, now } = authRequest(request);
         const result = await completeSetup(db, { secret: fromLink ?? pasted, password, sessionKey, now });
-        if (result.ok) return seeOther("/admin", sessionCookie(url, result.token), clearedSetupSecretCookie(url));
+        if (result.ok) {
+          const { addresses, domainCount } = await loadOnboarding(db);
+          const next = afterSetupPath({ addressCount: addresses.length, domainCount });
+          return seeOther(next, sessionCookie(url, result.token), clearedSetupSecretCookie(url));
+        }
         // A double submit: the first request already used the secret and logged this browser in.
         if ((await readSession(request)).session !== null) return seeOther("/admin");
         return seeOther("/admin/setup?error=invalid_secret", clearedSetupSecretCookie(url));

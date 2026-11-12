@@ -64,7 +64,7 @@ function NotOnCloudflare() {
 }
 
 /** Step 1: the domains of the Cloudflare account that Deparked does not manage yet. */
-function DomainPicker() {
+export function DomainPicker() {
   const navigate = useNavigate();
   const list = useServerFn(listAccountDomains);
   const searchId = useId();

@@ -95,13 +95,13 @@ describe("add", () => {
     expect((await addNotifyAddress(db, hosting, { email: SECOND, now: NOW + 6 * 3_600_000 + 10 })).ok).toBe(true);
   });
 
-  test("a host failure is reported and nothing is stored", async () => {
+  test("a rejected token is reported as such, and nothing is stored", async () => {
     const { db, hosting } = await setup();
     hosting.failNext("notifyAddresses", new HostingError("credentials-rejected", "Cloudflare refused the token."));
 
     const result = await addNotifyAddress(db, hosting, { email: SECOND, now: NOW });
 
-    expect(result).toEqual({ ok: false, message: "Cloudflare refused the token." });
+    expect(result).toEqual({ ok: false, message: "Cloudflare refused the token.", credentialsRejected: true });
     expect(await getNotifyAddress(db, SECOND)).toBeUndefined();
   });
 
@@ -203,7 +203,8 @@ describe("remove", () => {
 
     expect(await removeNotifyAddress(db, hosting, { email: SECOND })).toEqual({
       ok: false,
-      message: "Cloudflare did not answer.",
+      message: "Cloudflare did not answer just now, so nothing was changed. Try again in a minute.",
+      detail: "Cloudflare did not answer.",
     });
     expect(await getNotifyAddress(db, SECOND)).toBeDefined();
   });

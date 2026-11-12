@@ -14,6 +14,7 @@ import { Route as AdminShellRouteImport } from './routes/admin/_shell'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminLogoutRouteImport } from './routes/admin/logout'
 import { Route as AdminOffersDotcsvRouteImport } from './routes/admin/offers[.]csv'
+import { Route as AdminWelcomeRouteImport } from './routes/admin/welcome'
 import { Route as ApiOfferRouteImport } from './routes/api/offer'
 import { Route as AdminShellIndexRouteImport } from './routes/admin/_shell/index'
 import { Route as AdminShellAddRouteImport } from './routes/admin/_shell/add'
@@ -56,6 +57,11 @@ const AdminLogoutRoute = AdminLogoutRouteImport.update({
 const AdminOffersDotcsvRoute = AdminOffersDotcsvRouteImport.update({
   id: '/admin/offers.csv',
   path: '/admin/offers.csv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminWelcomeRoute = AdminWelcomeRouteImport.update({
+  id: '/admin/welcome',
+  path: '/admin/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOfferRoute = ApiOfferRouteImport.update({
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/welcome': typeof AdminWelcomeRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/add': typeof AdminShellAddRoute
   '/admin/inbox': typeof AdminShellInboxRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/welcome': typeof AdminWelcomeRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/add': typeof AdminShellAddRoute
   '/admin/inbox': typeof AdminShellInboxRoute
@@ -209,6 +217,7 @@ export interface FileRoutesById {
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
+  '/admin/welcome': typeof AdminWelcomeRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/_shell/add': typeof AdminShellAddRoute
   '/admin/_shell/inbox': typeof AdminShellInboxRoute
@@ -236,6 +245,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/admin/welcome'
     | '/api/offer'
     | '/admin/add'
     | '/admin/inbox'
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/admin/welcome'
     | '/api/offer'
     | '/admin/add'
     | '/admin/inbox'
@@ -283,6 +294,7 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/logout'
     | '/admin/offers.csv'
+    | '/admin/welcome'
     | '/api/offer'
     | '/admin/_shell/add'
     | '/admin/_shell/inbox'
@@ -309,6 +321,7 @@ export interface RootRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   AdminLogoutRoute: typeof AdminLogoutRoute
   AdminOffersDotcsvRoute: typeof AdminOffersDotcsvRoute
+  AdminWelcomeRoute: typeof AdminWelcomeRoute
   ApiOfferRoute: typeof ApiOfferRoute
   AdminSettingsLogoutEverywhereRoute: typeof AdminSettingsLogoutEverywhereRoute
   AdminSetupDoneRoute: typeof AdminSetupDoneRoute
@@ -350,6 +363,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/offers.csv'
       fullPath: '/admin/offers.csv'
       preLoaderRoute: typeof AdminOffersDotcsvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/welcome': {
+      id: '/admin/welcome'
+      path: '/admin/welcome'
+      fullPath: '/admin/welcome'
+      preLoaderRoute: typeof AdminWelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/offer': {
@@ -544,6 +564,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   AdminLogoutRoute: AdminLogoutRoute,
   AdminOffersDotcsvRoute: AdminOffersDotcsvRoute,
+  AdminWelcomeRoute: AdminWelcomeRoute,
   ApiOfferRoute: ApiOfferRoute,
   AdminSettingsLogoutEverywhereRoute: AdminSettingsLogoutEverywhereRoute,
   AdminSetupDoneRoute: AdminSetupDoneRoute,

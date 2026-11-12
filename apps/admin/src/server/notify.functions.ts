@@ -1,11 +1,12 @@
 import { env } from "cloudflare:workers";
 import { createDb } from "@deparked/db";
-import { type HostingAdapter, HostingError } from "@deparked/hosting";
+import type { HostingAdapter } from "@deparked/hosting";
 import { createServerFn } from "@tanstack/react-start";
 import { hostSchema } from "./domains";
 import { getHosting } from "./hosting";
 import {
   addNotifyAddress,
+  failed,
   loadNotifyAddresses,
   type NotifyResult,
   notifyEmailSchema,
@@ -21,8 +22,7 @@ async function withHosting(run: (hosting: HostingAdapter) => Promise<NotifyResul
   try {
     return await run(getHosting());
   } catch (error) {
-    if (error instanceof HostingError) return { ok: false, message: error.message };
-    throw error;
+    return failed(error);
   }
 }
 
