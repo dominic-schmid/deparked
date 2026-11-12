@@ -313,6 +313,52 @@ describe("publishing a draft", () => {
     await expectInSync();
   });
 
+  async function addCatalogFiles(count: number): Promise<void> {
+    const files = [];
+    for (let index = 0; index < count; index += 1) {
+      const path = `/catalog/img/${index}.avif`;
+      const content = new TextEncoder().encode(`image ${index}`);
+      releaseFiles.set(path, content);
+      files.push({ path, hash: await contentHash(path, content), size: content.length, contentType: "image/avif" });
+    }
+    const font = await listSiteFilesByHost(db, null);
+    await replaceSiteFiles(db, { host: null, files: [...font, ...files], now: time });
+  }
+
+  it("60 missing catalog files in one upload bucket finish in a few steps within the budget", async () => {
+    ctx = { ...ctx, hosting: createFakeHosting({ batchSize: 100 }) };
+    await addCatalogFiles(60);
+    await addDomain(A);
+    const id = await start({ host: A, kind: "draft" });
+
+    const steps: StepResult[] = [];
+    for (let guard = 0; guard < 6 && steps.at(-1)?.status !== "done"; guard += 1) {
+      const before = releaseRequests.length;
+      const step = await stepPublish(ctx, id);
+      steps.push(step);
+      expect(step.status).not.toBe("failed");
+      expect(step.progress.uploaded).toBeGreaterThan(0);
+      expect(step.progress.requests).toBeLessThanOrEqual(STEP_REQUEST_BUDGET);
+      expect(releaseRequests.length - before).toBeLessThanOrEqual(step.progress.requests);
+    }
+
+    expect(steps.at(-1)?.status).toBe("done");
+    expect(new Set(releaseRequests).size).toBe(61);
+  });
+
+  it("a step that cannot upload anything fails in plain words and frees the lock", async () => {
+    await addDomain(A);
+    const id = await start({ host: A, kind: "draft" });
+    ctx.hosting.publish = async () => ({ done: false, uploaded: [], pending: 5, requests: 1 });
+
+    const step = await stepPublish(ctx, id);
+
+    expect(step).toMatchObject({ status: "failed", progress: { uploaded: 0 } });
+    expect(step.message).toMatch(/without sending a file/);
+    expect(await getPublishLock(db)).toBeUndefined();
+    expect((await stepPublish(ctx, id)).status).toBe("failed");
+  });
+
   it("stores the published config as the draft, so nothing differs right after a publish", async () => {
     await addDomain(A, null);
     // A draft as an older admin may have stored it: same config, other formatting.
