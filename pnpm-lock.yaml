@@ -32,6 +32,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@deparked/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@deparked/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -63,6 +66,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.3.0
         version: 6.3.0(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       tailwindcss:
         specifier: ^4.3.5
         version: 4.3.5

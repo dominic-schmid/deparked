@@ -11,6 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminLoginRouteImport } from './routes/admin/login'
+import { Route as AdminLogoutRouteImport } from './routes/admin/logout'
+import { Route as AdminSettingsLogoutEverywhereRouteImport } from './routes/admin/settings/logout-everywhere'
+import { Route as AdminSettingsPasswordRouteImport } from './routes/admin/settings/password'
+import { Route as AdminSetupIndexRouteImport } from './routes/admin/setup/index'
+import { Route as AdminSetupDoneRouteImport } from './routes/admin/setup/done'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +28,111 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/admin/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminLogoutRoute = AdminLogoutRouteImport.update({
+  id: '/admin/logout',
+  path: '/admin/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSettingsLogoutEverywhereRoute =
+  AdminSettingsLogoutEverywhereRouteImport.update({
+    id: '/admin/settings/logout-everywhere',
+    path: '/admin/settings/logout-everywhere',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdminSettingsPasswordRoute = AdminSettingsPasswordRouteImport.update({
+  id: '/admin/settings/password',
+  path: '/admin/settings/password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSetupIndexRoute = AdminSetupIndexRouteImport.update({
+  id: '/admin/setup/',
+  path: '/admin/setup/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSetupDoneRoute = AdminSetupDoneRouteImport.update({
+  id: '/admin/setup/done',
+  path: '/admin/setup/done',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin/login': typeof AdminLoginRoute
+  '/admin/logout': typeof AdminLogoutRoute
   '/admin/': typeof AdminIndexRoute
+  '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
+  '/admin/settings/password': typeof AdminSettingsPasswordRoute
+  '/admin/setup/done': typeof AdminSetupDoneRoute
+  '/admin/setup/': typeof AdminSetupIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin/login': typeof AdminLoginRoute
+  '/admin/logout': typeof AdminLogoutRoute
   '/admin': typeof AdminIndexRoute
+  '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
+  '/admin/settings/password': typeof AdminSettingsPasswordRoute
+  '/admin/setup/done': typeof AdminSetupDoneRoute
+  '/admin/setup': typeof AdminSetupIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin/login': typeof AdminLoginRoute
+  '/admin/logout': typeof AdminLogoutRoute
   '/admin/': typeof AdminIndexRoute
+  '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
+  '/admin/settings/password': typeof AdminSettingsPasswordRoute
+  '/admin/setup/done': typeof AdminSetupDoneRoute
+  '/admin/setup/': typeof AdminSetupIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin/'
+  fullPaths:
+    | '/'
+    | '/admin/login'
+    | '/admin/logout'
+    | '/admin/'
+    | '/admin/settings/logout-everywhere'
+    | '/admin/settings/password'
+    | '/admin/setup/done'
+    | '/admin/setup/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin'
-  id: '__root__' | '/' | '/admin/'
+  to:
+    | '/'
+    | '/admin/login'
+    | '/admin/logout'
+    | '/admin'
+    | '/admin/settings/logout-everywhere'
+    | '/admin/settings/password'
+    | '/admin/setup/done'
+    | '/admin/setup'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin/login'
+    | '/admin/logout'
+    | '/admin/'
+    | '/admin/settings/logout-everywhere'
+    | '/admin/settings/password'
+    | '/admin/setup/done'
+    | '/admin/setup/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminLoginRoute: typeof AdminLoginRoute
+  AdminLogoutRoute: typeof AdminLogoutRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminSettingsLogoutEverywhereRoute: typeof AdminSettingsLogoutEverywhereRoute
+  AdminSettingsPasswordRoute: typeof AdminSettingsPasswordRoute
+  AdminSetupDoneRoute: typeof AdminSetupDoneRoute
+  AdminSetupIndexRoute: typeof AdminSetupIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,22 +151,71 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/logout': {
+      id: '/admin/logout'
+      path: '/admin/logout'
+      fullPath: '/admin/logout'
+      preLoaderRoute: typeof AdminLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings/logout-everywhere': {
+      id: '/admin/settings/logout-everywhere'
+      path: '/admin/settings/logout-everywhere'
+      fullPath: '/admin/settings/logout-everywhere'
+      preLoaderRoute: typeof AdminSettingsLogoutEverywhereRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings/password': {
+      id: '/admin/settings/password'
+      path: '/admin/settings/password'
+      fullPath: '/admin/settings/password'
+      preLoaderRoute: typeof AdminSettingsPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/setup/': {
+      id: '/admin/setup/'
+      path: '/admin/setup'
+      fullPath: '/admin/setup/'
+      preLoaderRoute: typeof AdminSetupIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/setup/done': {
+      id: '/admin/setup/done'
+      path: '/admin/setup/done'
+      fullPath: '/admin/setup/done'
+      preLoaderRoute: typeof AdminSetupDoneRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminLoginRoute: AdminLoginRoute,
+  AdminLogoutRoute: AdminLogoutRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminSettingsLogoutEverywhereRoute: AdminSettingsLogoutEverywhereRoute,
+  AdminSettingsPasswordRoute: AdminSettingsPasswordRoute,
+  AdminSetupDoneRoute: AdminSetupDoneRoute,
+  AdminSetupIndexRoute: AdminSetupIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }
