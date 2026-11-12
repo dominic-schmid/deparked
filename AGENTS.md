@@ -55,6 +55,8 @@ The owner wants brief, objective answers, clarifying questions on complex tasks,
 - One package: `pnpm --filter @deparked/<name> typecheck` or `test`. Tests sit next to the code as `src/**/*.test.ts`.
 - `pnpm --filter @deparked/admin dev` (or `build`): the admin on local workerd with a local D1.
 - `pnpm build:install`: rebuilds the committed `apps/install/dist/worker.js` from `apps/install/src`. `pnpm check:install-fresh` fails if it is stale; run both after touching the installer or a package it imports.
+- `pnpm test:e2e`: Playwright (Chromium) against the three Workers on local workerd, one local D1 and the `packages/cf` mock. No credentials; runs in CI. How to write a test: [e2e/README.md](e2e/README.md).
+- `pnpm test:e2e:real`: the same suite against the real account on `deparked-test-*` resources. Never in CI; refuses to run without `DEPARKED_E2E_REAL=1` and the variables it prints.
 - `pnpm dry-run`: builds the admin, then `wrangler deploy --dry-run` for all three Workers. No credentials needed.
 - Packages are consumed as TypeScript source (`exports` → `src/index.ts`), no build step. Add a dependency with `pnpm --filter @deparked/<name> add <dep>`; another package with `add @deparked/<other> --workspace`.
 - `apps/install` must install with plain npm: no `workspace:` dependencies in its `package.json`. Its source reaches `@deparked/*` through `tsconfig.json` paths and esbuild bundles them in.
