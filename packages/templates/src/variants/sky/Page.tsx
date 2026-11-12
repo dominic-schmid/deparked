@@ -2,9 +2,9 @@ import { fillDomain, sentenceParts } from "@deparked/config";
 import type { CSSProperties } from "react";
 import type { CatalogBackground } from "../../catalog";
 import { Island } from "../../island";
+import { OfferForm } from "../shared/offer-form/OfferForm";
 import type { PageProps } from "../types";
 import { fitMark } from "./mark";
-import { OfferForm } from "./OfferForm";
 
 export function Page({ config, host, background, sitekey, offerEndpoint }: PageProps) {
   const headline = fillDomain(config.headline, host);
