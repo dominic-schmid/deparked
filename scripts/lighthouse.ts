@@ -1,18 +1,19 @@
-// The landers' Lighthouse gate (DOM-357): every registered variant, rendered from the default config, on mobile and
-// desktop. Fails below SEO 100 or performance 95, at an LCP of 1.5 s or more, a CLS of 0.01 or more, or on a font
+// The landers' Lighthouse gate (DOM-357): every registered variant, rendered from the default config, on mobile
+// (mid-range 4G, below) and desktop (Lighthouse's desktop preset). Fails below SEO 100 or performance 95, at an LCP of 1.5 s or more, a CLS of 0.01 or more, or on a font
 // from another origin. HTML and island sizes are checked by the templates' Vitest budgets.
 //
-//   node scripts/lighthouse.ts [--variant gradient]
+//   node scripts/lighthouse.ts [--variant gradient] [--reports <dir>]   (--reports keeps each full report as JSON)
 //
 // Runs Playwright's Chromium (never downloads one) against a local server. `example.com` resolves to that server, so
 // the canonical URL, robots.txt and sitemap are the published ones. Turnstile's script is blocked: it is a third
 // party loaded after the page, and CI cannot reach it.
-import { existsSync, readFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import type { AddressInfo } from "node:net";
 import { extname, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { gzipSync } from "node:zlib";
 import { chromium } from "@playwright/test";
 import * as chromeLauncher from "chrome-launcher";
 import lighthouse from "lighthouse";
@@ -26,6 +27,22 @@ const SITEKEY = "1x00000000000000000000AA";
 
 const GATES = { seo: 1, performance: 0.95, lcpMs: 1500, cls: 0.01 };
 
+/**
+ * "LCP under 1.5 s on mid-range 4G" (decision doc section 9; DOM-357 states the 1.5 s). Lighthouse has no preset of
+ * that name: its mobile default is "Slow 4G" (150 ms, 1.6 Mbit/s). Mid-range 4G here is Chrome DevTools' "Fast 4G"
+ * network (60 ms round trip, 9 Mbit/s down, 1.5 Mbit/s up) on Lighthouse's mid-tier phone (CPU 4x slower than the
+ * desktop that calibrates it). Simulated throttling, as Lighthouse does by default.
+ */
+const MID_RANGE_4G = {
+  rttMs: 60,
+  throughputKbps: 9000,
+  requestLatencyMs: 60 * 2.75,
+  downloadThroughputKbps: 9000 * 0.9,
+  uploadThroughputKbps: 1500 * 0.9,
+  cpuSlowdownMultiplier: 4,
+};
+const mobileConfig = { extends: "lighthouse:default", settings: { throttling: MID_RANGE_4G } };
+
 const TYPES: Record<string, string> = {
   ".avif": "image/avif",
   ".webp": "image/webp",
@@ -34,7 +51,7 @@ const TYPES: Record<string, string> = {
   ".json": "application/json",
 };
 
-const { values } = parseArgs({ options: { variant: { type: "string" } } });
+const { values } = parseArgs({ options: { variant: { type: "string" }, reports: { type: "string" } } });
 
 await bundleRenderer();
 const { render, variants, catalog, defaultConfig } = createRequire(import.meta.url)(
@@ -43,23 +60,28 @@ const { render, variants, catalog, defaultConfig } = createRequire(import.meta.u
 const ids = Object.keys(variants).filter((id) => values.variant === undefined || id === values.variant);
 if (ids.length === 0) throw new Error(`No variant ${values.variant}.`);
 
+// Cloudflare compresses text assets for browsers that accept it; serving them raw would overstate every download.
+const COMPRESSED = new Set(["text/html", "text/plain", "text/javascript", "application/json"]);
+
+function send(request: IncomingMessage, response: ServerResponse, type: string, body: Buffer | string, cache = "") {
+  const headers: Record<string, string> = { "content-type": type, ...(cache === "" ? {} : { "cache-control": cache }) };
+  const gzip = COMPRESSED.has(type.split(";")[0] ?? "") && /\bgzip\b/.test(request.headers["accept-encoding"] ?? "");
+  response.writeHead(200, gzip ? { ...headers, "content-encoding": "gzip", vary: "accept-encoding" } : headers);
+  response.end(gzip ? gzipSync(body) : body);
+}
+
 let files: Record<string, string> = {};
 const server = createServer((request, response) => {
   const path = new URL(request.url ?? "/", "http://localhost").pathname;
   const page = path === "/" ? files["index.html"] : files[path.slice(1)];
   if (page !== undefined) {
-    const type = path === "/" ? "text/html; charset=utf-8" : "text/plain; charset=utf-8";
-    response.writeHead(200, { "content-type": type }).end(page);
+    send(request, response, path === "/" ? "text/html; charset=utf-8" : "text/plain; charset=utf-8", page);
     return;
   }
   const file = resolve(PUBLIC, `.${path}`);
   if (path.startsWith("/catalog/") && file.startsWith(`${PUBLIC}/catalog/`) && existsSync(file)) {
-    response
-      .writeHead(200, {
-        "content-type": TYPES[extname(file)] ?? "application/octet-stream",
-        "cache-control": "public, max-age=31536000, immutable",
-      })
-      .end(readFileSync(file));
+    const type = TYPES[extname(file)] ?? "application/octet-stream";
+    send(request, response, type, readFileSync(file), "public, max-age=31536000, immutable");
     return;
   }
   response.writeHead(404).end();
@@ -94,10 +116,14 @@ try {
           blockedUrlPatterns: ["*challenges.cloudflare.com*"],
           logLevel: "error",
         },
-        form === "desktop" ? desktopConfig : undefined,
+        form === "desktop" ? desktopConfig : mobileConfig,
       );
       if (run === undefined) throw new Error(`Lighthouse returned nothing for ${variant} on ${form}.`);
       const { categories, audits } = run.lhr;
+      if (values.reports !== undefined) {
+        mkdirSync(values.reports, { recursive: true });
+        writeFileSync(resolve(values.reports, `${variant}-${form}.json`), JSON.stringify(run.lhr));
+      }
       const requests = (audits["network-requests"]?.details as { items?: { url: string; resourceType?: string }[] })
         ?.items;
       results.push({

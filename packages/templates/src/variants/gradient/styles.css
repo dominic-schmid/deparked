@@ -446,10 +446,11 @@
     translate: 2px 0;
   }
 }
-/* starts a hair above invisible, so the largest paint is timed from the first frame */
+/* the content is on screen from the first frame, so the largest paint is when it really appears: the entrance
+   brings it into focus and place instead of fading it in from invisible */
 @keyframes enter {
   from {
-    opacity: 0.01;
+    filter: blur(5px);
     translate: 0 16px;
   }
 }

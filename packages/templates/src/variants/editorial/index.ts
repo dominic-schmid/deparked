@@ -6,7 +6,11 @@ import { css } from "./styles.generated";
 export const editorial: VariantDefinition = {
   Page,
   css,
-  fonts: [{ id: "newsreader", preload: true }, { id: "newsreader-italic" }, { id: "archivo" }],
+  fonts: [
+    { id: "newsreader", preload: true },
+    { id: "newsreader-italic", preload: true },
+    { id: "archivo", preload: true },
+  ],
   color: "#f4efe6",
   darkColor: "#15130f",
   colorScheme: "light dark",
