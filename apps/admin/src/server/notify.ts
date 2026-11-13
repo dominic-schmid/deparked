@@ -253,7 +253,7 @@ export async function removeNotifyAddress(
       ok: true,
       message:
         next === null
-          ? `${removed} ${names} ${users.length === 1 ? "has" : "have"} no address for offers now: they wait in the inbox.`
+          ? `${removed} ${names} ${users.length === 1 ? "has" : "have"} no address for offers now: they wait under Offers.`
           : `${removed} Offers for ${names} go to ${next} now.`,
     };
   } catch (error) {

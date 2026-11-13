@@ -102,7 +102,7 @@ function OffersCopy(props: {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-muted-foreground">
-        Uninstall deletes the admin, so the inbox goes with it. Keep a copy of your offers first.
+        Uninstall deletes the admin, so your offers go with it. Keep a copy of your offers first.
       </p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Button asChild variant="outline">

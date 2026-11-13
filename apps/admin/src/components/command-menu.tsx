@@ -1,14 +1,14 @@
 import { type CommandItem, CommandPalette } from "@deparked/ui/arc/command-palette";
 import { Dialog, DialogContent } from "@deparked/ui/arc/dialog";
 import { useNavigate } from "@tanstack/react-router";
-import { Globe, Inbox, LogOut, Plus, Search, Settings } from "lucide-react";
+import { Globe, HandCoins, LogOut, Plus, Search, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { DomainSummary } from "../server/domains";
 import { StatusDot, statusLabel } from "./status";
 
 const PAGES = [
   { to: "/admin", label: "Domains", icon: <Globe className="size-4" />, keywords: ["home", "all domains"] },
-  { to: "/admin/inbox", label: "Offers", icon: <Inbox className="size-4" />, keywords: ["inbox"] },
+  { to: "/admin/offers", label: "Offers", icon: <HandCoins className="size-4" />, keywords: ["inbox", "buyers"] },
   { to: "/admin/settings", label: "Settings", icon: <Settings className="size-4" />, keywords: ["password"] },
   { to: "/admin/add", label: "Add a domain", icon: <Plus className="size-4" />, keywords: ["new"] },
 ] as const;

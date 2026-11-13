@@ -54,6 +54,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   setOfferEmailStatus: [[{ id: "01", emailStatus: "sent", notifiedTo: NOTIFY, now: NOW }]],
   countNewOffers: [[], [HOST]],
   offerStatsForHosts: [[[HOST, "other.example"]], [[HOST], NOW]],
+  offerOrdinals: [[["01", "02"]]],
 
   listNotifyAddresses: [[]],
   getNotifyAddress: [[NOTIFY]],

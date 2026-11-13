@@ -41,7 +41,7 @@ export function NotifyPicker(props: { host: string; current: string | null; addr
       <CardHeader>
         <CardTitle>Where offers go</CardTitle>
         <CardDescription>
-          Every offer is kept in the inbox, and emailed to this address. Only verified addresses can get it.
+          Every offer is kept under Offers, and emailed to this address. Only verified addresses can get it.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

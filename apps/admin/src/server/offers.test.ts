@@ -8,7 +8,9 @@ import {
   exportFilename,
   exportOffers,
   INBOX_PAGE_SIZE,
+  loadOffer,
   loadOffers,
+  offerBackPath,
   offerPageSchema,
   offerStatusChangeSchema,
   offersCsv,
@@ -72,6 +74,38 @@ describe("inbox pages", () => {
     expect(page.offers.map((offer) => offer.name)).toEqual(["Buyer 1", "Buyer 2", "Buyer 0", "Buyer 3"]);
     expect(offerPageSchema.safeParse({ sort: "cheapest" }).success).toBe(false);
   });
+
+  test("each offer says where it stands on its domain", async () => {
+    const db = await seeded();
+    for (const [index, amountMinor] of [250_000, 850_000, 120_000].entries()) {
+      await insertOffer(db, { offer: { ...buyer, amountMinor, name: `Buyer ${index}` }, now: NOW + index });
+    }
+    const page = await loadOffers(db, {});
+    expect(page.offers.map((offer) => [offer.name, offer.context])).toEqual([
+      ["Buyer 2", { ordinal: 3, total: 3, bestAmountMinor: 850_000, bestCurrency: "USD" }],
+      ["Buyer 1", { ordinal: 2, total: 3, bestAmountMinor: 850_000, bestCurrency: "USD" }],
+      ["Buyer 0", { ordinal: 1, total: 3, bestAmountMinor: 850_000, bestCurrency: "USD" }],
+    ]);
+    const oldest = page.offers.at(-1);
+    expect(await loadOffer(db, oldest?.id ?? "")).toEqual(oldest);
+    expect(await loadOffer(db, "missing")).toBeNull();
+    expect((await loadOffers(db, { status: "ignored" })).offers).toEqual([]);
+  });
+});
+
+describe("the way back from the no-JavaScript status form", () => {
+  test.each([
+    ["/admin/offers", "/admin/offers"],
+    ["/admin/offers?status=new&offer=01ABC", "/admin/offers?status=new&offer=01ABC"],
+    ["/admin/d/example.com/offers?sort=highest", "/admin/d/example.com/offers?sort=highest"],
+    ["/admin/offers?host=example.com", "/admin/offers?host=example.com"],
+    ["https://evil.example/admin/offers", "/admin/offers"],
+    ["//evil.example/admin/offers", "/admin/offers"],
+    ["/admin/offers/../settings", "/admin/offers"],
+    ["/admin/offers?x=1#frag", "/admin/offers"],
+    ["/admin/settings", "/admin/offers"],
+    [undefined, "/admin/offers"],
+  ])("%s goes to %s", (value, path) => expect(offerBackPath(value)).toBe(path));
 });
 
 describe("CSV export", () => {

@@ -54,7 +54,7 @@ function NewOffersCount({ count }: { count: number }) {
 /** Domains, Offers, Settings as one row of pills. The section the page belongs to is filled. */
 function MainNav({ newOffers }: { newOffers: number }) {
   const path = useRouterState({ select: (state) => state.location.pathname });
-  const section = path.startsWith("/admin/inbox")
+  const section = /^\/admin\/(offers|inbox)(\/|$)/.test(path)
     ? "offers"
     : path.startsWith("/admin/settings")
       ? "settings"
@@ -68,7 +68,7 @@ function MainNav({ newOffers }: { newOffers: number }) {
       <Link to="/admin" activeOptions={{ exact: true }} className={PILL} aria-current={current("domains")}>
         Domains
       </Link>
-      <Link to="/admin/inbox" className={PILL} aria-current={current("offers")}>
+      <Link to="/admin/offers" className={PILL} aria-current={current("offers")}>
         Offers
         <NewOffersCount count={newOffers} />
       </Link>
@@ -130,7 +130,12 @@ function AccountMenu({ email, onLogOut }: { email: string | null; onLogOut: () =
   const navigate = useNavigate();
   return (
     <UserMenu
-      user={{ name: "Owner", email: email ?? "No address for offers yet" }}
+      // The workspace knows no name; the address offers go to is what identifies its owner.
+      user={
+        email === null
+          ? { name: "Owner", email: "No address for offers yet" }
+          : { name: email, email: "Offers are emailed here" }
+      }
       theme={theme}
       onThemeChange={setTheme}
       items={[

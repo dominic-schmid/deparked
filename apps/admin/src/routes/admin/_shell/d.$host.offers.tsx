@@ -1,63 +1,102 @@
 import { OFFER_SORTS, OFFER_STATUSES, type OfferSort, type OfferStatus } from "@deparked/db";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Button } from "@deparked/ui/button";
+import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { HandCoins, SearchX } from "lucide-react";
 import { oneOf } from "../../../components/messages";
-import { ExportButton, NoOffers, OfferList, SortSelect, STATUS_FILTERS } from "../../../components/offer-list";
-import { PageError, PagePending } from "../../../components/page";
+import { filteredEmptyTitle, offerParam } from "../../../components/offer-copy";
+import { NoOffers, OfferFilters, OffersPending, OffersView } from "../../../components/offer-list";
+import { PageError } from "../../../components/page";
 import { getOffers } from "../../../server/offers.functions";
 
 export const Route = createFileRoute("/admin/_shell/d/$host/offers")({
-  validateSearch: (search): { status?: OfferStatus | undefined; sort?: OfferSort | undefined } => ({
+  validateSearch: (
+    search,
+  ): { status?: OfferStatus | undefined; sort?: OfferSort | undefined; offer?: string | undefined } => ({
     status: oneOf(search.status, OFFER_STATUSES),
     sort: oneOf(search.sort, OFFER_SORTS),
+    offer: offerParam(search.offer),
   }),
-  loaderDeps: ({ search }) => search,
-  loader: ({ params, deps }) => getOffers({ data: { host: params.host, status: deps.status, sort: deps.sort } }),
+  loaderDeps: ({ search }) => ({ status: search.status, sort: search.sort }),
+  loader: ({ params, deps, location }) =>
+    getOffers({
+      data: { host: params.host, ...deps, selected: offerParam(new URLSearchParams(location.searchStr).get("offer")) },
+    }),
   component: DomainOffersPage,
-  pendingComponent: PagePending,
+  pendingComponent: OffersPending,
   errorComponent: PageError,
 });
 
-const FILTER_LINK =
-  "rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current=page]:bg-secondary aria-[current=page]:text-foreground";
+const domainRoute = Route.parentRoute;
 
 function DomainOffersPage() {
   const { host } = Route.useParams();
-  const { status, sort } = Route.useSearch();
-  const first = Route.useLoaderData();
+  const search = Route.useSearch();
+  const data = Route.useLoaderData();
+  const { domain } = domainRoute.useLoaderData();
   const navigate = useNavigate({ from: Route.fullPath });
-  const filter = { host, status };
-  return (
-    <>
-      <div className="mb-4 sm:max-w-xs">
-        <SortSelect
-          value={sort}
-          onChange={(next) => void navigate({ search: (previous) => ({ ...previous, sort: next }) })}
-        />
-      </div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <nav aria-label="Filter by status" className="flex flex-wrap gap-1">
-          {STATUS_FILTERS.map((item) => (
-            <Link
-              key={item.label}
-              to="/admin/d/$host/offers"
-              params={{ host }}
-              search={{ status: item.status, sort }}
-              activeOptions={{ exact: true, includeSearch: true }}
-              className={FILTER_LINK}
-            >
-              {item.label}
+  const back = useRouterState({ select: (state) => `${state.location.pathname}${state.location.searchStr}` });
+  const query = { host, status: search.status, sort: search.sort };
+
+  const live = domain.status === "live" || domain.status === "email_pending";
+  const empty = !data.anyOffers ? (
+    <NoOffers
+      icon={<HandCoins className="size-6" strokeWidth={1.5} />}
+      title={`No offers for ${host} yet`}
+      description={
+        live
+          ? "Its page is live and takes offers. Each one shows up here, and in your email, the moment a visitor sends it."
+          : "Offers come from its for-sale page once that page is live."
+      }
+      action={
+        live ? (
+          <Button asChild variant="outline" size="lg">
+            <a href={`https://${host}/`} target="_blank" rel="noreferrer">
+              See the page as visitors do
+            </a>
+          </Button>
+        ) : (
+          <Button asChild variant="accent" size="lg">
+            <Link to="/admin/d/$host" params={{ host }}>
+              Open the page editor
             </Link>
-          ))}
-        </nav>
-        <ExportButton filter={filter} />
-      </div>
-      <OfferList
-        key={`${host}|${status ?? ""}|${sort ?? ""}`}
-        first={first}
-        filter={{ ...filter, sort }}
+          </Button>
+        )
+      }
+    />
+  ) : (
+    <NoOffers
+      icon={<SearchX className="size-6" strokeWidth={1.5} />}
+      title={filteredEmptyTitle({ status: search.status })}
+      description="Other offers for this domain are under another status."
+      action={
+        <Button asChild variant="outline" size="lg">
+          <Link to="/admin/d/$host/offers" params={{ host }}>
+            Show all its offers
+          </Link>
+        </Button>
+      }
+    />
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      {data.anyOffers ? (
+        <OfferFilters
+          query={query}
+          newCount={data.newCount}
+          path={`/admin/d/${host}/offers`}
+          onChange={(next) => void navigate({ search: { status: next.status, sort: next.sort } })}
+        />
+      ) : null}
+      <OffersView
+        key={`${search.status ?? ""}|${search.sort ?? ""}`}
+        data={data}
+        query={query}
+        selectedId={search.offer}
         showHost={false}
-        empty={<NoOffers filtered={status !== undefined} />}
+        back={back}
+        empty={empty}
       />
-    </>
+    </div>
   );
 }

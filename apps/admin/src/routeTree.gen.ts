@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminShellRouteImport } from './routes/admin/_shell'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminLogoutRouteImport } from './routes/admin/logout'
+import { Route as AdminOfferStatusRouteImport } from './routes/admin/offer-status'
 import { Route as AdminOffersDotcsvRouteImport } from './routes/admin/offers[.]csv'
 import { Route as AdminWelcomeRouteImport } from './routes/admin/welcome'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
@@ -20,6 +21,7 @@ import { Route as ApiOfferRouteImport } from './routes/api/offer'
 import { Route as AdminShellIndexRouteImport } from './routes/admin/_shell/index'
 import { Route as AdminShellAddRouteImport } from './routes/admin/_shell/add'
 import { Route as AdminShellInboxRouteImport } from './routes/admin/_shell/inbox'
+import { Route as AdminShellOffersRouteImport } from './routes/admin/_shell/offers'
 import { Route as AdminShellSettingsRouteImport } from './routes/admin/_shell/settings'
 import { Route as AdminSettingsLogoutEverywhereRouteImport } from './routes/admin/settings/logout-everywhere'
 import { Route as AdminSetupIndexRouteImport } from './routes/admin/setup/index'
@@ -55,6 +57,11 @@ const AdminLogoutRoute = AdminLogoutRouteImport.update({
   path: '/admin/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminOfferStatusRoute = AdminOfferStatusRouteImport.update({
+  id: '/admin/offer-status',
+  path: '/admin/offer-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminOffersDotcsvRoute = AdminOffersDotcsvRouteImport.update({
   id: '/admin/offers.csv',
   path: '/admin/offers.csv',
@@ -88,6 +95,11 @@ const AdminShellAddRoute = AdminShellAddRouteImport.update({
 const AdminShellInboxRoute = AdminShellInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
+  getParentRoute: () => AdminShellRoute,
+} as any)
+const AdminShellOffersRoute = AdminShellOffersRouteImport.update({
+  id: '/offers',
+  path: '/offers',
   getParentRoute: () => AdminShellRoute,
 } as any)
 const AdminShellSettingsRoute = AdminShellSettingsRouteImport.update({
@@ -172,12 +184,14 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminShellRouteWithChildren
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
+  '/admin/offer-status': typeof AdminOfferStatusRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
   '/admin/welcome': typeof AdminWelcomeRoute
   '/api/health': typeof ApiHealthRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/add': typeof AdminShellAddRoute
   '/admin/inbox': typeof AdminShellInboxRoute
+  '/admin/offers': typeof AdminShellOffersRoute
   '/admin/settings': typeof AdminShellSettingsRouteWithChildren
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
@@ -198,12 +212,14 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
+  '/admin/offer-status': typeof AdminOfferStatusRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
   '/admin/welcome': typeof AdminWelcomeRoute
   '/api/health': typeof ApiHealthRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/add': typeof AdminShellAddRoute
   '/admin/inbox': typeof AdminShellInboxRoute
+  '/admin/offers': typeof AdminShellOffersRoute
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
   '/admin': typeof AdminShellIndexRoute
@@ -224,12 +240,14 @@ export interface FileRoutesById {
   '/admin/_shell': typeof AdminShellRouteWithChildren
   '/admin/login': typeof AdminLoginRoute
   '/admin/logout': typeof AdminLogoutRoute
+  '/admin/offer-status': typeof AdminOfferStatusRoute
   '/admin/offers.csv': typeof AdminOffersDotcsvRoute
   '/admin/welcome': typeof AdminWelcomeRoute
   '/api/health': typeof ApiHealthRoute
   '/api/offer': typeof ApiOfferRoute
   '/admin/_shell/add': typeof AdminShellAddRoute
   '/admin/_shell/inbox': typeof AdminShellInboxRoute
+  '/admin/_shell/offers': typeof AdminShellOffersRoute
   '/admin/_shell/settings': typeof AdminShellSettingsRouteWithChildren
   '/admin/settings/logout-everywhere': typeof AdminSettingsLogoutEverywhereRoute
   '/admin/setup/done': typeof AdminSetupDoneRoute
@@ -253,12 +271,14 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin/login'
     | '/admin/logout'
+    | '/admin/offer-status'
     | '/admin/offers.csv'
     | '/admin/welcome'
     | '/api/health'
     | '/api/offer'
     | '/admin/add'
     | '/admin/inbox'
+    | '/admin/offers'
     | '/admin/settings'
     | '/admin/settings/logout-everywhere'
     | '/admin/setup/done'
@@ -279,12 +299,14 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/login'
     | '/admin/logout'
+    | '/admin/offer-status'
     | '/admin/offers.csv'
     | '/admin/welcome'
     | '/api/health'
     | '/api/offer'
     | '/admin/add'
     | '/admin/inbox'
+    | '/admin/offers'
     | '/admin/settings/logout-everywhere'
     | '/admin/setup/done'
     | '/admin'
@@ -304,12 +326,14 @@ export interface FileRouteTypes {
     | '/admin/_shell'
     | '/admin/login'
     | '/admin/logout'
+    | '/admin/offer-status'
     | '/admin/offers.csv'
     | '/admin/welcome'
     | '/api/health'
     | '/api/offer'
     | '/admin/_shell/add'
     | '/admin/_shell/inbox'
+    | '/admin/_shell/offers'
     | '/admin/_shell/settings'
     | '/admin/settings/logout-everywhere'
     | '/admin/setup/done'
@@ -332,6 +356,7 @@ export interface RootRouteChildren {
   AdminShellRoute: typeof AdminShellRouteWithChildren
   AdminLoginRoute: typeof AdminLoginRoute
   AdminLogoutRoute: typeof AdminLogoutRoute
+  AdminOfferStatusRoute: typeof AdminOfferStatusRoute
   AdminOffersDotcsvRoute: typeof AdminOffersDotcsvRoute
   AdminWelcomeRoute: typeof AdminWelcomeRoute
   ApiHealthRoute: typeof ApiHealthRoute
@@ -369,6 +394,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/logout'
       fullPath: '/admin/logout'
       preLoaderRoute: typeof AdminLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/offer-status': {
+      id: '/admin/offer-status'
+      path: '/admin/offer-status'
+      fullPath: '/admin/offer-status'
+      preLoaderRoute: typeof AdminOfferStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/offers.csv': {
@@ -418,6 +450,13 @@ declare module '@tanstack/react-router' {
       path: '/inbox'
       fullPath: '/admin/inbox'
       preLoaderRoute: typeof AdminShellInboxRouteImport
+      parentRoute: typeof AdminShellRoute
+    }
+    '/admin/_shell/offers': {
+      id: '/admin/_shell/offers'
+      path: '/offers'
+      fullPath: '/admin/offers'
+      preLoaderRoute: typeof AdminShellOffersRouteImport
       parentRoute: typeof AdminShellRoute
     }
     '/admin/_shell/settings': {
@@ -561,6 +600,7 @@ const AdminShellDHostRouteWithChildren = AdminShellDHostRoute._addFileChildren(
 interface AdminShellRouteChildren {
   AdminShellAddRoute: typeof AdminShellAddRoute
   AdminShellInboxRoute: typeof AdminShellInboxRoute
+  AdminShellOffersRoute: typeof AdminShellOffersRoute
   AdminShellSettingsRoute: typeof AdminShellSettingsRouteWithChildren
   AdminShellIndexRoute: typeof AdminShellIndexRoute
   AdminShellDHostRoute: typeof AdminShellDHostRouteWithChildren
@@ -569,6 +609,7 @@ interface AdminShellRouteChildren {
 const AdminShellRouteChildren: AdminShellRouteChildren = {
   AdminShellAddRoute: AdminShellAddRoute,
   AdminShellInboxRoute: AdminShellInboxRoute,
+  AdminShellOffersRoute: AdminShellOffersRoute,
   AdminShellSettingsRoute: AdminShellSettingsRouteWithChildren,
   AdminShellIndexRoute: AdminShellIndexRoute,
   AdminShellDHostRoute: AdminShellDHostRouteWithChildren,
@@ -583,6 +624,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminShellRoute: AdminShellRouteWithChildren,
   AdminLoginRoute: AdminLoginRoute,
   AdminLogoutRoute: AdminLogoutRoute,
+  AdminOfferStatusRoute: AdminOfferStatusRoute,
   AdminOffersDotcsvRoute: AdminOffersDotcsvRoute,
   AdminWelcomeRoute: AdminWelcomeRoute,
   ApiHealthRoute: ApiHealthRoute,
