@@ -7,6 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@deparked/ui/dropdown-menu";
+import { BrandMark } from "@deparked/ui/flow";
 import { cn } from "@deparked/ui/lib/utils";
 import { Link, useNavigate, useParams, useRouterState } from "@tanstack/react-router";
 import { Check, ChevronDown, Globe, Plus, Settings } from "lucide-react";
@@ -26,17 +27,6 @@ type ShellData = {
 
 /** The page's content width; the header lines up with it. */
 export const CONTENT = "mx-auto w-full max-w-[1160px] px-4 sm:px-6 lg:px-10";
-
-/** Deparked's mark: a sign with a tangerine line, as on a shop window. */
-export function BrandMark({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 30 30" className={cn("size-[30px] shrink-0", className)}>
-      <rect width="30" height="30" rx="9" className="fill-primary" />
-      <rect x="7" y="10" width="16" height="3.5" rx="1.75" fill="#ff6a3d" />
-      <rect x="7" y="16.5" width="10" height="3.5" rx="1.75" className="fill-background" />
-    </svg>
-  );
-}
 
 /** A pill in a row of section links. The router marks the current one with `aria-current`, which fills it. */
 export const PILL =
