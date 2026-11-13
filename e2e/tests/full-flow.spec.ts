@@ -52,7 +52,7 @@ test("install, set up, add a domain, publish it, take an offer and read it under
   });
 
   await test.step("the wizard: where offers go, verified while it waits", async () => {
-    await expect(page.getByRole("heading", { level: 1, name: "Where should offers go?" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Where should offers land?" })).toBeVisible();
     await page.getByLabel("Email address").fill(OWNER);
     await page.getByRole("button", { name: "Send verification email" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Check your inbox" })).toBeVisible();
@@ -75,7 +75,7 @@ test("install, set up, add a domain, publish it, take an offer and read it under
       .getByRole("button", { name: /example\.com/ })
       .click();
     await page.getByRole("button", { name: `Add ${HOST}` }).click();
-    await expect(page.getByRole("heading", { name: `${HOST} is set up` })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: `${HOST} is in the window.` })).toBeVisible({ timeout: 30_000 });
     // The wizard's address became the domain's: nothing to pick in Settings, and no "not emailed" notice.
     expect(await db.sql("SELECT notify_email FROM domains WHERE host = ?", HOST)).toEqual([{ notify_email: OWNER }]);
     await expect(page.getByText("not emailed yet")).toHaveCount(0);

@@ -8,7 +8,7 @@ import {
   type Variant,
 } from "@deparked/config";
 import { type Db, getConfig, getDeployment, getDomain, listConfigHistory } from "@deparked/db";
-import { type Catalog, render, variants } from "@deparked/templates";
+import { type Catalog, render, renderPlaceholder, variants } from "@deparked/templates";
 import { getPublishState, type PublishState } from "../publish/pipeline";
 
 /** Cloudflare's documented always-pass test sitekey. The preview never loads Turnstile; this keeps real keys out. */
@@ -48,8 +48,13 @@ export function renderPreview(
   const parsed = parseConfig(config);
   if (!parsed.ok) return parsed;
   const html = render(parsed.config, host, { catalog: input.catalog, sitekey: PREVIEW_SITEKEY })["index.html"];
+  return { ok: true, html: inert(html, origin) };
+}
+
+/** A rendered page with the preview's policy and without its entrance animations. */
+function inert(html: string, origin: string): string {
   const head = `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(previewPolicy(origin))}">`;
-  return { ok: true, html: html.replace("<head>", `<head>${head}`).replace("</head>", `${PREVIEW_STYLE}</head>`) };
+  return html.replace("<head>", `<head>${head}`).replace("</head>", `${PREVIEW_STYLE}</head>`);
 }
 
 /** `value` when it is exactly an http(s) origin (`https://example.com`, `http://localhost:5173`), else null. */
@@ -172,21 +177,26 @@ export async function loadPublishState(
   };
 }
 
-export type Thumbnail = { html: string; source: "live" | "draft" | "default" };
+export type Thumbnail = { html: string; source: "live" | "draft" | "default" | "placeholder" };
 
 /**
  * The domain's page for the home screen's window: the live page, else the draft before the first publish, else the
  * defaults. Rendered as the editor's preview is. Null for a host that is not managed (or a config that cannot render).
+ * `asServed`: what visitors get, so before the first publish the placeholder page ("Add domain"'s success screen).
  */
 export async function loadThumbnail(
   input: { db: Db; catalog: Catalog },
   host: string,
   origin: string,
+  options: { asServed?: boolean } = {},
 ): Promise<Thumbnail | null> {
   const domain = await getDomain(input.db, host);
   if (domain === undefined || domain.status === "removed") return null;
   const stored = await getConfig(input.db, host);
   const live = readStored(stored?.liveJson);
+  if (options.asServed === true && (live === null || live === "unreadable")) {
+    return { html: inert(renderPlaceholder(host)["index.html"], origin), source: "placeholder" };
+  }
   const draft = readStored(stored?.draftJson);
   const [config, source]: [Config, Thumbnail["source"]] =
     live !== null && live !== "unreadable"

@@ -55,7 +55,7 @@ test("the owner adds a domain from the Cloudflare account, sees its placeholder 
   await expect(page.getByText(`${HOST} shows nothing today.`)).toBeVisible();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await page.getByRole("button", { name: `Add ${HOST}` }).click();
-  await expect(page.getByRole("heading", { name: `${HOST} is set up` })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: `${HOST} is in the window.` })).toBeVisible({ timeout: 30_000 });
   // No address for offers yet: said plainly, with the fix one click away.
   await expect(page.getByText(`Offers for ${HOST} are saved but not emailed yet`)).toBeVisible();
   await expect(page.getByRole("link", { name: "Add an address" })).toHaveAttribute("href", "/admin/settings");
@@ -91,7 +91,7 @@ test("the owner adds a domain from the Cloudflare account, sees its placeholder 
   // Turn on again: the same steps as adding, and the page is back.
   await page.getByRole("link", { name: "Turn on…" }).click();
   await page.getByRole("button", { name: `Add ${HOST}` }).click();
-  await expect(page.getByRole("heading", { name: `${HOST} is set up` })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: `${HOST} is in the window.` })).toBeVisible({ timeout: 30_000 });
   expect(await db.sql("SELECT status FROM domains WHERE host = ?", HOST)).toEqual([{ status: "placeholder" }]);
   expect(mock.state.routes.get(ZONE_ID)?.length).toBeGreaterThan(0);
   const again = mock.deployedAssets("deparked-sites");

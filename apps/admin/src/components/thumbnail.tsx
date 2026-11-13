@@ -18,8 +18,17 @@ const cache = new Map<string, Promise<Thumbnail | null>>();
  * documents. Inert like the editor's preview (an empty sandbox: no script, no form, no navigation) and hidden from
  * assistive technology: the card around it names the domain. Until it arrives, and if it cannot be rendered, the
  * window shows the domain's name on the surface colour; the page fades in over it once it has painted.
+ * `asServed`: the page visitors get right now, the placeholder before the first publish.
  */
-export function PageThumbnail({ host, className }: { host: string; className?: string }) {
+export function PageThumbnail({
+  host,
+  asServed = false,
+  className,
+}: {
+  host: string;
+  asServed?: boolean;
+  className?: string;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const render = useServerFn(getThumbnail);
   const [near, setNear] = useState(false);
@@ -48,19 +57,20 @@ export function PageThumbnail({ host, className }: { host: string; className?: s
   useEffect(() => {
     if (!near || html !== null) return;
     let current = true;
-    let request = cache.get(host);
+    const key = asServed ? `${host} as served` : host;
+    let request = cache.get(key);
     if (request === undefined) {
-      request = render({ data: { host, origin: window.location.origin } }).catch(() => null);
-      cache.set(host, request);
+      request = render({ data: { host, origin: window.location.origin, asServed } }).catch(() => null);
+      cache.set(key, request);
     }
     request.then((thumbnail) => {
-      if (thumbnail === null) cache.delete(host);
+      if (thumbnail === null) cache.delete(key);
       else if (current) setHtml(inertPreview(thumbnail.html));
     });
     return () => {
       current = false;
     };
-  }, [near, html, host, render]);
+  }, [near, html, host, asServed, render]);
 
   useEffect(() => {
     if (!near) setPainted(false);
