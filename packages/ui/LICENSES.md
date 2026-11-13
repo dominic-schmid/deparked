@@ -109,6 +109,8 @@ Ruixen's registry has no plain primitives (button, input, dialog and so on); it 
 | `src/components/arc/user-menu/` | Arc `user-menu` | MIT | yes | none |
 | `src/components/arc/lib/arc-provider.tsx`, `lib/use-copy-feedback.ts` | Arc registry `lib/` files (dependencies of `avatar`, `breadcrumb`, `copy-button`) | MIT | no | none |
 | `src/components/arc/input/input.module.css`, `textarea/textarea.module.css` | Arc `input`, `textarea` (stylesheets only) | MIT | no | the `.tsx` files are not copied: Arc's field bundles its label and messages, so `ui/input.tsx` and `ui/textarea.tsx` put its stylesheet on a bare element |
+| `fonts/bricolage-grotesque-latin.woff2`, `fonts/OFL-bricolagegrotesque.txt` | Bricolage Grotesque (Google Fonts `bricolagegrotesque/v9`, latin, `opsz` 12–96, `wght` 500–700), made by `scripts/fonts.ts` | OFL-1.1 | no | subset |
+| `fonts/instrument-sans-latin.woff2`, `fonts/OFL-instrumentsans.txt` | Instrument Sans (Google Fonts `instrumentsans/v4`, latin, `wght` 400–700), made by `scripts/fonts.ts` | OFL-1.1 | no | subset |
 | `src/components/ruixen/spark-chart.tsx` | <https://ruixen.com/r/spark-chart> | MIT | hover only | formatted; index reads typed for `noUncheckedIndexedAccess`; no label room reserved without `formatValue`; draw-in only with `motion-safe` |
 | `src/components/ruixen/wizard-stepper.tsx` | <https://ruixen.com/r/wizard-stepper> | MIT | animation and click only | formatted; one prop type widened for `exactOptionalPropertyTypes` |
 
@@ -116,7 +118,9 @@ Ruixen's registry has no plain primitives (button, input, dialog and so on); it 
 
 `src/lib/utils.ts` (`cn`) is shadcn/ui's helper, MIT. `src/styles/globals.css` is written for this repo; its token names follow shadcn/ui's theme convention.
 
-The new Arc folders (everything under `src/components/arc/` that is not listed above with changes) are byte-for-byte what `https://uiarc.dev/r/<name>.json` serves, checked on 2026-11-13, and nothing imports them yet. Their `.tsx` files do not pass this repo's `exactOptionalPropertyTypes`, so they are typechecked by `packages/ui/tsconfig.arc.json` (the flag off) and excluded from `tsconfig.json`; Biome's formatter, linter and import sorting are off for the whole `arc/` folder. Arc declares `@radix-ui/react-{dialog,dropdown-menu,popover,select,tabs}`, so `packages/ui` depends on them next to the `radix-ui` package the older Arc files import from. When a component gets used, either type its props for the flag (and record it in "Local changes") or move it out of the exclude list.
+The new Arc folders (everything under `src/components/arc/` that is not listed above with changes) are byte-for-byte what `https://uiarc.dev/r/<name>.json` serves, checked on 2026-11-13. Their `.tsx` files do not pass this repo's `exactOptionalPropertyTypes`, so they are typechecked by `packages/ui/tsconfig.arc.json` (the flag off) and excluded from `tsconfig.json`; Biome's formatter, linter and import sorting are off for the whole `arc/` folder. Arc declares `@radix-ui/react-{dialog,dropdown-menu,popover,select,tabs}`, so `packages/ui` depends on them next to the `radix-ui` package the older Arc files import from.
+
+They stay unmodified when used. Apps import them through `@deparked/ui/arc/<name>` (`src/arc/<name>.ts`, one re-export each), which imports `#arc/<folder>/<file>`: the package's `imports` map resolves that to the source for bundlers and to the declarations in `types/arc/` for TypeScript. The declarations are generated from the sources (`pnpm --filter @deparked/ui arc-types`, also the first step of its `typecheck`) and committed, so the admin's typecheck never reads the vendored sources under its stricter flags. To use another Arc component, add its `src/arc/<name>.ts`.
 
 ## Adding a component
 

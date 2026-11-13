@@ -11,11 +11,20 @@
     "./lib/*": "./src/lib/*.ts",
     "./components/ui/*": "./src/components/ui/*.tsx",
     "./ruixen/*": "./src/components/ruixen/*.tsx",
+    "./arc/*": "./src/arc/*.ts",
     "./*": "./src/components/ui/*.tsx"
   },
+  "imports": {
+    "#arc/*": {
+      "types": "./types/arc/*.d.ts",
+      "default": "./src/components/arc/*.tsx"
+    }
+  },
   "scripts": {
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.arc.json",
-    "test": "vitest run --passWithNoTests"
+    "typecheck": "tsc -p tsconfig.arc-types.json && tsc --noEmit && tsc --noEmit -p tsconfig.arc.json",
+    "arc-types": "tsc -p tsconfig.arc-types.json",
+    "test": "vitest run --passWithNoTests",
+    "fonts": "node scripts/fonts.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",
@@ -43,6 +52,7 @@
     "@types/react-dom": "^19.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "subset-font": "2.9.0",
     "tailwindcss": "^4.3.5"
   }
 }

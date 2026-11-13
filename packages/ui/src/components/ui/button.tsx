@@ -4,11 +4,13 @@ import type * as React from "react";
 import { Button as ArcButton, type ButtonProps as ArcButtonProps } from "../arc/button/button";
 import styles from "../arc/button/button.module.css";
 
-type Variant = "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+/** `accent`: the one tangerine action a screen leads with. */
+type Variant = "default" | "accent" | "destructive" | "outline" | "secondary" | "ghost" | "link";
 type Size = "default" | "xs" | "sm" | "lg" | "icon" | "icon-xs" | "icon-sm" | "icon-lg";
 
 const VARIANT: Record<Variant, ArcButtonProps["variant"]> = {
   default: "primary",
+  accent: "primary",
   destructive: "danger",
   outline: "secondary",
   secondary: "secondary",
@@ -27,9 +29,10 @@ const SIZE: Record<Size, ArcButtonProps["size"]> = {
   "icon-lg": "lg",
 };
 
-/** What Arc's button does not cover: the extra sizes and the link look, plus lucide icons at 16px inside. */
+/** What Arc's button does not cover: pill ends, the extra sizes, the accent and link looks, 16px lucide icons. */
 const EXTRA = {
-  base: "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  base: "rounded-full [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  accent: "border-tangerine bg-tangerine font-semibold text-tangerine-foreground",
   link: "text-primary underline-offset-4 hover:bg-transparent hover:text-primary hover:underline",
   xs: "h-6 min-h-6 gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
   icon: "size-9 min-h-0 px-0",
@@ -50,6 +53,7 @@ function look(variant: Variant, size: Size, className: string | undefined) {
   return cn(
     EXTRA.base,
     variant === "link" && EXTRA.link,
+    variant === "accent" && EXTRA.accent,
     size in EXTRA && EXTRA[size as keyof typeof EXTRA],
     className,
   );

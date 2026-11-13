@@ -69,15 +69,15 @@ writeFileSync(
   `${stdout}\n@layer theme,base,components,utilities;@layer components{${arcStyles}}\n`,
 );
 
-// The admin's typefaces, self-hosted: the same files the lander catalog ships.
-const fonts = `${repo}apps/sites/public/catalog/fonts/`;
+// The admin's typefaces, self-hosted (built by `pnpm --filter @deparked/ui fonts`). The admin's stylesheet reads them here.
+const fonts = `${repo}packages/ui/fonts/`;
 rmSync(`${root}public/fonts`, { recursive: true, force: true });
 mkdirSync(`${root}public/fonts`, { recursive: true });
-for (const [from, to] of [
-  ["archivo-latin.e19a759cff0c.woff2", "archivo-latin.woff2"],
-  ["newsreader-latin.b2905872e9ec.woff2", "newsreader-latin.woff2"],
-  ["OFL-archivo.txt", "OFL-archivo.txt"],
-  ["OFL-newsreader.txt", "OFL-newsreader.txt"],
+for (const name of [
+  "bricolage-grotesque-latin.woff2",
+  "instrument-sans-latin.woff2",
+  "OFL-bricolagegrotesque.txt",
+  "OFL-instrumentsans.txt",
 ] as const) {
-  copyFileSync(`${fonts}${from}`, `${root}public/fonts/${to}`);
+  copyFileSync(`${fonts}${name}`, `${root}public/fonts/${name}`);
 }

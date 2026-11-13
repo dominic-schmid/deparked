@@ -1,18 +1,19 @@
 @import "tailwindcss";
 @import "@deparked/ui/styles.css";
 
-/* The design system's two families (`--font-sans`, `--font-serif`), the same files the installer serves. */
+/* The design system's two families (`--font-sans` for the interface, `--font-display` for headings, money and
+   domain names), the same files the installer serves. */
 @font-face {
-  font-family: "Archivo";
-  src: url("../../../install/public/fonts/archivo-latin.woff2") format("woff2");
-  font-weight: 400 700;
+  font-family: "Bricolage Grotesque";
+  src: url("../../../install/public/fonts/bricolage-grotesque-latin.woff2") format("woff2");
+  font-weight: 500 700;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Newsreader";
-  src: url("../../../install/public/fonts/newsreader-latin.woff2") format("woff2");
+  font-family: "Instrument Sans";
+  src: url("../../../install/public/fonts/instrument-sans-latin.woff2") format("woff2");
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;
