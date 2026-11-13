@@ -20,7 +20,7 @@ type Problem = { kind: "failed" | "blocked"; message: string; credentialsRejecte
 const STUCK =
   "This step kept going without finishing. Nothing is lost and every step is safe to repeat: try again in a minute.";
 
-const STATUS_WORDS: Record<RowStatus, string> = {
+export const STATUS_WORDS: Record<RowStatus, string> = {
   pending: "Not started",
   running: "Running",
   waiting: "Waiting for another change to finish",
@@ -68,18 +68,17 @@ export function CredentialsRejected({ message }: { message?: string }) {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export type RunnerRow = Row;
+export type RunnerProblem = Problem;
+
 /**
- * Runs a change one step per request, from the first step, and shows its progress. Every step is safe to repeat,
- * so Retry sends the same step again. Starts on mount.
+ * Runs a change one step per request, from the first step, and keeps its progress. Every step is safe to repeat,
+ * so `retry` sends the same step again. Starts on mount. `announcement` is for a polite live region.
  */
-export function SetupRunner(props: {
+export function useStepRunner(props: {
   steps: readonly { id: string; title: string }[];
   run: StepRun;
   onFinished: () => void;
-  /** Accessible name of the progress list. */
-  label: string;
-  /** Shown next to "Check again" when a step needs the owner: where they can act on it. */
-  blockedAction?: ReactNode;
 }) {
   const { run, onFinished } = props;
   const [rows, setRows] = useState<Row[]>(() =>
@@ -178,6 +177,21 @@ export function SetupRunner(props: {
       alive.current = false;
     };
   }, [go]);
+
+  return { rows, problem, running, announcement, retry: go };
+}
+
+/** Runs a change with `useStepRunner` and shows every step as a row, with the problem and its way out under it. */
+export function SetupRunner(props: {
+  steps: readonly { id: string; title: string }[];
+  run: StepRun;
+  onFinished: () => void;
+  /** Accessible name of the progress list. */
+  label: string;
+  /** Shown next to "Check again" when a step needs the owner: where they can act on it. */
+  blockedAction?: ReactNode;
+}) {
+  const { rows, problem, running, announcement, retry: go } = useStepRunner(props);
 
   return (
     <div className="flex flex-col gap-4">

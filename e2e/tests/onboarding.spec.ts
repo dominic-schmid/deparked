@@ -6,7 +6,7 @@ const OWNER = "owner@example.com";
 test("a failed send says so in plain words, and the next try works", async ({ login, mock, urls }) => {
   const page = await login();
   await page.goto(`${urls.admin}/admin/welcome`);
-  await expect(page.getByRole("heading", { level: 1, name: "Where should offers go?" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Where should offers land?" })).toBeVisible();
 
   await page.getByRole("button", { name: "Send verification email" }).click();
   await expect(page.getByRole("alert")).toHaveText("Enter the email address that should get the offers.");
@@ -21,7 +21,7 @@ test("a failed send says so in plain words, and the next try works", async ({ lo
   await expect(page.getByRole("alert")).toContainText(
     "Cloudflare did not answer just now, so nothing was changed. Try again in a minute.",
   );
-  await expect(page.getByRole("heading", { level: 1, name: "Where should offers go?" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Where should offers land?" })).toBeVisible();
 
   await page.getByRole("button", { name: "Send verification email" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Check your inbox" })).toBeVisible();
@@ -90,6 +90,7 @@ test("when the address becomes verified it is announced and focus stays in the p
   mock.verifyAddress(OWNER);
   await page.getByRole("button", { name: "I clicked the link" }).click();
 
-  await expect(page.locator("[aria-live=polite]")).toContainText("Your address is verified.");
+  // The stepper in the header has its own live region; this one is the screen's.
+  await expect(page.locator("main [aria-live=polite]")).toContainText("Your address is verified.");
   await expect(page.getByRole("button", { name: "Next: add a domain" })).toBeFocused();
 });

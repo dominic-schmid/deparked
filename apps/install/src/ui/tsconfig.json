@@ -5,6 +5,7 @@
     "jsx": "react-jsx",
     "paths": {
       "@deparked/ui/lib/*": ["../../../../packages/ui/src/lib/*.ts"],
+      "@deparked/ui/arc/*": ["../../../../packages/ui/src/arc/*.ts"],
       "@deparked/ui/*": ["../../../../packages/ui/src/components/ui/*.tsx"]
     }
   },

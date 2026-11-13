@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AddDomainFlow } from "../../../components/add-domain";
-import { PageHeader } from "../../../components/page";
 
 export const Route = createFileRoute("/admin/_shell/add")({
   validateSearch: (search): { host?: string | undefined } => ({
@@ -10,12 +9,8 @@ export const Route = createFileRoute("/admin/_shell/add")({
   component: AddDomainPage,
 });
 
+/** Each step of the flow brings its own heading: the question, then the domain, then the result. */
 function AddDomainPage() {
   const { host } = Route.useSearch();
-  return (
-    <>
-      <PageHeader title="Add domain" />
-      <AddDomainFlow host={host} />
-    </>
-  );
+  return <AddDomainFlow host={host} />;
 }

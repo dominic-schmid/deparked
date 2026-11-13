@@ -60,10 +60,10 @@ export const previewDraft = createServerFn({ method: "POST" })
  * view, so the home screen itself renders no page. Null for an unknown host or an origin the policy cannot name.
  */
 export const getThumbnail = createServerFn()
-  .validator(z.object({ host, origin: z.string().max(300) }))
+  .validator(z.object({ host, origin: z.string().max(300), asServed: z.boolean().optional() }))
   .handler(async ({ data }) => {
     await requireSession();
     const origin = parseOrigin(data.origin);
     if (origin === null) return null;
-    return loadThumbnail({ db: createDb(env.DB), catalog }, data.host, origin);
+    return loadThumbnail({ db: createDb(env.DB), catalog }, data.host, origin, { asServed: data.asServed === true });
   });

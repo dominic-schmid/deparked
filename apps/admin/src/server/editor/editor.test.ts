@@ -150,4 +150,23 @@ describe("loadThumbnail", () => {
   it("returns null for a host that is not managed", async () => {
     expect(await loadThumbnail({ db, catalog }, "nope.example", ORIGIN)).toBeNull();
   });
+
+  it("as visitors see it: the placeholder page until the first publish, then the live page", async () => {
+    await saveDraft(db, { host: HOST, json: json("Draft words"), schemaVersion: CONFIG_VERSION, now: 2 });
+    const before = await loadThumbnail({ db, catalog }, HOST, ORIGIN, { asServed: true });
+    expect(before?.source).toBe("placeholder");
+    expect(before?.html).toContain(`${HOST} is not published yet`);
+    expect(before?.html).not.toContain("Draft words");
+    expect(before?.html).toContain("Content-Security-Policy");
+    await publishConfig(db, {
+      host: HOST,
+      json: json("Live words"),
+      schemaVersion: CONFIG_VERSION,
+      release: null,
+      now: 3,
+    });
+    const after = await loadThumbnail({ db, catalog }, HOST, ORIGIN, { asServed: true });
+    expect(after?.source).toBe("live");
+    expect(after?.html).toContain("Live words");
+  });
 });
