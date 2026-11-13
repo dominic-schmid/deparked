@@ -37,13 +37,13 @@ Ruixen's registry has no plain primitives (button, input, dialog and so on); it 
 | `src/components/ui/sheet.tsx` | shadcn/ui `sheet` (new-york, `npx shadcn@latest add sheet`) | MIT | yes | formatted |
 | `src/components/ui/skeleton.tsx` | shadcn/ui `skeleton` (new-york, `npx shadcn@latest add skeleton`) | MIT | no | formatted |
 | `src/components/ui/table.tsx` | shadcn/ui `table` (new-york, `npx shadcn@latest add table`) | MIT | no | formatted |
+| `src/components/ui/tabs.tsx` | shadcn/ui `tabs` (new-york, `npx shadcn@latest add tabs`) | MIT | yes | formatted |
 | `src/components/arc/foundation.css`, `motion-tokens.ts`, `lib/motion-tokens.ts` | Arc `arc-foundation` and `arc-motion-tokens` | MIT | no | none; loaded in the `arc` cascade layer by `src/styles/globals.css`, which maps Arc's token names onto Deparked's palette, radii and fonts |
 | `src/components/arc/button/` | Arc `button` | MIT | yes | `whileTap` and the prop spread typed for `exactOptionalPropertyTypes` |
 | `src/components/arc/badge/` | Arc `badge` | MIT | yes | none |
 | `src/components/arc/checkbox/` | Arc `checkbox` | MIT | yes | `@radix-ui/react-checkbox` imported from `radix-ui`; no default `aria-label` (call sites label it with `htmlFor`) |
 | `src/components/arc/popover/` | Arc `popover` | MIT | yes | Radix import from `radix-ui` |
 | `src/components/arc/switch/` | Arc `switch` | MIT | yes | Radix import from `radix-ui`; keyframe options typed for `exactOptionalPropertyTypes` |
-| `src/components/arc/tabs/` | Arc `tabs` | MIT | yes | Radix import from `radix-ui` |
 | `src/components/arc/tooltip/` | Arc `tooltip` | MIT | yes | Radix import from `radix-ui`; `animate` spread for `exactOptionalPropertyTypes` |
 | `src/components/arc/progress/` | Arc `progress` | MIT | yes | none |
 | `src/components/arc/toast/` | Arc `toast` | MIT | yes | none |
@@ -51,7 +51,7 @@ Ruixen's registry has no plain primitives (button, input, dialog and so on); it 
 | `src/components/ruixen/spark-chart.tsx` | <https://ruixen.com/r/spark-chart> | MIT | hover only | formatted; index reads typed for `noUncheckedIndexedAccess`; no label room reserved without `formatValue`; draw-in only with `motion-safe` |
 | `src/components/ruixen/wizard-stepper.tsx` | <https://ruixen.com/r/wizard-stepper> | MIT | animation and click only | formatted; one prop type widened for `exactOptionalPropertyTypes` |
 
-`src/components/ui/{button,badge,input,textarea,tabs,switch,checkbox,popover,tooltip,progress,toast}.tsx` are wrappers over the Arc files: they keep the shadcn export names and props (`variant`, `size`, `asChild`) where call sites use them.
+`src/components/ui/{button,badge,input,textarea,switch,checkbox,popover,tooltip,progress,toast}.tsx` are wrappers over the Arc files: they keep the shadcn export names and props (`variant`, `size`, `asChild`) where call sites use them.
 
 `src/lib/utils.ts` (`cn`) is shadcn/ui's helper, MIT. `src/styles/globals.css` is written for this repo; its token names follow shadcn/ui's theme convention.
 
@@ -139,4 +139,4 @@ SOFTWARE.
 
 ## Arc swap: what stays shadcn, and why
 
-Arc has no free equivalent that fits how the call sites compose these, so they are untouched: `alert-dialog`, `dialog` (only `command` uses it), `command`, `dropdown-menu`, `select`, `radio-group`, `sheet`, `skeleton`, plus the ones Arc does not have (`alert`, `avatar`, `card`, `field`, `label`, `scroll-area`, `separator`, `table`).
+Arc has no free equivalent that fits how the call sites compose these, so they are untouched: `alert-dialog`, `dialog` (only `command` uses it), `command`, `dropdown-menu`, `select`, `radio-group`, `sheet`, `skeleton`, `tabs` (Arc wraps the tab list in its own scroll shell, which breaks the editor grid, where the list is a grid child hidden on wide screens), plus the ones Arc does not have (`alert`, `avatar`, `card`, `field`, `label`, `scroll-area`, `separator`, `table`).

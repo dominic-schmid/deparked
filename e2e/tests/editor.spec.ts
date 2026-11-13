@@ -106,6 +106,43 @@ test("the preview loads the catalog's images and fonts on the admin's own addres
   expect(catalog.blocked).toEqual([]);
 });
 
+test("the editor keeps the form left, the device switch above the preview, and the preview shows the lander", async ({
+  login,
+  page,
+  db,
+  urls,
+}) => {
+  await seedDomain(db);
+  await login();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${urls.admin}/admin/d/${HOST}`);
+  const frame = page.locator(`iframe[title="Preview of ${HOST}"]`);
+  await expect(frame).toBeVisible();
+  const preview = page.frameLocator(`iframe[title="Preview of ${HOST}"]`);
+  await expect(preview.getByRole("heading", { level: 1 })).toHaveText(HOST);
+  expect((await preview.locator("body").innerText()).trim().length).toBeGreaterThan(0);
+
+  // Two columns: the form on the left, the device switch directly above the preview on the right.
+  const form = await page.getByRole("form", { name: `Design of ${HOST}` }).boundingBox();
+  const desktop = await page.getByRole("button", { name: "Desktop" }).boundingBox();
+  const box = await frame.boundingBox();
+  if (!form || !desktop || !box) throw new Error("editor parts are not laid out");
+  expect(form.x + form.width).toBeLessThanOrEqual(box.x + 1);
+  expect(desktop.y + desktop.height).toBeLessThanOrEqual(box.y + 1);
+  expect(box.height).toBeGreaterThan(300);
+  for (const device of ["Phone", "Tablet", "Desktop"]) {
+    await page.getByRole("button", { name: device }).click();
+    await expect(preview.getByRole("heading", { level: 1 })).toHaveText(HOST);
+  }
+
+  // On a phone the Edit and Preview tabs take over.
+  await page.setViewportSize({ width: 390, height: 800 });
+  await expect(page.getByRole("tab", { name: "Edit" })).toBeVisible();
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await expect(frame).toBeVisible();
+  await expect(preview.getByRole("heading", { level: 1 })).toHaveText(HOST);
+});
+
 test("the owner edits a domain's headline, sees it in the preview and publishes it", async ({
   login,
   page,

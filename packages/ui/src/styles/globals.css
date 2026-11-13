@@ -138,6 +138,14 @@
   --font-display: var(--font-body);
 }
 
+/*
+ * Arc draws one keyboard focus outline on every control. Controls that already draw their own ring (the shadcn
+ * components, links styled with `focus-visible:ring-*`) keep that one: Arc's outline is switched off on them.
+ */
+[class*="focus-visible:ring"] {
+  --focus-outline-width: 0px;
+}
+
 /* Arc's dark-only tokens (status tones, shadows, switch thumb) for the system setting and the `.dark` class. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light, [data-theme="light"]) {
