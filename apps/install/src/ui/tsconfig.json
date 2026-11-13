@@ -8,5 +8,5 @@
       "@deparked/ui/*": ["../../../../packages/ui/src/components/ui/*.tsx"]
     }
   },
-  "include": ["."]
+  "include": [".", "../../../../packages/ui/src/css-modules.d.ts"]
 }

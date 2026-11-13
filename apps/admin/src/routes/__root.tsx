@@ -1,4 +1,5 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, ScriptOnce, Scripts } from "@tanstack/react-router";
+import { THEME_SCRIPT } from "../components/theme";
 import appCss from "../styles/app.css?url";
 
 export const Route = createRootRoute({
@@ -16,12 +17,13 @@ export const Route = createRootRoute({
 
 function RootDocument() {
   return (
-    // The theme script of the logged-in shell may put `.dark` or `.light` on <html> before React hydrates it.
+    // The theme script puts `.dark` or `.light` and `data-theme` on <html> before React hydrates it.
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body className="min-h-dvh antialiased">
+        <ScriptOnce>{THEME_SCRIPT}</ScriptOnce>
         <Outlet />
         <Scripts />
       </body>

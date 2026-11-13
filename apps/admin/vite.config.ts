@@ -50,10 +50,37 @@ function catalogAssets(): Plugin {
   };
 }
 
+interface ArcNode {
+  append(node: unknown): unknown;
+}
+interface ArcRoot extends ArcNode {
+  source?: { input: { file?: string } } | undefined;
+  nodes: unknown[];
+  removeAll(): unknown;
+}
+
+/**
+ * Arc's component stylesheets (CSS Modules) go into Tailwind's `components` layer, so a utility class on an Arc
+ * component (`h-11`, `w-72`) still overrides it, as it did with the shadcn components. The layer order is restated
+ * because the first stylesheet to name the layers decides it.
+ */
+const arcLayer = {
+  postcssPlugin: "deparked-arc-layer",
+  Once(root: ArcRoot, { AtRule }: { AtRule: new (init: { name: string; params: string }) => ArcNode }) {
+    if (!/\/components\/arc\/.+\.module\.css$/.test((root.source?.input.file ?? "").replaceAll("\\", "/"))) return;
+    const layer = new AtRule({ name: "layer", params: "components" });
+    for (const node of [...root.nodes]) layer.append(node);
+    root.removeAll();
+    root.append(new AtRule({ name: "layer", params: "theme, base, components, utilities" }));
+    root.append(layer);
+  },
+};
+
 // A managed domain routes only `<host>/admin*` and `<host>/api/*` to this Worker (everything else is the lander),
 // so every URL the admin's pages load must sit under `/admin`: its built files and its server functions.
 export default defineConfig({
   build: { assetsDir: "admin/_assets" },
+  css: { postcss: { plugins: [arcLayer] } },
   plugins: [
     catalogAssets(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),

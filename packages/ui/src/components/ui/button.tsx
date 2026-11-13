@@ -1,61 +1,84 @@
 import { cn } from "@deparked/ui/lib/utils";
-import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
 import type * as React from "react";
+import { Button as ArcButton, type ButtonProps as ArcButtonProps } from "../arc/button/button";
+import styles from "../arc/button/button.module.css";
 
-const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out outline-none active:not-aria-disabled:scale-[0.98] motion-reduce:active:scale-100 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
-        outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
-        "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-8",
-        "icon-lg": "size-10",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  },
-);
+type Variant = "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+type Size = "default" | "xs" | "sm" | "lg" | "icon" | "icon-xs" | "icon-sm" | "icon-lg";
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  asChild = false,
-  ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
-  }) {
-  const Comp = asChild ? Slot.Root : "button";
+const VARIANT: Record<Variant, ArcButtonProps["variant"]> = {
+  default: "primary",
+  destructive: "danger",
+  outline: "secondary",
+  secondary: "secondary",
+  ghost: "ghost",
+  link: "ghost",
+};
 
+const SIZE: Record<Size, ArcButtonProps["size"]> = {
+  default: "md",
+  xs: "sm",
+  sm: "sm",
+  lg: "lg",
+  icon: "md",
+  "icon-xs": "sm",
+  "icon-sm": "sm",
+  "icon-lg": "lg",
+};
+
+/** What Arc's button does not cover: the extra sizes and the link look, plus lucide icons at 16px inside. */
+const EXTRA = {
+  base: "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  link: "text-primary underline-offset-4 hover:bg-transparent hover:text-primary hover:underline",
+  xs: "h-6 min-h-6 gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+  icon: "size-9 min-h-0 px-0",
+  "icon-xs": "size-6 min-h-0 px-0 [&_svg:not([class*='size-'])]:size-3",
+  "icon-sm": "size-8 min-h-0 px-0",
+  "icon-lg": "size-10 min-h-0 px-0",
+} as const;
+
+type ButtonProps = Omit<ArcButtonProps, "variant" | "size"> & {
+  variant?: Variant;
+  size?: Size;
+  /** Render the child (a link, say) with the button's look instead of a `<button>`. */
+  asChild?: boolean;
+  ref?: React.Ref<HTMLButtonElement> | undefined;
+};
+
+function look(variant: Variant, size: Size, className: string | undefined) {
+  return cn(
+    EXTRA.base,
+    variant === "link" && EXTRA.link,
+    size in EXTRA && EXTRA[size as keyof typeof EXTRA],
+    className,
+  );
+}
+
+function Button({ variant = "default", size = "default", asChild = false, className, ...props }: ButtonProps) {
+  if (asChild) {
+    // Arc's button animates its label and needs to own the element; a link takes its stylesheet only.
+    const classes = cn(
+      styles.button,
+      styles[VARIANT[variant] ?? "primary"],
+      styles[SIZE[size] ?? "md"],
+      look(variant, size, className),
+    );
+    const { loading: _loading, ...rest } = props;
+    return <Slot.Root data-slot="button" data-variant={variant} data-size={size} className={classes} {...rest} />;
+  }
   return (
-    <Comp
+    <ArcButton
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      variant={VARIANT[variant] ?? "primary"}
+      size={SIZE[size] ?? "md"}
+      className={look(variant, size, className)}
       {...props}
     />
   );
 }
 
-export { Button, buttonVariants };
+export type { ButtonProps };
+export { Button };
