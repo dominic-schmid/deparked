@@ -6,7 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { isHostName } from "../publish/files";
 import { requireSession } from "../require-session";
-import { loadEditor, loadPublishState, parseOrigin, renderPreview } from "./editor";
+import { loadEditor, loadPublishState, loadThumbnail, parseOrigin, renderPreview } from "./editor";
 
 const host = z.string().refine(isHostName, "Not a domain name.");
 
@@ -53,4 +53,17 @@ export const previewDraft = createServerFn({ method: "POST" })
     const origin = parseOrigin(data.origin);
     if (origin === null) return { ok: false as const, errors: { form: "The preview could not be rendered here." } };
     return renderPreview({ catalog }, data.host, data.config, origin);
+  });
+
+/**
+ * The page in a domain's window on the home screen, rendered like the preview. Asked for per card once it scrolls into
+ * view, so the home screen itself renders no page. Null for an unknown host or an origin the policy cannot name.
+ */
+export const getThumbnail = createServerFn()
+  .validator(z.object({ host, origin: z.string().max(300) }))
+  .handler(async ({ data }) => {
+    await requireSession();
+    const origin = parseOrigin(data.origin);
+    if (origin === null) return null;
+    return loadThumbnail({ db: createDb(env.DB), catalog }, data.host, origin);
   });

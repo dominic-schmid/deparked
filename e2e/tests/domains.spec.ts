@@ -44,7 +44,7 @@ test("the owner adds a domain from the Cloudflare account, sees its placeholder 
   const before = zoneBefore();
 
   const page = await login();
-  await page.getByRole("main").getByRole("link", { name: "Add domain" }).click();
+  await page.getByRole("main").getByRole("link", { name: "Add a domain" }).click();
   const picker = page.getByRole("list", { name: "Domains you can add" });
   await expect(picker.getByRole("button")).toHaveText([/example\.com/, /example\.org/]);
   await page.getByLabel("Search your domains").fill("org");

@@ -1,7 +1,9 @@
 import { env } from "cloudflare:workers";
-import { countNewOffers, createDb, setWorkspaceMark } from "@deparked/db";
+import { countNewOffers, createDb, listOffers, setWorkspaceMark } from "@deparked/db";
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
+import { homeView } from "../components/home-copy";
 import { type AnalyticsSource, loadDomainAnalytics, loadOverviewVisits, workerReportCache } from "./analytics";
 import { hostSchema, loadDomain, loadDomainSummaries, loadOverview } from "./domains";
 import { getHosting } from "./hosting";
@@ -13,20 +15,38 @@ import { loadSetupChecklist } from "./setup-checklist";
 export const getShell = createServerFn().handler(async () => {
   await requireSession();
   const db = createDb(env.DB);
-  const [domains, newOffers, tokenRejected] = await Promise.all([
+  const [summaries, newOffers, tokenRejected] = await Promise.all([
     loadDomainSummaries(db),
     countNewOffers(db),
     shellTokenRejected(),
   ]);
-  return { domains, newOffers, tokenRejected };
+  return { ...summaries, newOffers, tokenRejected };
 });
 
+/** The home screen: every domain, the setup steps left, the best offer waiting for an answer, the remembered view. */
 export const getOverview = createServerFn().handler(async () => {
   await requireSession();
   const now = Date.now();
   const db = createDb(env.DB);
-  const [domains, checklist] = await Promise.all([loadOverview(db, now), loadSetupChecklist(db)]);
-  return { domains, checklist, now };
+  const [domains, checklist, best] = await Promise.all([
+    loadOverview(db, now),
+    loadSetupChecklist(db),
+    listOffers(db, { status: "new", sort: "highest", limit: 1 }),
+  ]);
+  const offer = best.offers[0];
+  const bestOffer =
+    offer === undefined
+      ? null
+      : {
+          host: offer.host,
+          name: offer.name,
+          email: offer.email,
+          country: offer.country,
+          amountMinor: offer.amountMinor,
+          currency: offer.currency,
+          createdAt: offer.createdAt,
+        };
+  return { domains, checklist, bestOffer, view: homeView(getRequest().headers.get("Cookie")), now };
 });
 
 /** Hides the overview's "Finish setting up" card for good. */

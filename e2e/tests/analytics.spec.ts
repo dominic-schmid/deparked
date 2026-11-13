@@ -31,6 +31,13 @@ test("visits, conversion, referrers and countries come from Web Analytics next t
   );
 
   const page = await login();
+  const card = (host: string) => page.getByRole("article").filter({ hasText: host });
+  await expect(card("example.com")).toContainText("10 visits in 30 days");
+  await expect(card("example.org").getByRole("link", { name: "Set up visits" })).toHaveAttribute(
+    "href",
+    "/admin/add?host=example.org",
+  );
+  await page.getByRole("radio", { name: "List" }).click();
   const row = (host: string) => page.getByRole("row").filter({ hasText: host });
   await expect(row("example.com")).toContainText("7 / 10");
   await expect(row("example.com")).toContainText("10%");
@@ -78,8 +85,13 @@ test("a rejected token leaves the page readable, says what to fix, and is not re
     "href",
     "/admin/settings/cloudflare",
   );
-  await expect(page.getByRole("row").filter({ hasText: "example.com" })).toContainText("Unavailable");
+  await expect(page.getByRole("article").filter({ hasText: "example.com" })).toContainText("Visits unavailable");
   // A domain without a site is not set up, whether or not the read worked, and says how to fix it.
+  await expect(
+    page.getByRole("article").filter({ hasText: "example.org" }).getByRole("link", { name: "Set up visits" }),
+  ).toHaveAttribute("href", "/admin/add?host=example.org");
+  await page.getByRole("radio", { name: "List" }).click();
+  await expect(page.getByRole("row").filter({ hasText: "example.com" })).toContainText("Unavailable");
   const bare = page.getByRole("row").filter({ hasText: "example.org" });
   await expect(bare).toContainText("Not set up");
   await expect(bare.getByRole("link", { name: "Set it up" })).toHaveAttribute("href", "/admin/add?host=example.org");
@@ -113,6 +125,7 @@ test("more offers than counted visits reads >100%, with the reason a click away"
   });
 
   const page = await login();
+  await page.getByRole("radio", { name: "List" }).click();
   const row = page.getByRole("row").filter({ hasText: "example.com" });
   await row.getByRole("button", { name: /^>100%.*why/ }).click();
   await expect(page.getByRole("dialog")).toContainText("does not count visitors who block its script");

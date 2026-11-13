@@ -13,7 +13,7 @@ test("the owner goes from an empty workspace to a handled offer, an export and a
 }) => {
   const page = await login();
   await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
-  await expect(page.getByRole("main").getByRole("link", { name: "Add domain" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Add a domain" })).toBeVisible();
 
   const data = createDb(db.d1);
   const now = Date.now();
@@ -33,14 +33,27 @@ test("the owner goes from an empty workspace to a handled offer, an export and a
   await insertOffer(data, { offer: { ...buyer, host: "example.org", amountMinor: 500, name: "Grace" }, now: now - 1 });
 
   await page.reload();
-  const row = (host: string) => page.getByRole("row").filter({ hasText: host });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Three offers are waiting for you.");
   await expect(page.getByRole("heading", { name: "All domains" })).toBeVisible();
+  // Each domain is a window: its state or next step, and its offers as a price tag.
+  const card = (host: string) => page.getByRole("article").filter({ hasText: host });
+  await expect(card("example.com")).toContainText("Live");
+  await expect(card("example.com").getByRole("link", { name: /^2 offers · \$9,900\s*, 2 new$/ })).toBeVisible();
+  await expect(card("example.org").getByRole("link", { name: "Finish its page" })).toHaveAttribute(
+    "href",
+    "/admin/d/example.org",
+  );
+  // The list view says the same in a row per domain, and the choice is remembered.
+  await page.getByRole("radio", { name: "List" }).click();
+  const row = (host: string) => page.getByRole("row").filter({ hasText: host });
   await expect(row("example.com")).toContainText("Live");
   await expect(row("example.com")).toContainText("2 (2 new)");
-  await expect(row("example.com")).toContainText("$9,900.00");
+  await expect(row("example.com")).toContainText("$9,900");
   await expect(row("example.org")).toContainText("Draft");
+  await page.reload();
+  await expect(row("example.com")).toContainText("2 (2 new)");
 
-  const inboxLink = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Inbox/ });
+  const inboxLink = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Offers/ });
   await expect(inboxLink).toContainText("3");
   await inboxLink.click();
   const offers = page.getByRole("main").getByRole("listitem");

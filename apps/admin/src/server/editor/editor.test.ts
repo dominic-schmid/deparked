@@ -3,7 +3,7 @@ import { type Db, insertDomain, publishConfig, saveDraft } from "@deparked/db";
 import { createTestDb } from "@deparked/db/testing";
 import { catalog } from "@deparked/templates/catalog";
 import { beforeEach, describe, expect, it } from "vitest";
-import { loadEditor, PREVIEW_SITEKEY, parseOrigin, renderPreview } from "./editor";
+import { loadEditor, loadThumbnail, PREVIEW_SITEKEY, parseOrigin, renderPreview } from "./editor";
 
 const HOST = "a.example";
 
@@ -111,5 +111,43 @@ describe("loadEditor", () => {
 
   it("returns null for a host that is not managed", async () => {
     expect(await loadEditor({ db, catalog, now }, "b.example")).toBeNull();
+  });
+});
+
+describe("loadThumbnail", () => {
+  let db: Db;
+  const ORIGIN = "https://admin.example";
+  const json = (headline: string) => JSON.stringify({ ...defaultConfig(), headline });
+
+  beforeEach(async () => {
+    ({ db } = await createTestDb());
+    await insertDomain(db, { domain: { host: HOST, zoneId: "zone-a" }, now: 1 });
+  });
+
+  it("shows the live page when there is one, even with a newer draft", async () => {
+    await saveDraft(db, { host: HOST, json: json("Live words"), schemaVersion: CONFIG_VERSION, now: 2 });
+    await publishConfig(db, {
+      host: HOST,
+      json: json("Live words"),
+      schemaVersion: CONFIG_VERSION,
+      release: null,
+      now: 3,
+    });
+    await saveDraft(db, { host: HOST, json: json("Draft words"), schemaVersion: CONFIG_VERSION, now: 4 });
+    const thumbnail = await loadThumbnail({ db, catalog }, HOST, ORIGIN);
+    expect(thumbnail?.source).toBe("live");
+    expect(thumbnail?.html).toContain("Live words");
+  });
+
+  it("shows the draft before the first publish, else the defaults", async () => {
+    expect((await loadThumbnail({ db, catalog }, HOST, ORIGIN))?.source).toBe("default");
+    await saveDraft(db, { host: HOST, json: json("Draft words"), schemaVersion: CONFIG_VERSION, now: 2 });
+    const thumbnail = await loadThumbnail({ db, catalog }, HOST, ORIGIN);
+    expect(thumbnail?.source).toBe("draft");
+    expect(thumbnail?.html).toContain("Draft words");
+  });
+
+  it("returns null for a host that is not managed", async () => {
+    expect(await loadThumbnail({ db, catalog }, "nope.example", ORIGIN)).toBeNull();
   });
 });
