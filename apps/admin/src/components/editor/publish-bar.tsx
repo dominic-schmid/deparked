@@ -1,15 +1,5 @@
 import { fillDomain } from "@deparked/config";
-import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@deparked/ui/alert-dialog";
+import { Alert } from "@deparked/ui/arc/alert";
 import { ExpandableCard } from "@deparked/ui/arc/expandable-card";
 import { Timeline, type TimelineEvent } from "@deparked/ui/arc/timeline";
 import { Button } from "@deparked/ui/button";
@@ -19,6 +9,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight, Check, CircleAlert, Globe, History, Info, LoaderCircle } from "lucide-react";
 import { type ReactNode, type Ref, useState } from "react";
 import type { EditorPublishState, HistoryItem } from "../../server/editor/editor";
+import { ConfirmDialog } from "../confirm-dialog";
 import { relativeTime } from "../format";
 import { type ChangeValue, type FieldChange, variantLabel } from "./form";
 import type { PublishOutcome } from "./publish-loop";
@@ -182,20 +173,18 @@ function StateLine(props: {
       <p role="status" className="flex min-h-6 min-w-0 items-center gap-2 text-sm text-muted-foreground">
         {content}
       </p>
-      <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset the draft to the live page?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Your changes that are not live yet are replaced by what visitors see now. This can't be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep my changes</AlertDialogCancel>
-            <AlertDialogAction onClick={props.onResetToLive}>Reset draft</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirmReset}
+        onOpenChange={setConfirmReset}
+        title="Reset the draft to the live page?"
+        description="Your changes that are not live yet are replaced by what visitors see now. This can't be undone."
+        cancel="Keep my changes"
+        confirm="Reset draft"
+        onConfirm={() => {
+          setConfirmReset(false);
+          props.onResetToLive();
+        }}
+      />
     </>
   );
 }
@@ -269,35 +258,33 @@ function Outcome(props: { view: PublishView; host: string; onFollow: () => void 
   if (outcome.status === "stopped") return null;
   if (outcome.status === "done") {
     return (
-      <Alert>
-        <Check aria-hidden="true" className="text-positive" />
-        <AlertTitle>It's live</AlertTitle>
-        <AlertDescription>
-          <p className="[overflow-wrap:anywhere]">Visitors to {props.host} now see this version.</p>
-        </AlertDescription>
+      <Alert tone="success" title="It's live">
+        <span className="[overflow-wrap:anywhere]">Visitors to {props.host} now see this version.</span>
       </Alert>
     );
   }
   return (
-    <Alert variant="destructive">
-      <AlertTitle>
-        {outcome.reason === "busy"
+    <Alert
+      tone="danger"
+      title={
+        outcome.reason === "busy"
           ? "Another publish is running"
           : outcome.reason === "stalled"
             ? "Putting it live stalled"
-            : "Not live yet"}
-      </AlertTitle>
-      <AlertDescription>
-        <p className="[overflow-wrap:anywhere]">{outcome.message}</p>
+            : "Not live yet"
+      }
+    >
+      <span className="flex flex-col gap-1">
+        <span className="[overflow-wrap:anywhere]">{outcome.message}</span>
         {outcome.reason === "credentials-rejected" ? (
-          <p>
+          <span>
             <Link to="/admin/settings/cloudflare" className={linkClass}>
               Replace token
             </Link>
             . The live page keeps working meanwhile.
-          </p>
+          </span>
         ) : null}
-        <div className="mt-1 flex flex-wrap gap-2">
+        <span className="mt-1 flex flex-wrap gap-2">
           {outcome.reason === "busy" ? (
             <Button variant="outline" size="sm" onClick={props.onFollow}>
               Wait until it has finished
@@ -308,8 +295,8 @@ function Outcome(props: { view: PublishView; host: string; onFollow: () => void 
               Retry
             </Button>
           ) : null}
-        </div>
-      </AlertDescription>
+        </span>
+      </span>
     </Alert>
   );
 }
@@ -328,8 +315,8 @@ export function PublishMessages(props: {
   return (
     <div aria-live="polite" className="flex min-w-0 flex-col gap-3 empty:hidden">
       {props.notice ? (
-        <Alert>
-          <AlertDescription>{props.notice}</AlertDescription>
+        <Alert tone="info" title="Note">
+          {props.notice}
         </Alert>
       ) : null}
       <Outcome view={props.view} host={props.host} onFollow={props.onFollow} />
@@ -345,12 +332,9 @@ export function PublishMessages(props: {
         </p>
       ) : null}
       {state.outOfSync ? (
-        <Alert>
-          <AlertTitle>Visitors may see another version</AlertTitle>
-          <AlertDescription>
-            The pages that are live are not the ones this admin describes, after a rollback or an interrupted publish.
-            Put it live again to bring them in line.
-          </AlertDescription>
+        <Alert tone="warning" title="Visitors may see another version">
+          The pages that are live are not the ones this admin describes, after a rollback or an interrupted publish. Put
+          it live again to bring them in line.
         </Alert>
       ) : null}
     </div>
@@ -391,6 +375,8 @@ export function VersionsCard(props: {
   return (
     <>
       <ExpandableCard
+        // Positioned, so the screen-reader-only text inside is clipped with the folded panel.
+        className="relative"
         title="Earlier versions"
         description={
           latest === undefined
@@ -404,28 +390,18 @@ export function VersionsCard(props: {
           <Timeline events={events} now={props.now} label="Published versions" headingLevel={3} />
         )}
       </ExpandableCard>
-      <AlertDialog open={pick !== null} onOpenChange={(open) => (open ? null : setPick(null))}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Put this version back?</AlertDialogTitle>
-            <AlertDialogDescription>
-              It becomes the draft and goes live right away. Your current draft, with any changes that are not live yet,
-              is replaced.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (pick) props.onRevert(pick);
-                setPick(null);
-              }}
-            >
-              Put it back live
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={pick !== null}
+        onOpenChange={(open) => (open ? null : setPick(null))}
+        title="Put this version back?"
+        description="It becomes the draft and goes live right away. Your current draft, with any changes that are not live yet, is replaced."
+        cancel="Cancel"
+        confirm="Put it back live"
+        onConfirm={() => {
+          if (pick) props.onRevert(pick);
+          setPick(null);
+        }}
+      />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
+import { Alert } from "@deparked/ui/arc/alert";
 import { Button } from "@deparked/ui/button";
 import { Link } from "@tanstack/react-router";
 import { MailWarning } from "lucide-react";
@@ -33,17 +33,13 @@ function FixLink({ host, mail, ...rest }: { host: string; mail: Problem; classNa
 export function OfferMailNotice({ host, mail }: { host: string; mail: OfferMail }) {
   if (mail.state === "ok") return null;
   return (
-    <Alert role="note" className="mb-6 border-amber-500/40 bg-amber-50/60 dark:bg-amber-950/20">
-      <MailWarning aria-hidden="true" className="text-amber-700 dark:text-amber-400" />
-      <AlertTitle>Offers for {host} are saved but not emailed yet</AlertTitle>
-      <AlertDescription>
-        <p className="[overflow-wrap:anywhere]">{REASON[mail.state](mail)}</p>
-        <Button asChild variant="outline" size="sm" className="mt-2">
-          <FixLink host={host} mail={mail}>
-            {FIX_LABEL[mail.state]}
-          </FixLink>
-        </Button>
-      </AlertDescription>
+    <Alert tone="warning" title={`Offers for ${host} are saved but not emailed yet`} className="mb-6">
+      <span className="block [overflow-wrap:anywhere]">{REASON[mail.state](mail)}</span>
+      <Button asChild variant="outline" size="sm" className="mt-2">
+        <FixLink host={host} mail={mail}>
+          {FIX_LABEL[mail.state]}
+        </FixLink>
+      </Button>
     </Alert>
   );
 }

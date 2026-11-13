@@ -1,5 +1,5 @@
 import type { SetupEffect, SetupState } from "@deparked/hosting";
-import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
+import { Alert } from "@deparked/ui/arc/alert";
 import { Button } from "@deparked/ui/button";
 import { cn } from "@deparked/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -51,17 +51,13 @@ export function StatusIcon({ status }: { status: RowStatus }) {
 /** The "token rejected" message, with the way out. */
 export function CredentialsRejected({ message }: { message?: string }) {
   return (
-    <Alert variant="destructive">
-      <AlertTitle>Cloudflare rejected the token</AlertTitle>
-      <AlertDescription>
-        <p>
-          {message ??
-            "The saved API token no longer works, or it lacks a permission. Nothing was changed by this step."}
-        </p>
-        <Button asChild variant="outline" size="sm" className="mt-2">
-          <Link to="/admin/settings/cloudflare">Replace token in Settings</Link>
-        </Button>
-      </AlertDescription>
+    <Alert tone="danger" title="Cloudflare rejected the token">
+      <span className="block [overflow-wrap:anywhere]">
+        {message ?? "The saved API token no longer works, or it lacks a permission. Nothing was changed by this step."}
+      </span>
+      <Button asChild variant="outline" size="sm" className="mt-2">
+        <Link to="/admin/settings/cloudflare">Replace token in Settings</Link>
+      </Button>
     </Alert>
   );
 }
@@ -239,18 +235,18 @@ export function SetupRunner(props: {
           </div>
         </div>
       ) : (
-        <Alert variant={problem.kind === "failed" ? "destructive" : "default"}>
-          <AlertTitle>{problem.kind === "failed" ? "This step failed" : "Deparked needs you here"}</AlertTitle>
-          <AlertDescription>
-            <p className="[overflow-wrap:anywhere]">{problem.message}</p>
-            <p>Every step is safe to repeat: nothing is done twice.</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => void go()} disabled={running}>
-                {problem.kind === "failed" ? "Retry" : "Check again"}
-              </Button>
-              {problem.kind === "blocked" ? props.blockedAction : null}
-            </div>
-          </AlertDescription>
+        <Alert
+          tone={problem.kind === "failed" ? "danger" : "warning"}
+          title={problem.kind === "failed" ? "This step failed" : "Deparked needs you here"}
+        >
+          <span className="block [overflow-wrap:anywhere]">{problem.message}</span>
+          <span className="block">Every step is safe to repeat: nothing is done twice.</span>
+          <span className="mt-2 flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => void go()} disabled={running}>
+              {problem.kind === "failed" ? "Retry" : "Check again"}
+            </Button>
+            {problem.kind === "blocked" ? props.blockedAction : null}
+          </span>
         </Alert>
       )}
     </div>

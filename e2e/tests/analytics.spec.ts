@@ -52,11 +52,18 @@ test("visits, conversion, referrers and countries come from Web Analytics next t
   await page.getByRole("navigation", { name: "Domain" }).getByRole("link", { name: "Visits" }).click();
   await expect(page).toHaveURL(/\/admin\/d\/example\.com\/analytics$/);
   const main = page.getByRole("main");
-  const stat = (label: string) => main.locator("dt", { hasText: label }).locator("xpath=following-sibling::dd");
-  await expect(stat("Visits, 7 days")).toHaveText("7");
-  await expect(stat("Visits, 30 days")).toHaveText("10");
-  await expect(stat("Offers, 30 days")).toHaveText("1");
-  await expect(stat("Conversion, 30 days")).toHaveText("10%");
+  // Each headline number is a card: its label, the number (read as text too) and one line of context.
+  const stat = (label: string) => main.getByRole("article").filter({ has: page.getByText(label, { exact: true }) });
+  await expect(stat("Visits, 30 days")).toContainText("10");
+  await expect(stat("Visits, 7 days")).toContainText("7");
+  await expect(stat("Offers, 30 days")).toContainText("1");
+  // The server's page already carries the real numbers: nothing counts up from 0 once a script runs.
+  const html = await (await page.request.get(page.url())).text();
+  expect(html).toMatch(/data-metric-value[^>]*>10</);
+  expect(html).toMatch(/data-metric-value[^>]*>7</);
+  // The conversion is the offers card's tag, exact to a tenth of a percent.
+  await expect(stat("Offers, 30 days")).toContainText("10% of visits");
+  await expect(stat("Offers, 30 days")).toContainText("1 from 10 visits");
 
   const referrers = main.getByRole("listitem").filter({ has: page.getByText(/^(Direct|news\.example)$/) });
   await expect(referrers).toHaveText([/news\.example\s*5/, /Direct\s*5/]);

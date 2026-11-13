@@ -227,9 +227,8 @@
 
 @theme inline {
   --font-sans: var(--font-body);
-  /* The display face (`font-heading`). `font-serif` keeps its name for the screens that used it for headings. */
+  /* The display face (`font-heading`). */
   --font-heading: var(--font-display);
-  --font-serif: var(--font-display);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -261,13 +260,6 @@
   --shadow-rest: var(--shadow-resting);
   --shadow-lift: var(--shadow-raised);
   --shadow-float: var(--shadow-floating);
-}
-
-/* Used by the Ruixen spark chart's draw-in animation. */
-@keyframes spark-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
 }
 
 @layer base {

@@ -1,23 +1,16 @@
 import type { SetupEffect } from "@deparked/hosting";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@deparked/ui/alert-dialog";
+import { Alert } from "@deparked/ui/arc/alert";
+import { Skeleton } from "@deparked/ui/arc/skeleton";
 import { Button } from "@deparked/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
-import { Skeleton } from "@deparked/ui/skeleton";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { Check, CloudOff, Inbox, Palette, Power, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { describeChange, type SetupFailure, takeOffStep } from "../server/domain-setup/functions";
 import type { DisplayStatus } from "../server/domains";
 import type { PendingChange } from "../server/pending-change";
+import { ConfirmDialog } from "./confirm-dialog";
+import { effectRows, IconRows, keepRows, SettingsSection } from "./settings-ui";
 import { CredentialsRejected, SetupRunner, type StepRun } from "./setup-runner";
 
 type Change = "turn-off" | "remove";
@@ -25,14 +18,6 @@ type Change = "turn-off" | "remove";
 type Description = {
   steps: { id: string; title: string }[];
   removal: { effects: SetupEffect[]; keeps: string[] } | null;
-};
-
-const VERB: Record<SetupEffect["kind"], string> = {
-  create: "Adds",
-  change: "Changes",
-  remove: "Removes",
-  restore: "",
-  reuse: "Leaves",
 };
 
 const COPY: Record<Change, { title: string; action: string; running: string; done: string; intro: string }> = {
@@ -53,6 +38,7 @@ const COPY: Record<Change, { title: string; action: string; running: string; don
   },
 };
 
+/** The confirmation: what the change undoes and what it keeps, read from the server before anything happens. */
 function ChangeDialog(props: {
   host: string;
   change: Change;
@@ -78,79 +64,61 @@ function ChangeDialog(props: {
     if (props.open) void load();
   }, [props.open, load]);
 
+  const ready = result !== null && !("ok" in result) ? result : null;
   return (
-    <AlertDialog open={props.open} onOpenChange={props.onOpenChange}>
-      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="[overflow-wrap:anywhere]">
-            {copy.action} {props.host}?
-          </AlertDialogTitle>
-          <AlertDialogDescription>{copy.intro}</AlertDialogDescription>
-        </AlertDialogHeader>
-        {result === null ? (
-          <div role="status" aria-label="Loading what changes" className="flex flex-col gap-2">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-        ) : "ok" in result ? (
-          result.credentialsRejected ? (
-            <CredentialsRejected message={result.message} />
-          ) : (
-            <p className="text-sm text-destructive [overflow-wrap:anywhere]">{result.message}</p>
-          )
+    <ConfirmDialog
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title={`${copy.action} ${props.host}?`}
+      description={copy.intro}
+      cancel="Cancel"
+      confirm={copy.action}
+      tone={props.change === "remove" ? "danger" : "default"}
+      confirmDisabled={ready === null}
+      onConfirm={() => {
+        if (ready !== null) props.onConfirm(ready);
+      }}
+    >
+      {result === null ? (
+        <Skeleton label="Loading what changes" lines={3} />
+      ) : "ok" in result ? (
+        result.credentialsRejected ? (
+          <CredentialsRejected message={result.message} />
         ) : (
-          <div className="flex flex-col gap-3 text-sm">
-            <div>
-              <h3 className="font-medium">In Cloudflare</h3>
-              {result.removal === null || result.removal.effects.length === 0 ? (
-                <p className="text-muted-foreground">Nothing: Deparked has nothing set up there for this domain.</p>
-              ) : (
-                <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                  {result.removal.effects.map((effect) => (
-                    <li key={`${effect.kind}:${effect.what}`} className="[overflow-wrap:anywhere]">
-                      {effect.kind === "restore"
-                        ? `${effect.what.charAt(0).toUpperCase()}${effect.what.slice(1)}`
-                        : `${VERB[effect.kind]} ${effect.what}`}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div>
-              <h3 className="font-medium">Then</h3>
-              <p className="text-muted-foreground">
-                The domain's pages are taken offline
-                {props.change === "remove" ? " and it leaves the list of domains." : "."}
-              </p>
-            </div>
-            {result.removal === null ? null : (
-              <div>
-                <h3 className="font-medium">Stays</h3>
-                <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                  {result.removal.keeps.map((keep) => (
-                    <li key={keep} className="[overflow-wrap:anywhere]">
-                      {keep}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <Alert tone="danger" title="Nothing can be changed right now">
+            <span className="[overflow-wrap:anywhere]">{result.message}</span>
+          </Alert>
+        )
+      ) : (
+        <>
+          <div className="flex flex-col gap-2">
+            <h3 className="font-semibold">Undone in Cloudflare</h3>
+            {result.removal === null || result.removal.effects.length === 0 ? (
+              <p className="text-muted-foreground">Nothing: Deparked has nothing set up there for this domain.</p>
+            ) : (
+              <IconRows label="Undone in Cloudflare" rows={effectRows(result.removal.effects, true)} />
             )}
+            <IconRows
+              label="Then"
+              rows={[
+                {
+                  key: "offline",
+                  icon: CloudOff,
+                  tone: "danger",
+                  text: `The domain's pages are taken offline${props.change === "remove" ? " and it leaves the list of domains." : "."}`,
+                },
+              ]}
+            />
           </div>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            variant={props.change === "remove" ? "destructive" : "default"}
-            disabled={result === null || "ok" in result}
-            onClick={() => {
-              if (result !== null && !("ok" in result)) props.onConfirm(result);
-            }}
-          >
-            {copy.action}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          {result.removal === null || result.removal.keeps.length === 0 ? null : (
+            <div className="flex flex-col gap-2">
+              <h3 className="font-semibold">Kept</h3>
+              <IconRows label="Kept" rows={keepRows(result.removal.keeps)} />
+            </div>
+          )}
+        </>
+      )}
+    </ConfirmDialog>
   );
 }
 
@@ -182,40 +150,41 @@ function ChangeProgress(props: { host: string; change: Change; steps: Descriptio
   );
 }
 
-function ChangeCard(props: { host: string; change: Change; description: string; title?: string }) {
+/** A section with one change: its line, its button, the confirmation, then its steps once confirmed. */
+function ChangeSection(props: { host: string; change: Change; lead: string; title?: string }) {
   const [open, setOpen] = useState(false);
   const [running, setRunning] = useState<Description["steps"] | null>(null);
   const copy = COPY[props.change];
+  const remove = props.change === "remove";
   return (
-    <Card className={props.change === "remove" ? "border-destructive/40" : undefined}>
-      <CardHeader>
-        <CardTitle>
-          <h2>{props.title ?? copy.title}</h2>
-        </CardTitle>
-        <CardDescription>{props.description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {running === null ? (
-          <>
-            <Button variant={props.change === "remove" ? "destructive" : "outline"} onClick={() => setOpen(true)}>
+    <SettingsSection
+      title={props.title ?? copy.title}
+      lead={props.lead}
+      {...(remove ? { tone: "danger" as const } : {})}
+    >
+      {running === null ? (
+        <>
+          <div>
+            <Button variant={remove ? "destructive" : "outline"} onClick={() => setOpen(true)}>
+              {remove ? <Trash2 aria-hidden="true" /> : <Power aria-hidden="true" />}
               {props.title ?? copy.action}…
             </Button>
-            <ChangeDialog
-              host={props.host}
-              change={props.change}
-              open={open}
-              onOpenChange={setOpen}
-              onConfirm={(description) => {
-                setOpen(false);
-                setRunning(description.steps);
-              }}
-            />
-          </>
-        ) : (
-          <ChangeProgress host={props.host} change={props.change} steps={running} />
-        )}
-      </CardContent>
-    </Card>
+          </div>
+          <ChangeDialog
+            host={props.host}
+            change={props.change}
+            open={open}
+            onOpenChange={setOpen}
+            onConfirm={(description) => {
+              setOpen(false);
+              setRunning(description.steps);
+            }}
+          />
+        </>
+      ) : (
+        <ChangeProgress host={props.host} change={props.change} steps={running} />
+      )}
+    </SettingsSection>
   );
 }
 
@@ -223,7 +192,7 @@ const ON_COPY = {
   off: {
     title: "Turned off",
     text: (host: string) =>
-      `${host} serves what it served before Deparked. Its design and offers are kept, so turning it on again brings the page back as it was.`,
+      `${host} serves what it served before Deparked. Turning it on again brings the page back as it was.`,
     action: "Turn on…",
   },
   adding: {
@@ -246,43 +215,46 @@ export function DomainActions(props: { host: string; status: DisplayStatus; pend
   const off = status === "off";
   const on = ON_COPY[pending === "adding" || pending === "turning-on" ? pending : "off"];
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
+    <>
       {pending === "turning-off" || pending === "unclear" ? (
-        <ChangeCard
+        <ChangeSection
           host={host}
           change="turn-off"
           title="Finish turning off"
-          description={`Turning ${host} off stopped half-way: some of Deparked's settings, or its pages, are still in place. Finishing checks every step again and removes what is left.`}
+          lead={`Turning ${host} off stopped half-way: some of Deparked's settings, or its pages, are still in place. Finishing checks every step again and removes what is left.`}
         />
       ) : null}
       {off ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <h2>{on.title}</h2>
-            </CardTitle>
-            <CardDescription>{on.text(host)}</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <SettingsSection title={on.title} lead={on.text(host)}>
+          <IconRows
+            label="Kept while it is off"
+            rows={[
+              { key: "design", icon: Palette, tone: "positive", text: "Its page design" },
+              { key: "offers", icon: Inbox, tone: "positive", text: "The offers it received" },
+              { key: "steps", icon: Check, tone: "neutral", text: "Turning on runs the same steps as adding it" },
+            ]}
+          />
+          <div>
             <Button asChild>
               <Link to="/admin/add" search={{ host }}>
+                <Power aria-hidden="true" />
                 {on.action}
               </Link>
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </SettingsSection>
       ) : pending === "turning-off" ? null : (
-        <ChangeCard
+        <ChangeSection
           host={host}
           change="turn-off"
-          description={`Stops showing the for-sale page on ${host} and gives the address back to what it served before. The design and the offers stay.`}
+          lead={`Stops showing the for-sale page on ${host} and gives the address back to what it served before. The design and the offers stay.`}
         />
       )}
-      <ChangeCard
+      <ChangeSection
         host={host}
         change="remove"
-        description={`Turns ${host} off and takes it off the list. Its offers stay in the database.`}
+        lead={`Turns ${host} off and takes it off the list. Its offers stay in the database.`}
       />
-    </div>
+    </>
   );
 }

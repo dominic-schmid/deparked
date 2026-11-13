@@ -86,12 +86,12 @@ test("the owner goes from an empty workspace to a handled offer, an export and a
   expect(csv).toContain("example.com,9900.00,USD,'=SUM(A1),buyer@example.net");
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Settings" }).click();
-  await page.getByLabel("Email address").fill("Second@Example.org");
+  await page.getByLabel("Add another address").fill("Second@Example.org");
   await page.getByRole("button", { name: "Add address" }).click();
   await expect(page.getByText("Verification email sent to second@example.org")).toBeVisible();
   const added = page.getByRole("listitem").filter({ hasText: "second@example.org" });
-  await expect(added).toContainText("Pending");
-  await expect(added).toContainText("Waiting since");
+  await expect(added).toContainText("Waiting for you to click the link in its inbox");
+  await expect(added.getByRole("button", { name: "I clicked it" })).toBeVisible();
   // Right after the first mail the limit answers in that row, in plain words.
   await added.getByRole("button", { name: "Send it again" }).click();
   await expect(added.getByRole("alert")).toContainText("You can send another in a minute.");

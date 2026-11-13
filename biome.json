@@ -33,7 +33,7 @@
   },
   "overrides": [
     {
-      "includes": ["packages/ui/src/components/ui/**", "packages/ui/src/components/ruixen/**"],
+      "includes": ["packages/ui/src/components/ui/**"],
       "linter": {
         "rules": {
           "a11y": {

@@ -1,6 +1,6 @@
 import { Button } from "@deparked/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
 import { createFileRoute } from "@tanstack/react-router";
+import { LogOut } from "lucide-react";
 import { AuthForm, PasswordField } from "../../../components/auth-form";
 import {
   lockedMessage,
@@ -10,6 +10,7 @@ import {
   retryMinutes,
   retrySearch,
 } from "../../../components/messages";
+import { SectionPart, SettingsSection } from "../../../components/settings-ui";
 import { changePassword } from "../../../server/auth/account";
 import { checkNewPassword, PASSWORD_MIN_LENGTH } from "../../../server/auth/password";
 import { sessionCookie } from "../../../server/auth/session";
@@ -68,49 +69,37 @@ function ChangePasswordPage() {
           ? NEW_PASSWORD_ERRORS[error]
           : undefined;
   return (
-    <div className="flex max-w-md flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>Change password</h2>
-          </CardTitle>
-          <CardDescription>Changing it logs out every other browser. This one stays logged in.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AuthForm
-            action={PATH}
-            submit="Change password"
-            submitting="Changing…"
-            error={message}
-            notice={changed ? "Password changed. Every other browser was logged out." : undefined}
-          >
-            <PasswordField label="Current password" name="current" autoComplete="current-password" />
-            <PasswordField
-              label="New password"
-              name="password"
-              autoComplete="new-password"
-              minLength={PASSWORD_MIN_LENGTH}
-              hint={PASSWORD_HINT}
-            />
-            <PasswordField label="Repeat new password" name="confirm" autoComplete="new-password" />
-          </AuthForm>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>Log out everywhere</h2>
-          </CardTitle>
-          <CardDescription>Log out here and in every other browser, without changing the password.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form method="post" action="/admin/settings/logout-everywhere">
-            <Button type="submit" variant="outline">
-              Log out everywhere
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <SettingsSection title="Password" lead="Changing it logs out every other browser. This one stays logged in.">
+      <div className="max-w-md">
+        <AuthForm
+          action={PATH}
+          submit="Change password"
+          submitting="Changing…"
+          error={message}
+          notice={changed ? "Password changed. Every other browser was logged out." : undefined}
+        >
+          <PasswordField label="Current password" name="current" autoComplete="current-password" />
+          <PasswordField
+            label="New password"
+            name="password"
+            autoComplete="new-password"
+            minLength={PASSWORD_MIN_LENGTH}
+            hint={PASSWORD_HINT}
+          />
+          <PasswordField label="Repeat new password" name="confirm" autoComplete="new-password" />
+        </AuthForm>
+      </div>
+      <SectionPart title="Log out everywhere" divided>
+        <p className="text-sm text-muted-foreground">
+          Log out here and in every other browser, without changing the password.
+        </p>
+        <form method="post" action="/admin/settings/logout-everywhere">
+          <Button type="submit" variant="outline">
+            <LogOut aria-hidden="true" />
+            Log out everywhere
+          </Button>
+        </form>
+      </SectionPart>
+    </SettingsSection>
   );
 }

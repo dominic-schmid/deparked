@@ -3,7 +3,6 @@ import { Badge } from "@deparked/ui/badge";
 import { Button } from "@deparked/ui/button";
 import { Disclosure, FlowTitle } from "@deparked/ui/flow";
 import { Input } from "@deparked/ui/input";
-import { Label } from "@deparked/ui/label";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowRight, CircleAlert, Lock, MailCheck, RotateCw } from "lucide-react";
@@ -167,9 +166,9 @@ function NotifyScreen() {
         <p>Every offer is emailed to you and kept here.</p>
       </FlowTitle>
       <form noValidate onSubmit={(event) => void onSubmit(event)} className="flex max-w-[30rem] flex-col gap-2.5">
-        <Label htmlFor={id} className="font-semibold">
+        <label htmlFor={id} className="text-sm font-semibold">
           Email address
-        </Label>
+        </label>
         <div className="flex flex-wrap gap-2">
           <Input
             ref={input}

@@ -1,11 +1,8 @@
 import { Badge } from "@deparked/ui/badge";
 import { Button } from "@deparked/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@deparked/ui/card";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@deparked/ui/field";
 import { Input } from "@deparked/ui/input";
 import { cn } from "@deparked/ui/lib/utils";
-import { SparkChart } from "@deparked/ui/ruixen/spark-chart";
-import { WizardStepper } from "@deparked/ui/ruixen/wizard-stepper";
 import { Switch } from "@deparked/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@deparked/ui/tabs";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -41,17 +38,8 @@ describe("static rendering", () => {
     expect(html).toContain('role="alert"');
   });
 
-  it("renders layout components without client JS", () => {
-    const html = renderToStaticMarkup(
-      <Card>
-        <CardHeader>
-          <CardTitle>example.com</CardTitle>
-          <Badge variant="secondary">Live</Badge>
-        </CardHeader>
-        <CardContent>Three offers</CardContent>
-      </Card>,
-    );
-    expect(html).toContain("example.com");
+  it("renders a badge without client JS", () => {
+    const html = renderToStaticMarkup(<Badge variant="secondary">Live</Badge>);
     expect(html).toContain("Live");
     expect(html).not.toContain("<script");
   });
@@ -74,25 +62,6 @@ describe("static rendering", () => {
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain("Variant picker");
     expect(html).not.toContain("Title and description");
-  });
-
-  it("renders the Ruixen components on the server", () => {
-    const chart = renderToStaticMarkup(<SparkChart data={[3, 8, 5, 13, 9]} height={48} />);
-    expect(chart).toContain("<svg");
-    expect(chart).toMatch(/<path[^>]* d="M 0 /);
-
-    const stepper = renderToStaticMarkup(
-      <WizardStepper
-        currentStep={1}
-        steps={[
-          { id: "connect", title: "Connect Cloudflare" },
-          { id: "install", title: "Installing" },
-          { id: "password", title: "Create your password" },
-        ]}
-      />,
-    );
-    expect(stepper).toContain("Connect Cloudflare");
-    expect(stepper).toContain("Create your password");
   });
 });
 

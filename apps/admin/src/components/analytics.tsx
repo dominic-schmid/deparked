@@ -1,7 +1,7 @@
 import { Alert } from "@deparked/ui/arc/alert";
+import { Sparkline } from "@deparked/ui/arc/sparkline";
 import { Button } from "@deparked/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@deparked/ui/popover";
-import { SparkChart } from "@deparked/ui/ruixen/spark-chart";
 import { Link, useRouter } from "@tanstack/react-router";
 import type { AnalyticsProblem } from "../server/analytics-shape";
 
@@ -46,11 +46,11 @@ export function ConversionValue({ value }: { value: string }) {
   );
 }
 
-/** The small line in a domain's row. Decorative: the counts next to it are its text. */
+/** The small line in a domain's row. Decorative: the counts next to it are its text, so Arc's caption is hidden. */
 export function VisitsSparkline({ daily }: { daily: number[] }) {
   return (
-    <div aria-hidden="true" className="w-20 shrink-0 text-primary">
-      <SparkChart data={daily} height={24} color="currentColor" className="pointer-events-none" />
+    <div aria-hidden="true" inert className="w-20 shrink-0 [&_figcaption]:hidden [&_figure]:gap-0">
+      <Sparkline data={daily} label="Visits" width={80} height={24} area={false} interactive={false} />
     </div>
   );
 }
@@ -59,17 +59,23 @@ const TEXT_LINK =
   "rounded-sm font-medium underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 /** Why visits are missing, with the fix when the owner can make one. Offers and the rest of the page still show. */
-export function AnalyticsProblemAlert({ problem }: { problem: AnalyticsProblem }) {
+export function AnalyticsProblemAlert({
+  problem,
+  className = "mb-6",
+}: {
+  problem: AnalyticsProblem;
+  className?: string;
+}) {
   const router = useRouter();
   return (
-    <Alert tone="warning" title="Visits are not available right now" className="mb-6">
-      <p>{problem.message}</p>
+    <Alert tone="warning" title="Visits are not available right now" className={className}>
+      <span className="block">{problem.message}</span>
       {problem.credentials ? (
-        <p>
+        <span className="mt-1 block">
           <Link to="/admin/settings/cloudflare" className={TEXT_LINK}>
             Check the Cloudflare token
           </Link>
-        </p>
+        </span>
       ) : (
         <Button variant="outline" size="sm" className="mt-2" onClick={() => router.invalidate()}>
           Try again
