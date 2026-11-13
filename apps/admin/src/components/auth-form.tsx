@@ -31,6 +31,8 @@ export function AuthForm(props: {
   submitting: string;
   error?: string | undefined;
   notice?: string | undefined;
+  /** The submit button's look: full width by default; a guided flow's own wins (`flow`). */
+  look?: "card" | "flow";
   children: ReactNode;
 }) {
   const [pending, setPending] = useState(false);
@@ -66,7 +68,13 @@ export function AuthForm(props: {
       {/* One workspace, one password: a fixed name lets password managers file it properly. */}
       <input type="text" name="username" autoComplete="username" value="admin" readOnly hidden />
       {props.children}
-      <Button type="submit" aria-disabled={pending} className="w-full">
+      <Button
+        type="submit"
+        aria-disabled={pending}
+        variant={props.look === "flow" ? "accent" : "default"}
+        size={props.look === "flow" ? "lg" : "default"}
+        className={props.look === "flow" ? "h-12 self-start px-6 max-sm:w-full" : "w-full"}
+      >
         {pending ? props.submitting : props.submit}
       </Button>
     </form>
