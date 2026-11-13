@@ -90,13 +90,13 @@ function NotifyAddressesPage() {
           </CardTitle>
           <CardDescription>
             Where offers are emailed. Cloudflare only delivers to addresses whose owner clicked the link in its
-            verification email. Offers are always kept in the inbox too.
+            verification email. Offers are always kept under Offers too.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {addresses.length === 0 ? (
             <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No address yet. Add one below so offers reach your inbox.
+              No address yet. Add one below so offers reach your email.
             </p>
           ) : (
             <ul className="flex flex-col divide-y rounded-lg border">
@@ -231,7 +231,7 @@ function AddressRow(props: {
               <AlertDialogTitle className="[overflow-wrap:anywhere]">Remove {address.email}?</AlertDialogTitle>
               <AlertDialogDescription className="[overflow-wrap:anywhere]">
                 {verified
-                  ? "Offers can no longer be emailed to it. Offers already received stay in the inbox."
+                  ? "Offers can no longer be emailed to it. Offers already received stay under Offers."
                   : "It never received an offer. A domain that would have used it moves to your other address, if you have one."}
               </AlertDialogDescription>
             </AlertDialogHeader>

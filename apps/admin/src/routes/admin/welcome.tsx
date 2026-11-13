@@ -103,7 +103,7 @@ function LaterLink() {
       >
         Skip to the admin
       </Link>
-      . You can add an address any time in Settings. Until then offers wait in the inbox.
+      . You can add an address any time in Settings. Until then offers wait under Offers.
     </p>
   );
 }
@@ -248,11 +248,11 @@ function InboxScreen(props: { addresses: NotifyAddress[] }) {
         title={pending.length === 0 ? "Offers will reach you" : "Check your inbox"}
       >
         {pending.length === 0 ? (
-          <p>Cloudflare confirmed your address. Every offer is emailed there and also kept in your Deparked inbox.</p>
+          <p>Cloudflare confirmed your address. Every offer is emailed there and also kept under Offers in Deparked.</p>
         ) : (
           <p>
             Cloudflare sent an email with a verification link. Click it, then come back and check. No need to wait: you
-            can go on now, and offers are kept in your Deparked inbox until the address is verified.
+            can go on now, and offers are kept under Offers in Deparked until the address is verified.
           </p>
         )}
       </ScreenTitle>
@@ -361,7 +361,7 @@ function DomainScreen(props: { addresses: NotifyAddress[] }) {
         <MailCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
         <span className="min-w-0 [overflow-wrap:anywhere]">
           {address === null ? (
-            "Its offers wait in the inbox until one of your addresses is verified. The first one verified gets them."
+            "Its offers wait under Offers until one of your addresses is verified. The first one verified gets them."
           ) : (
             <>
               Offers for it go to{" "}

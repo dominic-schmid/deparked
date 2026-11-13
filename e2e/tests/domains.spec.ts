@@ -57,7 +57,7 @@ test("the owner adds a domain from the Cloudflare account, sees its placeholder 
   await page.getByRole("button", { name: `Add ${HOST}` }).click();
   await expect(page.getByRole("heading", { name: `${HOST} is set up` })).toBeVisible({ timeout: 30_000 });
   // No address for offers yet: said plainly, with the fix one click away.
-  await expect(page.getByText(`Offers for ${HOST} are saved in the inbox but not emailed yet`)).toBeVisible();
+  await expect(page.getByText(`Offers for ${HOST} are saved but not emailed yet`)).toBeVisible();
   await expect(page.getByRole("link", { name: "Add an address" })).toHaveAttribute("href", "/admin/settings");
 
   const deployed = mock.deployedAssets("deparked-sites");
