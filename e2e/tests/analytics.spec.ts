@@ -49,7 +49,7 @@ test("visits, conversion, referrers and countries come from Web Analytics next t
   expect(mock.callsTo("analytics.graphql")).toHaveLength(1);
 
   await row("example.com").getByRole("link", { name: "example.com" }).click();
-  await page.getByRole("navigation", { name: "Domain" }).getByRole("link", { name: "Analytics" }).click();
+  await page.getByRole("navigation", { name: "Domain" }).getByRole("link", { name: "Visits" }).click();
   await expect(page).toHaveURL(/\/admin\/d\/example\.com\/analytics$/);
   const main = page.getByRole("main");
   const stat = (label: string) => main.locator("dt", { hasText: label }).locator("xpath=following-sibling::dd");
@@ -111,7 +111,7 @@ test("a rejected token leaves the page readable, says what to fix, and is not re
 
   mock.failNext({ route: "analytics.graphql", status: 503, times: 3 });
   await page.getByRole("row").filter({ hasText: "example.com" }).getByRole("link", { name: "example.com" }).click();
-  await page.getByRole("navigation", { name: "Domain" }).getByRole("link", { name: "Analytics" }).click();
+  await page.getByRole("navigation", { name: "Domain" }).getByRole("link", { name: "Visits" }).click();
   await expect(page.getByText("Cloudflare did not answer in time")).toBeVisible();
   await expect(page.getByText("Offers, 30 days")).toBeVisible();
 

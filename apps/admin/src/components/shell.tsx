@@ -38,10 +38,12 @@ export function BrandMark({ className }: { className?: string }) {
   );
 }
 
-const PILL =
+/** A pill in a row of section links. The router marks the current one with `aria-current`, which fills it. */
+export const PILL =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium whitespace-nowrap text-foreground outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current=page]:bg-primary aria-[current=page]:font-semibold aria-[current=page]:text-primary-foreground active:scale-[0.97] max-sm:min-h-11 max-sm:flex-1 max-sm:px-3 motion-reduce:transition-none";
 
-function NewOffersCount({ count }: { count: number }) {
+/** The tangerine count of offers still marked new; nothing at zero. */
+export function NewOffersCount({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span className="rounded-full bg-tangerine px-2 py-px text-xs font-semibold text-tangerine-foreground tabular-nums">
