@@ -13,8 +13,9 @@ import { describe, expect, it } from "vitest";
 
 describe("static rendering", () => {
   it("renders a button as a plain element, and as its child with asChild", () => {
+    // Arc's button wraps its label in the spans that animate a label change.
     expect(renderToStaticMarkup(<Button type="submit">Send offer</Button>)).toMatch(
-      /^<button[^>]*type="submit"[^>]*>Send offer<\/button>$/,
+      /^<button[^>]*type="submit"[^>]*>(<span[^>]*>)*Send offer(<\/span>)*<\/button>$/,
     );
     const link = renderToStaticMarkup(
       <Button asChild variant="outline">

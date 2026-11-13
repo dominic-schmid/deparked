@@ -16,12 +16,12 @@ import {
   DropdownMenuTrigger,
 } from "@deparked/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@deparked/ui/sheet";
-import { Link, ScriptOnce, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Check, ChevronsUpDown, Globe, Inbox, LogOut, Menu, Plus, Search, Settings } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { DomainSummary } from "../server/domains";
 import { StatusDot, statusLabel } from "./status";
-import { THEME_SCRIPT, ThemeToggle } from "./theme";
+import { ThemeToggle } from "./theme";
 
 type ShellData = { domains: DomainSummary[]; newOffers: number; tokenRejected: boolean };
 
@@ -240,7 +240,6 @@ export function AppShell({ data, children }: { data: ShellData; children: ReactN
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <ScriptOnce>{THEME_SCRIPT}</ScriptOnce>
       <a
         href="#main"
         className="sr-only z-50 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"

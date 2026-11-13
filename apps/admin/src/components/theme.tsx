@@ -14,10 +14,10 @@ const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 
 /**
- * Runs before the first paint: a stored choice puts `.dark` or `.light` on <html>. Without one, and without
- * JavaScript, the stylesheet follows the system.
+ * Runs before the first paint: a stored choice puts `.dark` or `.light` on <html>, and `data-theme` (Arc's switch)
+ * follows the choice, or the system setting without one. Without JavaScript the stylesheet follows the system.
  */
-export const THEME_SCRIPT = `try{var t=localStorage.getItem("${KEY}");if(t==="dark"||t==="light")document.documentElement.classList.add(t)}catch(e){}`;
+export const THEME_SCRIPT = `try{var d=document.documentElement,t=null;try{t=localStorage.getItem("${KEY}")}catch(e){}if(t==="dark"||t==="light")d.classList.add(t);d.setAttribute("data-theme",t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light")}catch(e){}`;
 
 function stored(): Theme {
   try {
@@ -28,10 +28,16 @@ function stored(): Theme {
   }
 }
 
+const SYSTEM_DARK = "(prefers-color-scheme: dark)";
+
 function apply(theme: Theme): void {
-  const classes = document.documentElement.classList;
-  classes.toggle("dark", theme === "dark");
-  classes.toggle("light", theme === "light");
+  const root = document.documentElement;
+  root.classList.toggle("dark", theme === "dark");
+  root.classList.toggle("light", theme === "light");
+  root.setAttribute(
+    "data-theme",
+    theme === "dark" || (theme === "system" && matchMedia(SYSTEM_DARK).matches) ? "dark" : "light",
+  );
 }
 
 const listeners = new Set<() => void>();
@@ -42,11 +48,16 @@ function subscribe(listener: () => void): () => void {
     apply(stored());
     listener();
   };
+  // The system setting changed while following it.
+  const system = matchMedia(SYSTEM_DARK);
+  const onSystem = () => apply(stored());
   listeners.add(listener);
   window.addEventListener("storage", onStorage);
+  system.addEventListener("change", onSystem);
   return () => {
     listeners.delete(listener);
     window.removeEventListener("storage", onStorage);
+    system.removeEventListener("change", onSystem);
   };
 }
 

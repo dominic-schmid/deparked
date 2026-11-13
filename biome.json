@@ -30,6 +30,17 @@
           "suspicious": { "noArrayIndexKey": "off", "noDoubleEquals": "off" }
         }
       }
+    },
+    {
+      "includes": ["packages/ui/src/components/arc/**"],
+      "linter": {
+        "rules": {
+          "a11y": { "useSemanticElements": "off", "noSvgWithoutTitle": "off" },
+          "complexity": { "noImportantStyles": "off" },
+          "correctness": { "noUnknownPseudoClass": "off", "useExhaustiveDependencies": "off" },
+          "suspicious": { "noArrayIndexKey": "off", "useIterableCallbackReturn": "off" }
+        }
+      }
     }
   ],
   "assist": { "actions": { "source": { "organizeImports": "on" } } }

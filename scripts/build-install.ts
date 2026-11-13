@@ -32,7 +32,7 @@ await build({
 
 rmSync(`${root}public/assets`, { recursive: true, force: true });
 mkdirSync(`${root}public/assets`, { recursive: true });
-await build({
+const page = await build({
   absWorkingDir: root,
   entryPoints: ["src/ui/main.tsx"],
   outfile: "public/assets/app.js",
@@ -42,19 +42,32 @@ await build({
   platform: "browser",
   target: "es2022",
   jsx: "automatic",
+  // Arc's components are CSS Modules: their styles come out beside the script, and are joined to the Tailwind output below.
+  loader: { ".module.css": "local-css" },
   minify: true,
   define: { "process.env.NODE_ENV": '"production"' },
   legalComments: "none",
   charset: "utf8",
   logLevel: "warning",
+  write: false,
 });
+let arcStyles = "";
+for (const file of page.outputFiles) {
+  if (file.path.endsWith(".css")) arcStyles = file.text;
+  else writeFileSync(file.path, file.contents);
+}
 
 const { stdout } = await promisify(execFile)(
   `${repo}node_modules/.bin/tailwindcss`,
   ["--input", "src/ui/styles.css", "--minify"],
   { cwd: root, maxBuffer: 16 * 1024 * 1024 },
 );
-writeFileSync(`${root}public/assets/app.css`, stdout);
+// Arc's styles sit in Tailwind's `components` layer, so a utility class on an Arc component still overrides it.
+// The layer order is restated because the first stylesheet to name the layers decides it.
+writeFileSync(
+  `${root}public/assets/app.css`,
+  `${stdout}\n@layer theme,base,components,utilities;@layer components{${arcStyles}}\n`,
+);
 
 // The admin's typefaces, self-hosted: the same files the lander catalog ships.
 const fonts = `${repo}apps/sites/public/catalog/fonts/`;
