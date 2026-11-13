@@ -1,6 +1,5 @@
 import { BarChart } from "@deparked/ui/arc/bar-chart";
 import { EmptyState } from "@deparked/ui/arc/empty-state";
-import { MetricCard } from "@deparked/ui/arc/metric-card";
 import { SegmentedControl } from "@deparked/ui/arc/segmented-control";
 import { type DataColumn, SortableDataTable } from "@deparked/ui/arc/sortable-data-table";
 import { Button } from "@deparked/ui/button";
@@ -71,6 +70,32 @@ function Metrics({ visits, offers30 }: { visits: DomainVisits; offers30: number 
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * A headline number in the look of Arc's metric card, rendered as plain text. Arc's card rolls its counter up from 0
+ * once in view, so the server's HTML (and a browser without JavaScript) would read 0: this one says the real number.
+ */
+function MetricCard(props: { label: string; value: number; context: string; change?: string }) {
+  return (
+    <article className="flex min-w-0 flex-col rounded-[24px] bg-card p-5 shadow-rest sm:p-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2 sm:mb-8">
+        <span className="text-sm text-muted-foreground">{props.label}</span>
+        {props.change === undefined ? null : (
+          <small className="rounded-full border px-2 py-0.5 text-sm text-muted-foreground tabular-nums">
+            {props.change}
+          </small>
+        )}
+      </div>
+      <span
+        data-metric-value
+        className="font-heading text-3xl leading-none font-medium tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere]"
+      >
+        {formatCount(props.value)}
+      </span>
+      <p className="mt-4 text-sm text-muted-foreground">{props.context}</p>
+    </article>
   );
 }
 

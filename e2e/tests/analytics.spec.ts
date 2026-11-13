@@ -57,6 +57,10 @@ test("visits, conversion, referrers and countries come from Web Analytics next t
   await expect(stat("Visits, 30 days")).toContainText("10");
   await expect(stat("Visits, 7 days")).toContainText("7");
   await expect(stat("Offers, 30 days")).toContainText("1");
+  // The server's page already carries the real numbers: nothing counts up from 0 once a script runs.
+  const html = await (await page.request.get(page.url())).text();
+  expect(html).toMatch(/data-metric-value[^>]*>10</);
+  expect(html).toMatch(/data-metric-value[^>]*>7</);
   // The conversion is the offers card's tag, exact to a tenth of a percent.
   await expect(stat("Offers, 30 days")).toContainText("10% of visits");
   await expect(stat("Offers, 30 days")).toContainText("1 from 10 visits");
