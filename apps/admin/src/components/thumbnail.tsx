@@ -17,14 +17,16 @@ const cache = new Map<string, Promise<Thumbnail | null>>();
  * on or near the screen, and dropped again when one scrolls far away, so a long list never holds hundreds of
  * documents. Inert like the editor's preview (an empty sandbox: no script, no form, no navigation) and hidden from
  * assistive technology: the card around it names the domain. Until it arrives, and if it cannot be rendered, the
- * window shows the domain's name.
+ * window shows the domain's name on the surface colour; the page fades in over it once it has painted.
  */
 export function PageThumbnail({ host, className }: { host: string; className?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const render = useServerFn(getThumbnail);
   const [near, setNear] = useState(false);
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [html, setHtml] = useState<string | null>(null);
+  // The frame stays invisible until its page has painted, so the window never flashes white or sits blank.
+  const [painted, setPainted] = useState(false);
 
   useEffect(() => {
     const element = box.current;
@@ -32,12 +34,14 @@ export function PageThumbnail({ host, className }: { host: string; className?: s
     const near = new IntersectionObserver(([entry]) => setNear(entry?.isIntersecting ?? false), {
       rootMargin: "400px 0px",
     });
-    const size = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 0));
+    const resize = new ResizeObserver(([entry]) =>
+      setSize({ width: entry?.contentRect.width ?? 0, height: entry?.contentRect.height ?? 0 }),
+    );
     near.observe(element);
-    size.observe(element);
+    resize.observe(element);
     return () => {
       near.disconnect();
-      size.disconnect();
+      resize.disconnect();
     };
   }, []);
 
@@ -58,16 +62,21 @@ export function PageThumbnail({ host, className }: { host: string; className?: s
     };
   }, [near, html, host, render]);
 
+  useEffect(() => {
+    if (!near) setPainted(false);
+  }, [near]);
+
+  const { width } = size;
   const scale = width / PAGE_WIDTH;
   return (
     <div
       ref={box}
       className={cn("relative aspect-[16/10] w-full overflow-hidden bg-muted", className)}
-      data-thumbnail={html !== null && near ? "ready" : "waiting"}
+      data-thumbnail={painted ? "ready" : "waiting"}
     >
       <span
         aria-hidden="true"
-        className="absolute inset-0 grid place-items-center p-4 text-center font-heading text-lg font-bold tracking-[-0.02em] text-muted-foreground/70 [overflow-wrap:anywhere]"
+        className="absolute inset-0 grid place-items-center p-4 text-center font-heading text-lg font-bold max-sm:p-2 max-sm:text-xs tracking-[-0.02em] text-muted-foreground/70 [overflow-wrap:anywhere]"
       >
         {host}
       </span>
@@ -79,8 +88,13 @@ export function PageThumbnail({ host, className }: { host: string; className?: s
           sandbox=""
           referrerPolicy="no-referrer"
           srcDoc={html}
-          className="pointer-events-none absolute top-0 left-0 origin-top-left border-0 bg-white"
-          style={{ width: PAGE_WIDTH, height: PAGE_WIDTH / (16 / 10), transform: `scale(${scale})` }}
+          onLoad={() => requestAnimationFrame(() => setPainted(true))}
+          className={cn(
+            "pointer-events-none absolute top-0 left-0 origin-top-left border-0 transition-opacity duration-150 ease-out motion-reduce:transition-none",
+            painted ? "opacity-100" : "opacity-0",
+          )}
+          // Tall enough to fill the window whatever its shape (16:10 on a card, a taller crop in a phone row).
+          style={{ width: PAGE_WIDTH, height: size.height / scale, transform: `scale(${scale})` }}
         />
       ) : null}
     </div>

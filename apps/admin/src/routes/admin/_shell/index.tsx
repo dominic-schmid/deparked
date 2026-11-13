@@ -1,5 +1,6 @@
 import { EmptyState } from "@deparked/ui/arc/empty-state";
 import { Button } from "@deparked/ui/button";
+import { cn } from "@deparked/ui/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus, Store } from "lucide-react";
 import { useState } from "react";
@@ -84,19 +85,26 @@ function HomePage() {
           </div>
           {visits.ok ? null : <AnalyticsProblemAlert problem={visits.problem} />}
           {view === "list" ? (
-            <DomainTable domains={domains} visits={visits} now={now} />
-          ) : (
-            <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-5">
-              {domains.map((domain) => (
-                <li key={domain.host} className="flex min-w-0 flex-col [&>*]:flex-1">
-                  <WindowCard domain={domain} visits={visits} />
-                </li>
-              ))}
-              <li className="flex flex-col [&>*]:flex-1">
-                <AddDomainCard />
+            <div className="max-sm:hidden">
+              <DomainTable domains={domains} visits={visits} now={now} />
+            </div>
+          ) : null}
+          {/* Phones always get the windows: compact rows read better there than a table. */}
+          <ul
+            className={cn(
+              "grid grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-5 max-sm:gap-3",
+              view === "list" && "sm:hidden",
+            )}
+          >
+            {domains.map((domain) => (
+              <li key={domain.host} className="flex min-w-0 flex-col [&>*]:flex-1">
+                <WindowCard domain={domain} visits={visits} />
               </li>
-            </ul>
-          )}
+            ))}
+            <li className="flex flex-col [&>*]:flex-1">
+              <AddDomainCard />
+            </li>
+          </ul>
         </section>
       )}
     </div>

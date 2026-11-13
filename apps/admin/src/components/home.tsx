@@ -206,15 +206,19 @@ function offersLabel(domain: DomainOverview): string {
 }
 
 /** The price tag hung on a window: how many offers and the best one. Tangerine while some are new. */
-function PriceTag({ domain }: { domain: DomainOverview }) {
+function PriceTag({ domain, inline = false }: { domain: DomainOverview; inline?: boolean }) {
   if (domain.offers === 0) return null;
   return (
     <Link
       to="/admin/d/$host/offers"
       params={{ host: domain.host }}
       className={cn(
-        "absolute right-3 bottom-3 z-[2] max-w-[calc(100%-1.5rem)] -rotate-[4deg] truncate rounded-[10px] px-3 py-1.5 text-[13px] font-semibold tabular-nums shadow-[0_4px_10px_rgb(20_22_43/0.18)] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/60",
-        domain.newOffers > 0 ? "bg-tangerine text-tangerine-foreground" : "bg-card text-foreground",
+        "z-[2] truncate rounded-[10px] font-semibold tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/60",
+        inline
+          ? "relative max-w-full self-start px-2 py-0.5 text-xs sm:hidden"
+          : "absolute right-3 bottom-3 max-w-[calc(100%-1.5rem)] -rotate-[4deg] px-3 py-1.5 text-[13px] shadow-[0_4px_10px_rgb(20_22_43/0.18)] max-sm:hidden",
+        domain.newOffers > 0 ? "bg-tangerine text-tangerine-foreground" : "bg-muted text-foreground",
+        !inline && domain.newOffers === 0 && "bg-card",
       )}
     >
       {offersLabel(domain)}
@@ -229,10 +233,11 @@ export function WindowCard({ domain, visits }: { domain: DomainOverview; visits:
     <Card
       title={domain.host}
       translate="no"
-      className="border-transparent shadow-lift [&_h3]:font-semibold [&_h3]:[overflow-wrap:anywhere] [&_h3]:[text-wrap:wrap]"
+      // Phones: a row, the page small on the left, so a long portfolio stays scannable.
+      className="border-transparent shadow-lift max-sm:grid max-sm:grid-cols-[7.5rem_minmax(0,1fr)] [&_h3]:font-semibold [&_h3]:[overflow-wrap:anywhere] [&_h3]:[text-wrap:wrap] max-sm:[&_h3]:text-base max-sm:[&>div:first-child>div]:h-full max-sm:[&>div:first-child>div]:min-h-24 max-sm:[&>div:last-child]:p-3"
       media={
-        <div className="relative w-full">
-          <PageThumbnail host={domain.host} />
+        <div className="relative w-full max-sm:h-full">
+          <PageThumbnail host={domain.host} className="max-sm:aspect-auto max-sm:h-full" />
           <PriceTag domain={domain} />
         </div>
       }
@@ -244,9 +249,10 @@ export function WindowCard({ domain, visits }: { domain: DomainOverview; visits:
       >
         <span className="sr-only">Open {domain.host}</span>
       </Link>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-muted-foreground max-sm:mt-1 max-sm:flex-col max-sm:items-start">
         <NextStep domain={domain} />
         <CardVisits state={visitsCellState(domain, visits)} host={domain.host} />
+        <PriceTag domain={domain} inline />
       </div>
     </Card>
   );
@@ -257,7 +263,7 @@ export function AddDomainCard() {
   return (
     <Link
       to="/admin/add"
-      className="flex min-h-60 flex-col items-center justify-center gap-3 rounded-[var(--radius-panel)] border-2 border-dashed border-input p-6 font-semibold text-muted-foreground outline-none transition-colors duration-150 hover:border-muted-foreground/60 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none"
+      className="flex min-h-60 flex-col items-center justify-center gap-3 max-sm:min-h-16 max-sm:flex-row max-sm:p-3 rounded-[var(--radius-panel)] border-2 border-dashed border-input p-6 font-semibold text-muted-foreground outline-none transition-colors duration-150 hover:border-muted-foreground/60 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none"
     >
       <span className="grid size-12 place-items-center rounded-full bg-card text-foreground shadow-rest">
         <Plus className="size-5" aria-hidden="true" />
@@ -449,7 +455,7 @@ export function ViewSwitch({ view, onChange }: { view: HomeView; onChange: (view
         document.cookie = `${HOME_VIEW_COOKIE}=${next}; Path=/admin; Max-Age=31536000; SameSite=Lax${secure}`;
         onChange(next);
       }}
-      className="bg-card shadow-rest pointer-coarse:[--tg-h:44px]"
+      className="bg-card shadow-rest max-sm:hidden pointer-coarse:[--tg-h:44px]"
     >
       <ToggleGroupItem value="grid" label="Windows">
         <LayoutGrid aria-hidden="true" />
