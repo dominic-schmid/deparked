@@ -1,14 +1,33 @@
-import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
+import { Alert } from "@deparked/ui/arc/alert";
+import { CopyButton } from "@deparked/ui/arc/copy-button";
+import { ExpandableCard } from "@deparked/ui/arc/expandable-card";
+import { Progress } from "@deparked/ui/arc/progress";
 import { Button } from "@deparked/ui/button";
+import { BrowserWindow, Disclosure, LiveTag, FlowTitle as ScreenTitle, Showcase } from "@deparked/ui/flow";
 import { Input } from "@deparked/ui/input";
 import { Label } from "@deparked/ui/label";
 import { cn } from "@deparked/ui/lib/utils";
 import { RadioGroup, RadioGroupItem } from "@deparked/ui/radio-group";
-import { ArrowRight, Check, CircleAlert, Copy, ExternalLink, Eye, EyeOff, RotateCw, ShieldAlert } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  CircleAlert,
+  Database,
+  Download,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+  type LucideIcon,
+  PanelsTopLeft,
+  RotateCw,
+  ShieldAlert,
+  Wrench,
+} from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { Account, ApiError, CheckResponse, PlanStep, Status, StepReport } from "../api";
 import { checkToken, finishInstall, getStatus, rollbackStep, runStep } from "./client";
-import { Screen, ScreenTitle, Section, Shell, Spinner, type Stage } from "./parts";
+import { Screen, Section, Shell, Spinner, type Stage } from "./parts";
 import { TokenDiagram, TokenPagePictures } from "./pictures";
 import { TOKEN_PERMISSIONS, tokenTemplateUrl } from "./token-link";
 
@@ -104,12 +123,9 @@ function Unreachable(props: { onRetry: () => void }) {
   return (
     <>
       <ScreenTitle title="The installer does not answer">
-        <p>
-          This page loaded, but the installer Worker behind it did not reply. Wait a minute (a fresh deploy can take
-          that long), then try again.
-        </p>
+        <p>The Worker behind this page did not reply. A fresh deploy can take a minute: wait, then try again.</p>
       </ScreenTitle>
-      <Button onClick={props.onRetry}>
+      <Button variant="accent" size="lg" className="mt-8 h-12 px-6" onClick={props.onRetry}>
         <RotateCw aria-hidden /> Try again
       </Button>
     </>
@@ -162,7 +178,7 @@ function TokenField(props: {
           inputMode="text"
           aria-describedby={props.error === null ? hint : `${hint} ${errorId}`}
           aria-invalid={props.error === null ? undefined : true}
-          className="h-11 pr-11 font-mono text-[15px] placeholder:font-sans sm:text-sm"
+          className="h-12 pr-12 font-mono text-[15px] placeholder:font-sans sm:text-sm"
           placeholder="Paste the token you copied…"
           translate="no"
         />
@@ -170,7 +186,7 @@ function TokenField(props: {
           type="button"
           variant="ghost"
           size="icon"
-          className="absolute top-1 right-1"
+          className="absolute top-1.5 right-1.5"
           aria-label={visible ? "Hide the token" : "Show the token"}
           aria-pressed={visible}
           onClick={() => setVisible((shown) => !shown)}
@@ -194,8 +210,8 @@ function NoRelease() {
   return (
     <ScreenTitle title="Nothing to install yet">
       <p>
-        This installer was built before the first Deparked release. Update your copy of the installer from the Deparked
-        repository (sync your fork on GitHub, Cloudflare redeploys it), then open this page again.
+        This installer is older than the first Deparked release. Sync your fork on GitHub (Cloudflare redeploys it),
+        then open this page again.
       </p>
     </ScreenTitle>
   );
@@ -226,92 +242,88 @@ function Connect(props: {
   }
 
   return (
-    <>
-      <ScreenTitle eyebrow={`Deparked ${props.status.pinnedRelease}`} title="Connect your Cloudflare account">
-        <p>
-          Deparked installs itself into the Cloudflare account you deployed this installer to: a Worker for your
-          for-sale pages, an admin panel and its database. It needs one API token for that, which you create on
-          Cloudflare's site and paste here.
-        </p>
-      </ScreenTitle>
-
-      {resuming ? (
-        <Alert role="note" className="mb-8">
-          <RotateCw aria-hidden />
-          <AlertTitle>An install is half done</AlertTitle>
-          <AlertDescription>
+    <div className="flex flex-col gap-14">
+      <div className="grid items-center gap-x-14 gap-y-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <ScreenTitle eyebrow={`Deparked ${props.status.pinnedRelease}`} title="Connect your Cloudflare account">
+            <p>Deparked installs into this account with one API token. Create it on Cloudflare, then paste it here.</p>
+          </ScreenTitle>
+          {resuming ? (
+            <Alert tone="info" title="An install is half done" className="max-w-xl">
+              Paste your token again. The install continues where it stopped, without repeating anything.
+            </Alert>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-col gap-2">
+          <TokenDiagram />
+          <Disclosure summary="Why a token?" className="px-2">
             <p>
-              Paste your token again: once it is checked you see where the install stopped, and it continues from there
-              without repeating anything.
+              Deparked installs a Worker for your for-sale pages, an admin panel and its database. Cloudflare lets a
+              Worker publish pages or change settings only with a token.
             </p>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Section title="Why a token">
-        <TokenDiagram />
-        <p className="mt-4 max-w-[62ch] text-sm leading-relaxed text-muted-foreground">
-          Cloudflare only lets a Worker publish pages or change settings with a token. The token travels from this page
-          to your installer, then into your account as a secret of the admin panel. Deparked has no server of its own,
-          so nobody else ever sees it.
-        </p>
-      </Section>
+            <p>
+              The token travels from this page to your installer, then into your account as a secret of the admin panel.
+              Deparked has no server of its own, so nobody else ever sees it.
+            </p>
+          </Disclosure>
+        </div>
+      </div>
 
       <Section title="Create the token" number={1}>
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-2.5">
           <div>
-            <Button asChild size="lg" className="h-11 px-5">
+            <Button asChild variant="accent" size="lg" className="h-12 px-6">
               <a href={TOKEN_URL} target="_blank" rel="noreferrer">
                 Open Cloudflare's token page <ExternalLink aria-hidden />
+                <span className="sr-only"> (opens in a new tab)</span>
               </a>
             </Button>
-            <p className="mt-2.5 text-[13px] text-muted-foreground">
-              Opens in a new tab with the name and every permission filled in. Log in to the same account first.
-            </p>
           </div>
-          <TokenPagePictures />
-          <Alert role="note">
-            <ShieldAlert aria-hidden />
-            <AlertTitle>What this token can do</AlertTitle>
-            <AlertDescription>
-              <p>
-                It can change every Worker in this account, not just Deparked's: Cloudflare cannot narrow that
-                permission to one Worker. Deparked keeps it only as a secret of its admin panel. Delete it on
-                Cloudflare's token page whenever you like; your pages keep working, publishing stops until you add a new
-                one.
-              </p>
-              <details className="group mt-2">
-                <summary className="cursor-pointer font-medium text-foreground underline-offset-2 hover:underline">
-                  All {TOKEN_PERMISSIONS.length} permissions and why
-                </summary>
-                <ul className="mt-2 grid gap-1.5">
-                  {TOKEN_PERMISSIONS.map((permission) => (
-                    <li key={permission.key} className="grid gap-x-3 sm:grid-cols-[13rem_1fr]">
-                      <span className="font-medium text-foreground">
-                        {permission.label} · {permission.type === "edit" ? "Edit" : "Read"}
-                      </span>
-                      <span>{permission.why}</span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </AlertDescription>
-          </Alert>
+          <p className="text-[13px] text-muted-foreground">
+            Everything is filled in. Log in to the same Cloudflare account first.
+          </p>
+        </div>
+        <TokenPagePictures />
+        <div className="flex max-w-3xl flex-col gap-1 rounded-2xl bg-card p-4 shadow-rest sm:p-5">
+          <p className="flex items-start gap-3 text-sm">
+            <ShieldAlert aria-hidden className="mt-px size-5 shrink-0 text-[var(--warning)]" />
+            <span>
+              <strong className="font-semibold">It can change every Worker in this account,</strong> not only
+              Deparked's. You can delete it on Cloudflare any time.
+            </span>
+          </p>
+          <Disclosure summary={`What it can do: all ${TOKEN_PERMISSIONS.length} permissions`} className="pl-8">
+            <p>
+              Cloudflare cannot narrow the Workers permission to one Worker. Deparked keeps the token only as a secret
+              of its admin panel. Delete it on Cloudflare's token page whenever you like: your pages keep working, and
+              publishing stops until you add a new one.
+            </p>
+            <ul className="grid gap-1.5">
+              {TOKEN_PERMISSIONS.map((permission) => (
+                <li key={permission.key} className="grid gap-x-3 sm:grid-cols-[13rem_1fr]">
+                  <span className="font-medium text-foreground">
+                    {permission.label} · {permission.type === "edit" ? "Edit" : "Read"}
+                  </span>
+                  <span>{permission.why}</span>
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
         </div>
       </Section>
 
-      <Section title="Paste it here" number={2} className="pb-0">
+      <Section title="Paste it here" number={2}>
         <form onSubmit={submit} noValidate className="flex max-w-xl flex-col gap-4">
           <TokenField value={token} onChange={setToken} error={error} />
           <div>
-            <Button type="submit" size="lg" className="h-11 px-5" disabled={busy}>
+            <Button type="submit" variant="accent" size="lg" className="h-12 px-6" disabled={busy}>
               {busy ? <Spinner /> : null}
               {busy ? "Checking the token…" : resuming ? "Check and continue" : "Check the token"}
             </Button>
           </div>
         </form>
       </Section>
-    </>
+    </div>
   );
 }
 
@@ -344,11 +356,11 @@ function PickAccount(props: {
     <>
       <ScreenTitle title="Which account is this?">
         <p>
-          The token reaches {props.accounts.length} Cloudflare accounts. Pick the one you deployed the installer to;
-          Deparked checks that it really is.
+          The token reaches {props.accounts.length} Cloudflare accounts. Pick the one this installer runs in; Deparked
+          checks it.
         </p>
       </ScreenTitle>
-      <form onSubmit={submit} className="flex max-w-xl flex-col gap-5">
+      <form onSubmit={submit} className="mt-10 flex max-w-xl flex-col gap-5">
         <fieldset aria-labelledby={legend} className="min-w-0">
           <legend id={legend} className="sr-only">
             Cloudflare account
@@ -367,8 +379,8 @@ function PickAccount(props: {
               <Label
                 key={account.id}
                 className={cn(
-                  "flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-accent/60 [&>button]:mt-0.5",
-                  choice === account.id && "border-primary/40 bg-accent/60",
+                  "flex min-h-12 cursor-pointer items-start gap-3 rounded-2xl bg-card px-4 py-3 shadow-rest transition-colors hover:bg-accent/60 [&>button]:mt-0.5",
+                  choice === account.id && "ring-2 ring-primary",
                 )}
               >
                 <RadioGroupItem value={account.id} />
@@ -384,11 +396,11 @@ function PickAccount(props: {
         </fieldset>
         <ErrorNote error={error} />
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">
-          <Button type="submit" size="lg" className="h-11 px-5" disabled={busy}>
+          <Button type="submit" variant="accent" size="lg" className="h-12 px-6" disabled={busy}>
             {busy ? <Spinner /> : null}
             {busy ? "Checking…" : "Use this account"}
           </Button>
-          <Button type="button" variant="ghost" size="lg" className="h-11" onClick={props.onBack}>
+          <Button type="button" variant="ghost" size="lg" className="h-12" onClick={props.onBack}>
             Use another token
           </Button>
         </div>
@@ -397,47 +409,76 @@ function PickAccount(props: {
   );
 }
 
+/** The install's parts as the owner thinks of them. Unknown steps keep a generic tool. */
+const STEP_ICON: Record<string, LucideIcon> = {
+  download: Download,
+  migrate: Database,
+  sites: PanelsTopLeft,
+  admin: LayoutDashboard,
+};
+
+function StepIcon(props: { id: string; done: boolean }) {
+  const Icon = STEP_ICON[props.id] ?? Wrench;
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "grid size-9 shrink-0 place-items-center rounded-[11px]",
+        props.done ? "bg-secondary text-muted-foreground" : "bg-positive/15 text-[var(--success)]",
+      )}
+    >
+      <Icon className="size-[18px]" />
+    </span>
+  );
+}
+
 function StepPreview(props: { step: PlanStep }) {
   const { step } = props;
   return (
-    <li className="flex gap-3 py-3.5">
-      <span
-        className={cn(
-          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border",
-          step.status === "done" && "border-primary bg-primary text-primary-foreground",
-          step.status === "blocked" && "border-destructive text-destructive",
-        )}
-      >
-        {step.status === "done" ? <Check aria-hidden className="size-3" strokeWidth={3} /> : null}
-        {step.status === "blocked" ? <CircleAlert aria-hidden className="size-3.5" /> : null}
-      </span>
+    <li className="flex min-w-0 items-center gap-3 rounded-2xl bg-card p-2.5 pr-4 shadow-rest">
+      <StepIcon id={step.id} done={step.status === "done"} />
       <div className="min-w-0">
-        <p className="text-sm font-medium">
+        <p className="text-sm font-medium [overflow-wrap:anywhere]">
           {step.title}
           {step.status === "done" ? <span className="font-normal text-muted-foreground"> · already done</span> : null}
         </p>
-        {step.status === "blocked" ? (
-          <p className="mt-1 text-sm text-destructive">{step.reason}</p>
-        ) : (
-          <ul className="mt-1 grid gap-0.5 text-[13px] text-muted-foreground">
-            {step.effects.map((effect) => (
-              <li key={effect.what} className="break-words">
-                {effect.kind === "create" ? "Creates " : effect.kind === "change" ? "Updates " : ""}
-                {effect.what}
-              </li>
-            ))}
-          </ul>
-        )}
+        {step.status === "blocked" ? <p className="mt-0.5 text-sm text-destructive">{step.reason}</p> : null}
       </div>
     </li>
+  );
+}
+
+/** Every change a step makes, for the review's "in detail" card. */
+function StepEffects(props: { steps: readonly PlanStep[] }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {props.steps.map((step) => (
+        <div key={step.id}>
+          <p className="font-semibold text-foreground">{step.title}</p>
+          {step.status === "done" ? (
+            <p>Already done.</p>
+          ) : (
+            <ul className="mt-0.5 grid gap-0.5">
+              {step.effects.map((effect) => (
+                <li key={effect.what} className="[overflow-wrap:anywhere]">
+                  {effect.kind === "create" ? "Creates " : effect.kind === "change" ? "Updates " : ""}
+                  {effect.what}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
 function Review(props: { ready: Ready; onBack: () => void; onInstall: () => void }) {
   const { ready } = props;
   const blocked = ready.missing.length > 0 || ready.steps.some((step) => step.status === "blocked");
+  const effects = ready.steps.reduce((sum, step) => sum + (step.status === "done" ? 0 : step.effects.length), 0);
   return (
-    <>
+    <div className="flex max-w-3xl flex-col gap-8">
       <ScreenTitle
         eyebrow={`Account: ${ready.account.name}`}
         title={
@@ -447,77 +488,88 @@ function Review(props: { ready: Ready; onBack: () => void; onInstall: () => void
         {ready.missing.length > 0 ? (
           <p>
             Cloudflare refused {ready.missing.length === 1 ? "one thing" : `${ready.missing.length} things`} Deparked
-            needs. Create a new token with the button below (it asks for everything), then paste it.
+            needs. Create a new token (it asks for everything), then paste it.
           </p>
         ) : (
-          <p>Nothing has changed in your account yet. This is what the install does, one step at a time.</p>
+          <p>Nothing has changed in your account yet. The install takes these steps, one at a time.</p>
         )}
       </ScreenTitle>
 
       {ready.progress?.startedAt == null ? null : (
-        <Alert role="note" className="mb-8">
-          <RotateCw aria-hidden />
-          <AlertTitle>Continuing an install</AlertTitle>
-          <AlertDescription>
-            <p>
-              It started {formatDate(ready.progress.startedAt)}
-              {ready.progress.stoppedAt === null ? "" : ` and stopped at “${ready.progress.stoppedAt}”`}. Finished steps
-              show as already done.
-            </p>
-            {ready.progress.lastError === null ? null : (
-              <p className="mt-1 break-words">Last problem: {ready.progress.lastError}</p>
-            )}
-          </AlertDescription>
+        <Alert tone="info" title="Continuing an install">
+          <span className="block [overflow-wrap:anywhere]">
+            It started {formatDate(ready.progress.startedAt)}
+            {ready.progress.stoppedAt === null ? "" : ` and stopped at “${ready.progress.stoppedAt}”`}. Finished steps
+            show as already done.
+          </span>
+          {ready.progress.lastError === null ? null : (
+            <span className="mt-1 block [overflow-wrap:anywhere]">Last problem: {ready.progress.lastError}</span>
+          )}
         </Alert>
       )}
 
       {ready.missing.length > 0 ? (
-        <div className="mb-8 rounded-xl border border-destructive/30 bg-destructive/[0.04] p-4 sm:p-5">
+        <div className="rounded-2xl bg-card p-4 shadow-rest ring-1 ring-destructive/30 sm:p-5">
           <ul className="grid gap-2.5">
             {ready.missing.map((gap) => (
-              <li key={gap.label} className="text-sm">
-                <span className="font-semibold">{gap.label}</span>
-                <span className="text-muted-foreground"> · {gap.why}</span>
+              <li key={gap.label} className="flex items-start gap-2.5 text-sm [overflow-wrap:anywhere]">
+                <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
+                <span>
+                  <span className="font-semibold">{gap.label}</span>
+                  <span className="text-muted-foreground"> · {gap.why}</span>
+                </span>
               </li>
             ))}
           </ul>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Button asChild>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button asChild variant="accent" size="lg" className="h-12 px-6">
               <a href={TOKEN_URL} target="_blank" rel="noreferrer">
                 Create a complete token <ExternalLink aria-hidden />
+                <span className="sr-only"> (opens in a new tab)</span>
               </a>
             </Button>
-            <Button variant="outline" onClick={props.onBack}>
+            <Button variant="outline" size="lg" className="h-12" onClick={props.onBack}>
               Paste the new token
             </Button>
           </div>
         </div>
       ) : (
-        <ol className="mb-6 divide-y border-y">
-          {ready.steps.map((step) => (
-            <StepPreview key={step.id} step={step} />
-          ))}
-        </ol>
+        <div className="flex flex-col gap-3">
+          <ol aria-label="Install steps" className="grid gap-2 sm:grid-cols-2">
+            {ready.steps.map((step) => (
+              <StepPreview key={step.id} step={step} />
+            ))}
+          </ol>
+          {effects === 0 ? null : (
+            <ExpandableCard
+              className="relative"
+              title="Every change, in detail"
+              description={`${effects} changes in your account`}
+            >
+              <StepEffects steps={ready.steps} />
+            </ExpandableCard>
+          )}
+        </div>
       )}
 
       {ready.unchecked.length > 0 ? (
-        <p className="mb-8 max-w-[62ch] text-[13px] text-muted-foreground">
-          {ready.unchecked.map((gap) => gap.label).join(", ")} could not be checked yet: Cloudflare only answers for
-          them on a domain. They matter once you add one, and the admin checks them then.
+        <p className="max-w-[62ch] text-[13px] text-muted-foreground">
+          {ready.unchecked.map((gap) => gap.label).join(", ")} can only be checked on a domain. The admin checks them
+          when you add one.
         </p>
       ) : null}
 
       {ready.missing.length > 0 ? null : (
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">
-          <Button size="lg" className="h-11 px-5" disabled={blocked} onClick={props.onInstall}>
+          <Button variant="accent" size="lg" className="h-12 px-6" disabled={blocked} onClick={props.onInstall}>
             {ready.nothingToDo ? "Finish" : "Install Deparked"} <ArrowRight aria-hidden />
           </Button>
-          <Button variant="ghost" size="lg" className="h-11" onClick={props.onBack}>
+          <Button variant="ghost" size="lg" className="h-12" onClick={props.onBack}>
             Use another token
           </Button>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -606,27 +658,47 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
     if (problem !== null) retryRef.current?.focus();
   }, [problem]);
 
+  const done = rows.filter((row) => row.state === "done").length;
+  const current = rows.find((row) => row.state === "running" || row.state === "failed");
+  const label = handing
+    ? "Making your one-time setup link"
+    : current === undefined
+      ? done === rows.length
+        ? "Every step is done"
+        : "Starting"
+      : current.state === "failed"
+        ? `Stopped at: ${current.title}`
+        : current.title;
   return (
-    <>
+    <div className="flex max-w-3xl flex-col gap-8">
       <ScreenTitle title="Installing Deparked">
-        <p>
-          Each step is one short request from this tab. If you close it, open the installer again and paste your token:
-          it continues where it stopped.
-        </p>
+        <p>Each step is one short request from this tab. Closed it? Open the installer again: it continues.</p>
       </ScreenTitle>
       <p className="sr-only" aria-live="polite">
         {announce}
       </p>
-      <ol className="divide-y border-y">
+      <Progress value={handing ? rows.length : done} max={Math.max(rows.length, 1)} label={label} showValue />
+      {problem === null ? null : (
+        <Alert tone="danger" title={problem.title}>
+          <span className="block [overflow-wrap:anywhere]">{problem.detail}</span>
+          <span className="mt-1 block">
+            Retry is safe: every step checks what is already there and repeats nothing that worked.
+          </span>
+          <Button ref={retryRef} variant="outline" className="mt-3" onClick={() => void run()}>
+            <RotateCw aria-hidden /> Retry
+          </Button>
+        </Alert>
+      )}
+      <ol aria-label="Install steps" className="flex flex-col gap-2">
         {rows.map((row, index) => (
-          <li key={row.id} className="flex gap-3.5 py-4">
+          <li key={row.id} className="flex gap-3.5 rounded-2xl bg-card p-3 pr-4 shadow-rest">
             <span
               className={cn(
-                "grid size-6 shrink-0 place-items-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors duration-200",
-                row.state === "done" && "border-primary bg-primary text-primary-foreground",
-                row.state === "running" && "border-primary text-foreground",
-                row.state === "failed" && "border-destructive bg-destructive/10 text-destructive",
-                row.state === "waiting" && "text-muted-foreground",
+                "grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold tabular-nums transition-colors duration-200 motion-reduce:transition-none",
+                row.state === "done" && "bg-positive text-tangerine-foreground",
+                row.state === "running" && "ring-[1.5px] ring-tangerine ring-inset",
+                row.state === "failed" && "bg-destructive/10 text-destructive ring-[1.5px] ring-destructive ring-inset",
+                row.state === "waiting" && "text-muted-foreground ring-1 ring-input ring-inset",
               )}
             >
               {row.state === "done" ? <Check aria-hidden className="size-3.5" strokeWidth={3} /> : null}
@@ -634,7 +706,7 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
               {row.state === "failed" ? <CircleAlert aria-hidden className="size-3.5" /> : null}
               {row.state === "waiting" ? index + 1 : null}
             </span>
-            <div className="min-w-0 flex-1 pt-0.5">
+            <div className="min-w-0 flex-1 pt-1">
               <p className={cn("text-sm font-medium", row.state === "waiting" && "text-muted-foreground")}>
                 {row.title}
                 <span className="sr-only">
@@ -650,7 +722,7 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
               {row.detail.length > 0 ? (
                 <ul className="mt-1 grid gap-0.5 text-[13px] text-muted-foreground">
                   {row.detail.map((line) => (
-                    <li key={line} className="break-words">
+                    <li key={line} className="[overflow-wrap:anywhere]">
                       {line}
                     </li>
                   ))}
@@ -660,88 +732,75 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
           </li>
         ))}
       </ol>
-      {handing ? (
-        <p className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner /> Making your one-time setup link…
-        </p>
-      ) : null}
-      {problem === null ? null : (
-        <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/[0.04] p-4 sm:p-5" role="alert">
-          <p className="flex gap-2 text-sm font-medium">
-            <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
-            <span>{problem.title}</span>
-          </p>
-          <p className="mt-1.5 pl-6 text-sm break-words text-muted-foreground">{problem.detail}</p>
-          <p className="mt-1.5 pl-6 text-[13px] text-muted-foreground">
-            Retry is safe: every step checks what is already there and repeats nothing that worked.
-          </p>
-          <Button ref={retryRef} className="mt-4 ml-6" onClick={() => void run()}>
-            <RotateCw aria-hidden /> Retry
-          </Button>
-        </div>
-      )}
-    </>
+    </div>
   );
 }
 
-function CopyButton(props: { text: string }) {
-  const [copied, setCopied] = useState(false);
+/** The admin's "Create your password" page, drawn small inside the success window. */
+function PasswordPageDrawing() {
   return (
-    <Button
-      variant="outline"
-      size="lg"
-      className="h-11"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(props.text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        } catch {
-          setCopied(false);
-        }
-      }}
-    >
-      {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
-      <span aria-live="polite">{copied ? "Copied" : "Copy the link"}</span>
-    </Button>
+    <div aria-hidden className="flex aspect-[16/10] flex-col justify-center gap-3 bg-background px-[12%]">
+      <span className="h-3.5 w-3/5 rounded-md bg-foreground/85" />
+      <span className="flex h-8 items-center gap-1.5 rounded-xl bg-card px-3 shadow-rest">
+        {[0, 1, 2, 3, 4, 5, 6].map((dot) => (
+          <span key={dot} className="size-1.5 rounded-full bg-foreground/60" />
+        ))}
+      </span>
+      <span className="h-8 rounded-xl bg-card shadow-rest" />
+      <span className="h-8 w-2/5 rounded-full bg-tangerine" />
+    </div>
   );
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "your admin";
+  }
 }
 
 function Done(props: { setupUrl: string; recovered: boolean }) {
   return (
-    <>
-      <ScreenTitle
-        eyebrow={props.recovered ? "Recovery" : "Installed"}
-        title={props.recovered ? "Here is a new setup link" : "Deparked is installed"}
-      >
-        <p>
-          {props.recovered
-            ? "Open it to set a new password for your workspace. Earlier setup links stop working."
-            : "One step is left, and it happens in your new admin panel: create the password for your workspace."}
-        </p>
-      </ScreenTitle>
-      <div className="rounded-xl border bg-card p-5 sm:p-6">
-        <p className="text-sm font-medium">Your one-time setup link</p>
-        <p
-          translate="no"
-          className="mt-2 break-all rounded-md bg-muted px-3 py-2.5 font-mono text-[13px] leading-relaxed"
-        >
-          {props.setupUrl}
-        </p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Button asChild size="lg" className="h-11 px-5">
+    <div className="grid items-center gap-x-14 gap-y-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <Showcase celebrate={!props.recovered} tag={<LiveTag>{props.recovered ? "New link" : "Installed"}</LiveTag>}>
+        <BrowserWindow address={hostOf(props.setupUrl)}>
+          <PasswordPageDrawing />
+        </BrowserWindow>
+      </Showcase>
+      <div className="flex min-w-0 flex-col gap-7">
+        <ScreenTitle title={props.recovered ? "Here is a new setup link" : "Deparked is installed"}>
+          <p>
+            {props.recovered
+              ? "Open it to set a new password. Earlier setup links stop working."
+              : "One step left: create your password in your new admin."}
+          </p>
+        </ScreenTitle>
+        <div>
+          <Button asChild variant="accent" size="lg" className="h-12 px-7">
             <a href={props.setupUrl}>
               Create your password <ArrowRight aria-hidden />
             </a>
           </Button>
-          <CopyButton text={props.setupUrl} />
         </div>
-        <p className="mt-4 text-[13px] text-muted-foreground">
-          It works once, for 24 hours, and this page shows it only now. Lost it? Open this installer again and paste
-          your token: you get a new one.
-        </p>
+        <div className="flex max-w-xl flex-col gap-3 rounded-2xl bg-card p-4 shadow-rest sm:p-5">
+          <p className="text-sm font-semibold">Your one-time setup link</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p
+              translate="no"
+              className="min-w-0 flex-[1_1_16rem] rounded-xl bg-secondary px-3 py-2.5 font-mono text-[13px] leading-relaxed break-all"
+            >
+              {props.setupUrl}
+            </p>
+            <CopyButton value={props.setupUrl} label="Copy the link" />
+          </div>
+          <p className="text-[13px] text-muted-foreground">
+            Works once, for 24 hours, and this page shows it only now. Lost it? Open this installer again and paste your
+            token.
+          </p>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -816,19 +875,19 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
   }
 
   return (
-    <>
+    <div className="flex max-w-3xl flex-col gap-12">
       <ScreenTitle title="Deparked is installed">
-        <p>Your admin panel runs as its own Worker. This installer only helps you back in if you lose access.</p>
+        <p>Your admin runs as its own Worker. This installer only helps you back in if you lose access.</p>
       </ScreenTitle>
       {adminUrl === null ? null : (
-        <Button asChild size="lg" className="mb-10 h-11 px-5">
+        <Button asChild variant="accent" size="lg" className="-mt-4 h-12 self-start px-6">
           <a href={adminUrl}>
             Open the admin <ArrowRight aria-hidden />
           </a>
         </Button>
       )}
-      <Section title="Lost your password or the setup link?" className="pb-0">
-        <p className="mb-5 max-w-[62ch] text-sm text-muted-foreground">
+      <Section title="Lost your password or the setup link?">
+        <p className="max-w-[62ch] text-sm text-muted-foreground">
           Paste a token for this account (the one you installed with, or a new one from{" "}
           <a
             className="underline underline-offset-2 hover:text-foreground"
@@ -838,7 +897,7 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
           >
             Cloudflare's token page
           </a>
-          ). The installer checks it really is your account, then gives you a new one-time setup link.
+          ). The installer checks it is your account, then gives you a new one-time setup link.
         </p>
         <form
           noValidate
@@ -858,7 +917,7 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
                   key={account.id}
                   type="button"
                   variant="outline"
-                  className="h-11 justify-start"
+                  className="h-auto min-h-12 justify-start whitespace-normal py-2 text-left [overflow-wrap:anywhere]"
                   onClick={() => void recover(action, account.id)}
                 >
                   {account.name}
@@ -867,23 +926,27 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
             </div>
           )}
           <div>
-            <Button type="submit" size="lg" className="h-11 px-5" disabled={busy !== null}>
+            <Button type="submit" variant="accent" size="lg" className="h-12 px-6" disabled={busy !== null}>
               {busy === "link" ? <Spinner /> : null}
               {busy === "link" ? "Checking…" : "Get a new setup link"}
             </Button>
           </div>
-          <div className="mt-6 border-t pt-6">
-            <p className="text-sm font-medium">The admin stopped working after an update?</p>
-            <p className="mt-1 mb-4 max-w-[62ch] text-sm text-muted-foreground">
-              With the same token, the installer puts back the version you had before the last update. Your pages stay
-              online; the database keeps the newer version's changes, which the earlier version can work with. Then open
-              the admin: it publishes every page again.
+          <div className="mt-6 flex flex-col gap-3 border-t pt-6">
+            <p className="text-sm font-semibold">The admin stopped working after an update?</p>
+            <p className="max-w-[62ch] text-sm text-muted-foreground">
+              With the same token, the installer puts back the version you had before. Your pages stay online.
             </p>
+            <Disclosure summary="What a rollback keeps">
+              <p>
+                The database keeps the newer version's changes, which the earlier version can work with. Then open the
+                admin: it publishes every page again.
+              </p>
+            </Disclosure>
             <Button
               type="button"
               variant="outline"
               size="lg"
-              className="h-11 px-5"
+              className="h-12 self-start px-6"
               disabled={busy !== null}
               onClick={() => {
                 if (token.trim() === "")
@@ -894,20 +957,17 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
               {busy === "rollback" ? <Spinner /> : <RotateCw aria-hidden />}
               {busy === "rollback" ? "Rolling back…" : "Roll back the last update"}
             </Button>
-            <p className="mt-3 text-sm text-muted-foreground" aria-live="polite">
+            <p className="text-sm text-muted-foreground" aria-live="polite">
               {busy === "rollback" ? progress : ""}
             </p>
             {rolledBack ? (
-              <Alert className="mt-3" role="status">
-                <AlertTitle>Rolled back</AlertTitle>
-                <AlertDescription>
-                  The earlier version is installed again. Open the admin to finish: it publishes every page again.
-                </AlertDescription>
+              <Alert tone="success" title="Rolled back">
+                The earlier version is installed again. Open the admin to finish: it publishes every page again.
               </Alert>
             ) : null}
           </div>
         </form>
       </Section>
-    </>
+    </div>
   );
 }

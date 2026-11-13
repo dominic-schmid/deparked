@@ -1,66 +1,73 @@
 // Simplified drawings, not screenshots: Cloudflare's dashboard changes, the three clicks do not.
-import { ArrowDown, ArrowRight, Cloud, Laptop, MousePointer2 } from "lucide-react";
+import { Journey } from "@deparked/ui/flow";
+import { MousePointer2 } from "lucide-react";
 import type { ReactNode } from "react";
 
-function Node(props: { icon: ReactNode; title: string; detail: string; accent?: boolean }) {
-  return (
-    <div
-      className={`flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-xl border p-3.5 sm:flex-col sm:items-start sm:gap-2.5 sm:p-4 ${
-        props.accent === true ? "border-primary/30 bg-card shadow-[0_6px_20px_-12px_rgb(0_0_0/0.25)]" : "bg-card"
-      }`}
-    >
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary text-secondary-foreground">
-        {props.icon}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm font-semibold leading-tight">{props.title}</span>
-        <span className="mt-0.5 block text-[13px] leading-snug text-muted-foreground">{props.detail}</span>
-      </span>
-    </div>
-  );
-}
+const TILE = "aspect-[4/3] w-full rounded-[14px]";
 
-function Link(props: { label: string }) {
-  return (
-    <div className="flex shrink-0 items-center gap-2 py-1.5 pl-7 text-xs text-muted-foreground sm:w-[7.5rem] sm:flex-col sm:justify-center sm:gap-1.5 sm:px-2 sm:py-0 sm:text-center">
-      <ArrowDown aria-hidden className="size-4 sm:hidden" />
-      <ArrowRight aria-hidden className="hidden size-4 sm:block" />
-      <span className="text-balance sm:leading-snug">{props.label}</span>
-    </div>
-  );
-}
-
-function DeparkedMark() {
-  return (
-    <svg aria-hidden viewBox="0 0 20 20" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6">
-      <rect x="2.5" y="4" width="15" height="12" rx="2.5" />
-      <path d="M6 8.5h5M6 11.5h8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** Why the key is needed: you, Deparked in your account, Cloudflare. */
+/** Why the key is needed: you paste it once, Deparked keeps it in your account, Cloudflare serves the pages. */
 export function TokenDiagram() {
   return (
-    <figure
-      className="flex flex-col sm:flex-row sm:items-stretch"
-      aria-label="You paste the token into this page once. Deparked, running in your own Cloudflare account, uses it to publish your pages and set up your domains through Cloudflare."
-    >
-      <Node icon={<Laptop aria-hidden className="size-[18px]" />} title="You" detail="in this browser" />
-      <Link label="paste the token once" />
-      <Node icon={<DeparkedMark />} title="Deparked" detail="in your Cloudflare account" accent />
-      <Link label="publishes pages, sets up domains" />
-      <Node icon={<Cloud aria-hidden className="size-[18px]" />} title="Cloudflare" detail="serves your pages" />
-    </figure>
+    <Journey
+      label="How the token is used"
+      note="It goes from this tab into your own account, as a secret of your admin panel. Nobody else sees it."
+      stages={[
+        {
+          caption: "You paste a token once",
+          picture: (
+            <div className={`${TILE} flex flex-col gap-1.5 bg-background p-2`}>
+              <span className="flex gap-1">
+                <span className="size-1.5 rounded-full bg-border" />
+                <span className="size-1.5 rounded-full bg-border" />
+              </span>
+              <span className="flex flex-1 items-center justify-center rounded-[9px] bg-card px-2">
+                <span className="w-full truncate rounded-full bg-tangerine px-2 py-1 text-center font-mono text-[9px] leading-none tracking-[0.2em] text-tangerine-foreground">
+                  ••••••
+                </span>
+              </span>
+            </div>
+          ),
+        },
+        {
+          caption: "Deparked keeps it in your account",
+          picture: (
+            <div className={`${TILE} grid place-items-center bg-[#14162b] dark:bg-secondary`}>
+              <span className="flex w-1/2 flex-col gap-1.5">
+                <span className="h-2 w-full rounded-full bg-tangerine" />
+                <span className="h-2 w-2/3 rounded-full bg-[#f3f5fa]" />
+              </span>
+            </div>
+          ),
+        },
+        {
+          caption: "Cloudflare serves your pages",
+          picture: (
+            <div className={`${TILE} grid place-items-center bg-tangerine/15`}>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 64 40"
+                className="w-3/5"
+                fill="none"
+                strokeWidth="2.2"
+                strokeLinejoin="round"
+              >
+                <path
+                  d="M16 36h34a11 11 0 0 0 1-21.95A15 15 0 0 0 22.5 10 12 12 0 0 0 16 36Z"
+                  className="fill-card stroke-foreground"
+                />
+                <path d="M24 26h16M24 20h10" className="stroke-tangerine" strokeLinecap="round" />
+              </svg>
+            </div>
+          ),
+        },
+      ]}
+    />
   );
 }
 
 function Window(props: { children: ReactNode }) {
   return (
-    <div
-      aria-hidden
-      className="overflow-hidden rounded-lg border bg-card text-[10px] leading-none shadow-[0_1px_0_rgb(0_0_0/0.03),0_8px_24px_-12px_rgb(0_0_0/0.18)]"
-    >
+    <div aria-hidden className="overflow-hidden rounded-2xl bg-card text-[10px] leading-none shadow-lift">
       <div className="flex items-center gap-1.5 border-b bg-muted/60 px-2.5 py-2">
         <span className="size-1.5 rounded-full bg-foreground/15" />
         <span className="size-1.5 rounded-full bg-foreground/15" />
