@@ -237,6 +237,24 @@ describe("offers", () => {
     ]);
   });
 
+  test("an offer knows its place among its domain's offers", async () => {
+    await q.insertDomain(db, { domain: { host: "other.example", zoneId: "zone-2" }, now: NOW });
+    const first = await q.insertOffer(db, { offer, now: NOW });
+    const elsewhere = await q.insertOffer(db, { offer: { ...offer, host: "other.example" }, now: NOW + 1 });
+    const second = await q.insertOffer(db, { offer, now: NOW + 2 });
+    // Same millisecond: the id decides, as in the list.
+    const third = await q.insertOffer(db, { offer, now: NOW + 2 });
+    const [later, earlier] = [second, third].sort((a, b) => (a.id < b.id ? 1 : -1)) as [Offer, Offer];
+    const ordinals = await q.offerOrdinals(db, [first.id, elsewhere.id, later.id, earlier.id, "missing"]);
+    expect(Object.fromEntries(ordinals)).toEqual({
+      [first.id]: 1,
+      [elsewhere.id]: 1,
+      [earlier.id]: 2,
+      [later.id]: 3,
+    });
+    expect(await q.offerOrdinals(db, [])).toEqual(new Map());
+  });
+
   test("the email outcome is recorded", async () => {
     const stored = await q.insertOffer(db, { offer, now: NOW });
     await q.setOfferEmailStatus(db, { id: stored.id, emailStatus: "failed", emailError: "rejected", now: NOW + 1 });

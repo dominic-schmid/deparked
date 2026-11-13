@@ -1,4 +1,5 @@
 import { and, count, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import type { Db } from "../client";
 import { type EmailStatus, type Offer, type OfferSort, type OfferStatus, offers } from "../schema";
 import { ulid } from "../ulid";
@@ -32,7 +33,7 @@ export type OfferPage = { offers: Offer[]; next: OfferCursor | null };
 const FIRST_PAGE: OfferCursor = { key: Number.MAX_SAFE_INTEGER, id: "" };
 const MAX_PAGE_SIZE = 200;
 // D1 allows 100 bound parameters per statement.
-const HOSTS_PER_STATEMENT = 90;
+const VALUES_PER_STATEMENT = 90;
 
 /**
  * Offers newest or highest first, for one host or all, optionally one status. Keyset pagination on (sort column,
@@ -64,6 +65,33 @@ export async function listOffers(
         ? { key: input.sort === "highest" ? last.amountMinor : last.createdAt, id: last.id }
         : null,
   };
+}
+
+const earlier = alias(offers, "earlier");
+
+/**
+ * Each offer's place among its domain's offers, oldest first: 1 for the first offer a domain got. Ties on
+ * `created_at` go by id, as in `listOffers`. Unknown ids are absent.
+ */
+export async function offerOrdinals(db: Db, ids: readonly string[]): Promise<Map<string, number>> {
+  const ordinals = new Map<string, number>();
+  for (let start = 0; start < ids.length; start += VALUES_PER_STATEMENT) {
+    const before = db
+      .select({ total: count() })
+      .from(earlier)
+      .where(
+        and(
+          eq(earlier.host, offers.host),
+          sql`(${earlier.createdAt}, ${earlier.id}) <= (${offers.createdAt}, ${offers.id})`,
+        ),
+      );
+    const rows = await db
+      .select({ id: offers.id, ordinal: sql<number>`(${before})` })
+      .from(offers)
+      .where(inArray(offers.id, ids.slice(start, start + VALUES_PER_STATEMENT)));
+    for (const row of rows) ordinals.set(row.id, row.ordinal);
+  }
+  return ordinals;
 }
 
 export async function setOfferStatus(
@@ -124,7 +152,7 @@ export type OfferStats = {
  */
 export async function offerStatsForHosts(db: Db, hosts: readonly string[], since = 0): Promise<OfferStats[]> {
   const stats: OfferStats[] = [];
-  for (let start = 0; start < hosts.length; start += HOSTS_PER_STATEMENT) {
+  for (let start = 0; start < hosts.length; start += VALUES_PER_STATEMENT) {
     const rows = await db
       .select({
         host: offers.host,
@@ -136,7 +164,7 @@ export async function offerStatsForHosts(db: Db, hosts: readonly string[], since
         bestCurrency: offers.currency,
       })
       .from(offers)
-      .where(inArray(offers.host, hosts.slice(start, start + HOSTS_PER_STATEMENT)))
+      .where(inArray(offers.host, hosts.slice(start, start + VALUES_PER_STATEMENT)))
       .groupBy(offers.host);
     for (const row of rows) stats.push({ ...row, bestAmountMinor: row.bestAmountMinor ?? 0 });
   }
