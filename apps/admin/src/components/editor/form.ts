@@ -120,7 +120,7 @@ export function errorsByField(errors: ConfigErrors): Partial<Record<FormField | 
 }
 
 const LABELS: [string, (config: Config) => unknown][] = [
-  ["Design", (config) => config.variant],
+  ["Look", (config) => config.variant],
   ["Background", (config) => config.background],
   ["Headline", (config) => config.headline],
   ["Offer sentence", (config) => config.sentence],
@@ -178,7 +178,7 @@ function colors(config: Config): ChangeValue {
 }
 
 const FIELDS: [string, (config: Config, names: ChangeNames) => ChangeValue][] = [
-  ["Design", (config) => plain(variantLabel(config.variant))],
+  ["Look", (config) => plain(variantLabel(config.variant))],
   ["Background", (config, names) => plain(names.background(config.background))],
   ["Headline", (config) => text(config.headline)],
   ["Offer sentence", (config) => text(config.sentence)],

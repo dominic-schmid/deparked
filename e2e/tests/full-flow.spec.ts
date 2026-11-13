@@ -91,12 +91,12 @@ test("install, set up, add a domain, publish it, take an offer and read it under
     // The preview renders once the editor has hydrated: typing before that would be reset by React.
     await expect(preview.getByRole("heading", { level: 1 })).toBeVisible();
     await page.getByLabel("Headline").fill(HEADLINE);
-    await page.getByRole("radiogroup", { name: "Design" }).getByRole("radio", { name: "Gradient" }).click();
+    await page.getByRole("radiogroup", { name: "Look" }).getByRole("radio", { name: "Gradient" }).click();
     await expect(preview.getByRole("heading", { level: 1 })).toHaveText(SHOWN);
-    await expect(page.getByText("Draft saved")).toBeVisible();
-    await page.getByRole("button", { name: "Publish", exact: true }).click();
-    await expect(page.getByText("Published", { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("The draft matches the live page.")).toBeVisible();
+    await expect(page.getByText(/^Saved ·/)).toBeVisible();
+    await page.getByRole("button", { name: "Put it live", exact: true }).click();
+    await expect(page.getByText("It's live", { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Live · matches your draft", { exact: true })).toBeVisible();
   });
 
   await test.step("a visitor sends an offer through the page's form", async () => {
