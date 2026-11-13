@@ -1,6 +1,5 @@
-import { Alert, AlertDescription } from "@deparked/ui/alert";
+import { Alert } from "@deparked/ui/arc/alert";
 import { Button } from "@deparked/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
 import { Field, FieldDescription, FieldLabel } from "@deparked/ui/field";
 import { Input } from "@deparked/ui/input";
 import { type ComponentProps, type ReactNode, useEffect, useId, useState } from "react";
@@ -8,15 +7,15 @@ import { type ComponentProps, type ReactNode, useEffect, useId, useState } from 
 export function AuthPage(props: { title: string; description?: ReactNode; children: ReactNode }) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h1 className="text-xl">{props.title}</h1>
-          </CardTitle>
-          {props.description ? <CardDescription>{props.description}</CardDescription> : null}
-        </CardHeader>
-        <CardContent>{props.children}</CardContent>
-      </Card>
+      <div className="flex flex-col gap-6 rounded-[28px] bg-card p-6 shadow-lift sm:p-8">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="font-heading text-2xl leading-tight font-bold tracking-[-0.01em] text-balance">
+            {props.title}
+          </h1>
+          {props.description ? <p className="text-sm text-muted-foreground">{props.description}</p> : null}
+        </div>
+        {props.children}
+      </div>
     </main>
   );
 }
@@ -55,16 +54,8 @@ export function AuthForm(props: {
       }}
       className="flex flex-col gap-5"
     >
-      {props.error ? (
-        <Alert variant="destructive" id={messageId}>
-          <AlertDescription>{props.error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {props.notice ? (
-        <Alert role="status">
-          <AlertDescription>{props.notice}</AlertDescription>
-        </Alert>
-      ) : null}
+      {props.error ? <Alert tone="danger" id={messageId} title={props.error} /> : null}
+      {props.notice ? <Alert tone="success" title={props.notice} /> : null}
       {/* One workspace, one password: a fixed name lets password managers file it properly. */}
       <input type="text" name="username" autoComplete="username" value="admin" readOnly hidden />
       {props.children}

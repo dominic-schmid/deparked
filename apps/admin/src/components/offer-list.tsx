@@ -1,5 +1,5 @@
 import type { OfferCursor, OfferSort, OfferStatus } from "@deparked/db";
-import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
+import { Alert } from "@deparked/ui/arc/alert";
 import { BottomSheet } from "@deparked/ui/arc/bottom-sheet";
 import { ButtonGroup } from "@deparked/ui/arc/button-group";
 import { CopyButton } from "@deparked/ui/arc/copy-button";
@@ -13,7 +13,7 @@ import { Button } from "@deparked/ui/button";
 import { cn } from "@deparked/ui/lib/utils";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Globe, Mail, TrendingUp, TriangleAlert } from "lucide-react";
+import { Globe, Mail, TrendingUp } from "lucide-react";
 import { Fragment, type ReactNode, useState, useSyncExternalStore } from "react";
 import type { OfferItem } from "../server/offers";
 import { getOffers, setOfferStatus } from "../server/offers.functions";
@@ -391,12 +391,10 @@ function OfferDetail(props: {
       </dl>
 
       {offer.emailStatus === "failed" ? (
-        <Alert>
-          <TriangleAlert aria-hidden="true" />
-          <AlertTitle>The notification email was not sent</AlertTitle>
-          <AlertDescription className="[overflow-wrap:anywhere]">
+        <Alert tone="warning" title="The notification email was not sent">
+          <span className="[overflow-wrap:anywhere]">
             This offer is only here in Offers.{offer.emailError ? ` Error: ${offer.emailError}` : ""}
-          </AlertDescription>
+          </span>
         </Alert>
       ) : null}
 

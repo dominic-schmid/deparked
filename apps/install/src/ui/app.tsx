@@ -2,12 +2,11 @@ import { Alert } from "@deparked/ui/arc/alert";
 import { CopyButton } from "@deparked/ui/arc/copy-button";
 import { ExpandableCard } from "@deparked/ui/arc/expandable-card";
 import { Progress } from "@deparked/ui/arc/progress";
+import { RadioGroup } from "@deparked/ui/arc/radio-group";
 import { Button } from "@deparked/ui/button";
 import { BrowserWindow, Disclosure, LiveTag, FlowTitle as ScreenTitle, Showcase } from "@deparked/ui/flow";
 import { Input } from "@deparked/ui/input";
-import { Label } from "@deparked/ui/label";
 import { cn } from "@deparked/ui/lib/utils";
-import { RadioGroup, RadioGroupItem } from "@deparked/ui/radio-group";
 import {
   ArrowRight,
   Check,
@@ -160,9 +159,9 @@ function TokenField(props: {
   }, [props.error]);
   return (
     <div>
-      <Label htmlFor={id} className="mb-2 text-sm font-medium">
+      <label htmlFor={id} className="mb-2 block text-sm font-medium">
         {props.label ?? "API token"}
-      </Label>
+      </label>
       <div className="relative">
         <Input
           ref={input}
@@ -336,7 +335,6 @@ function PickAccount(props: {
   const [choice, setChoice] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const legend = useId();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -361,39 +359,27 @@ function PickAccount(props: {
         </p>
       </ScreenTitle>
       <form onSubmit={submit} className="mt-10 flex max-w-xl flex-col gap-5">
-        <fieldset aria-labelledby={legend} className="min-w-0">
-          <legend id={legend} className="sr-only">
-            Cloudflare account
-          </legend>
+        <div
+          className={cn(
+            // Arc hides the native radio under its row: the row shows where keyboard focus is.
+            "min-w-0 [&_label:has(input:focus-visible)]:ring-[3px] [&_label:has(input:focus-visible)]:ring-ring/50",
+            // A long list scrolls in its own box, so the button stays in reach.
+            props.accounts.length > 6 &&
+              "max-h-[min(28rem,60dvh)] overflow-y-auto overscroll-contain rounded-2xl bg-card p-2 shadow-rest",
+          )}
+        >
           <RadioGroup
+            label="Cloudflare account"
+            name="account"
             value={choice}
             onValueChange={setChoice}
-            className={cn(
-              "gap-2",
-              // A long list scrolls in its own box, so the button stays in reach.
-              props.accounts.length > 6 &&
-                "max-h-[min(28rem,60dvh)] overflow-y-auto overscroll-contain rounded-xl border p-2",
-            )}
-          >
-            {props.accounts.map((account) => (
-              <Label
-                key={account.id}
-                className={cn(
-                  "flex min-h-12 cursor-pointer items-start gap-3 rounded-2xl bg-card px-4 py-3 shadow-rest transition-colors hover:bg-accent/60 [&>button]:mt-0.5",
-                  choice === account.id && "ring-2 ring-primary",
-                )}
-              >
-                <RadioGroupItem value={account.id} />
-                <span className="min-w-0">
-                  <span className="block break-words text-sm font-medium">{account.name}</span>
-                  <span translate="no" className="block truncate font-mono text-xs text-muted-foreground">
-                    {account.id}
-                  </span>
-                </span>
-              </Label>
-            ))}
-          </RadioGroup>
-        </fieldset>
+            options={props.accounts.map((account) => ({
+              value: account.id,
+              label: account.name,
+              description: account.id,
+            }))}
+          />
+        </div>
         <ErrorNote error={error} />
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">
           <Button type="submit" variant="accent" size="lg" className="h-12 px-6" disabled={busy}>

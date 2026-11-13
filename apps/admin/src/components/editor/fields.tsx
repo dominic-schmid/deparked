@@ -317,8 +317,9 @@ export function EditorFields(props: FieldsProps) {
               ? `Your own: ${form.accentPrimary} on ${form.accentContrast}`
               : "Using the look's own"
         }
-        // Arc's colour picker floats out of its box: the card stops clipping while that panel is open.
-        className="has-[[aria-haspopup=dialog][aria-expanded=true]]:overflow-visible has-[[aria-haspopup=dialog][aria-expanded=true]]:[&>div]:overflow-visible"
+        // Positioned, so the screen-reader-only text inside is clipped with the folded panel. Arc's colour picker
+        // floats out of its box: the card stops clipping while that panel is open.
+        className="relative has-[[aria-haspopup=dialog][aria-expanded=true]]:overflow-visible has-[[aria-haspopup=dialog][aria-expanded=true]]:[&>div]:overflow-visible"
       >
         <Fields disabled={disabled}>
           <Switch
@@ -363,6 +364,8 @@ export function EditorFields(props: FieldsProps) {
       </ExpandableCard>
 
       <ExpandableCard
+        // Positioned, so the screen-reader-only text inside is clipped with the folded panel.
+        className="relative"
         title="Google and link previews"
         description={searchErrors ? "Needs a fix" : truncate(fillDomain(form.seoTitle, host), 44)}
       >

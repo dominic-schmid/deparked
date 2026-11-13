@@ -1,14 +1,4 @@
 import { CONFIG_VERSION, type Config, parseConfig } from "@deparked/config";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@deparked/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@deparked/ui/tabs";
 import { useBlocker, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -17,6 +7,7 @@ import type { EditorData, HistoryItem } from "../../server/editor/editor";
 import { getEditor, getEditorPublishState, previewDraft } from "../../server/editor/functions";
 import { revertTo, saveDraft, startPublish, stepPublish } from "../../server/publish/functions";
 import type { StartResult } from "../../server/publish/pipeline";
+import { ConfirmDialog } from "../confirm-dialog";
 import { EditorFields } from "./fields";
 import {
   backgroundForVariant,
@@ -450,26 +441,23 @@ export function Editor(props: { data: EditorData }) {
           />
         </TabsContent>
       </Tabs>
-      <AlertDialog open={blocker.status === "blocked"}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {view.phase === "running" ? "A publish is running" : "Leave without saving?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {view.phase === "running"
-                ? "A publish only moves forward while this page is open. If you leave, it stops after the step running now and nothing new goes live; the next publish can start once its lock runs out, within five minutes."
-                : config === null
-                  ? "Some fields have problems, so your latest changes are not saved. They are lost if you leave."
-                  : "Your latest changes could not be saved. They are lost if you leave."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => blocker.reset?.()}>Stay here</AlertDialogCancel>
-            <AlertDialogAction onClick={() => blocker.proceed?.()}>Leave</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={blocker.status === "blocked"}
+        onOpenChange={(open) => {
+          if (!open) blocker.reset?.();
+        }}
+        title={view.phase === "running" ? "A publish is running" : "Leave without saving?"}
+        description={
+          view.phase === "running"
+            ? "A publish only moves forward while this page is open. If you leave, it stops after the step running now and nothing new goes live; the next publish can start once its lock runs out, within five minutes."
+            : config === null
+              ? "Some fields have problems, so your latest changes are not saved. They are lost if you leave."
+              : "Your latest changes could not be saved. They are lost if you leave."
+        }
+        cancel="Stay here"
+        confirm="Leave"
+        onConfirm={() => blocker.proceed?.()}
+      />
     </div>
   );
 }

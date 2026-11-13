@@ -45,7 +45,12 @@ for (const width of [320, 1280])
     await page.getByRole("button", { name: "Check the token" }).click();
     await expect(page.getByRole("heading", { name: "Which account is this?" })).toBeVisible();
     await fitsWidth(page, width);
-    await page.getByRole("radio").first().click();
+    // Arc's radio rows hide the native input under the row: the owner presses the row.
+    await page
+      .locator("label")
+      .filter({ has: page.getByRole("radio") })
+      .first()
+      .click();
     await page.getByRole("button", { name: "Use this account" }).click();
     await expect(page.getByRole("button", { name: "Install Deparked" })).toBeVisible();
     await fitsWidth(page, width);
