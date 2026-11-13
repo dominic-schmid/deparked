@@ -114,7 +114,7 @@ describe("the editor form", () => {
       accent: { primary: "#112233", contrast: "#ffffff" },
     };
     const changes = describeChanges(draft, { ...live, marketplaceUrl: "https://example.net/listing" }, names);
-    expect(changes.map((change) => change.label)).toEqual(["Design", "Headline", "Marketplace link", "Colours"]);
+    expect(changes.map((change) => change.label)).toEqual(["Look", "Headline", "Marketplace link", "Colours"]);
     const [design, headline, link, colours] = changes;
     expect(design?.to).toEqual({ text: "Gradient", full: "Gradient" });
     expect(headline?.to.text).toBe("“A much longer headline that goes on…”");

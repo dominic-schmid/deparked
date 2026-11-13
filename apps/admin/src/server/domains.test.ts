@@ -80,6 +80,7 @@ test("a domain page exists only for a managed host", async () => {
     notifyVerified: true,
     mail: { state: "ok", email: "owner@example.com" },
     pending: null,
+    newOffers: 0,
   });
   await replaceSiteFiles(db, {
     host: HOST,

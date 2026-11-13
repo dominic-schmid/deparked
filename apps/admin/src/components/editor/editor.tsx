@@ -1,5 +1,4 @@
 import { CONFIG_VERSION, type Config, parseConfig } from "@deparked/config";
-import { Alert, AlertDescription } from "@deparked/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +32,7 @@ import {
   toForm,
 } from "./form";
 import { PreviewFrame } from "./preview";
-import { HistoryList, PublishBar, type PublishView, type SaveStatus } from "./publish-bar";
+import { PublishActions, PublishMessages, type PublishView, type SaveStatus, VersionsCard } from "./publish-bar";
 import { type PublishOutcome, progressText, revertWroteDraft, runPublish, waitUntilFree } from "./publish-loop";
 
 const SAVE_DELAY_MS = 800;
@@ -315,7 +314,7 @@ export function Editor(props: { data: EditorData }) {
       ended === "free"
         ? {
             phase: "notice",
-            text: "The other publish has finished. Your draft is not published yet: press Publish when you are ready.",
+            text: "The other publish has finished. Your draft is not live yet: press Put it live when you are ready.",
           }
         : {
             phase: "notice",
@@ -375,16 +374,10 @@ export function Editor(props: { data: EditorData }) {
   const canPublish = changes !== null && (changes.length > 0 || data.publish.outOfSync) && !publishing;
 
   return (
-    <div className="flex flex-col gap-6">
-      {data.notice ? (
-        <Alert>
-          <AlertDescription>{data.notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      <PublishBar
-        host={host}
+    // Its children are grid items of the domain frame (`d.$host.tsx`): the actions go into the header row.
+    <div className="contents *:col-span-full">
+      <PublishActions
         state={data.publish}
-        now={data.now}
         changes={changes}
         diff={diff}
         hasLive={data.live !== null}
@@ -392,20 +385,30 @@ export function Editor(props: { data: EditorData }) {
         view={view}
         save={{ status, invalidCount, problem: errors.form, onRetry: () => config && void persist(config) }}
         onPublish={() => void publish()}
-        onFollow={() => void follow()}
         publishRef={publishButton}
         onResetToLive={resetToLive}
+      />
+      <PublishMessages
+        host={host}
+        state={data.publish}
+        view={view}
+        notice={data.notice}
+        onFollow={() => void follow()}
       />
       <Tabs
         value={tab}
         onValueChange={setTab}
-        className="gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-8"
+        className="mt-1 gap-4 md:grid md:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] md:items-start md:gap-5 lg:grid-cols-[minmax(0,23rem)_minmax(0,1fr)]"
       >
         <TabsList className="w-full md:hidden">
           <TabsTrigger value="edit">Edit</TabsTrigger>
           <TabsTrigger value="preview">Preview</TabsTrigger>
         </TabsList>
-        <TabsContent value="edit" forceMount className="data-[state=inactive]:hidden md:data-[state=inactive]:block">
+        <TabsContent
+          value="edit"
+          forceMount
+          className="flex min-w-0 flex-col gap-2.5 data-[state=inactive]:hidden md:data-[state=inactive]:flex"
+        >
           <form
             aria-label={`Design of ${host}`}
             onSubmit={(event) => {
@@ -415,6 +418,7 @@ export function Editor(props: { data: EditorData }) {
             noValidate
           >
             <EditorFields
+              host={host}
               disabled={publishing}
               form={form}
               errors={errors}
@@ -424,27 +428,28 @@ export function Editor(props: { data: EditorData }) {
               onChange={update}
             />
           </form>
+          <VersionsCard
+            host={host}
+            items={data.history}
+            now={data.now}
+            disabled={publishing}
+            onRevert={(item) => void revertToItem(item)}
+          />
         </TabsContent>
         <TabsContent
           value="preview"
           forceMount
-          className="h-[75dvh] min-h-96 flex-none data-[state=inactive]:hidden md:mt-2 md:data-[state=inactive]:block lg:sticky lg:top-20 lg:mt-0 lg:h-[calc(100dvh-7rem)]"
+          className="h-[75dvh] min-h-96 min-w-0 flex-none data-[state=inactive]:hidden md:sticky md:top-4 md:h-[calc(100dvh-2rem)] md:max-h-[60rem] md:data-[state=inactive]:block"
         >
           <PreviewFrame
             html={preview.html}
             host={host}
+            live={data.live !== null}
             stale={(config === null || preview.refused) && preview.html !== null}
             loading={preview.loading}
           />
         </TabsContent>
       </Tabs>
-      <HistoryList
-        host={host}
-        items={data.history}
-        now={data.now}
-        disabled={publishing}
-        onRevert={(item) => void revertToItem(item)}
-      />
       <AlertDialog open={blocker.status === "blocked"}>
         <AlertDialogContent>
           <AlertDialogHeader>

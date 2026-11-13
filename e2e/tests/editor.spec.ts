@@ -164,7 +164,7 @@ test("the owner edits a domain's headline, sees it in the preview and publishes 
   const watched = watchCatalog(page);
   await login(HOST);
   await page.goto(hostUrl(HOST, `/admin/d/${HOST}`));
-  await expect(page.getByText("Not published yet.")).toBeVisible();
+  await expect(page.getByText("Not live yet", { exact: true })).toBeVisible();
 
   const preview = page.frameLocator(`iframe[title="Preview of ${HOST}"]`);
   await expect(preview.getByRole("heading", { level: 1 })).toHaveText(HOST);
@@ -173,19 +173,20 @@ test("the owner edits a domain's headline, sees it in the preview and publishes 
 
   await page.getByLabel("Headline").fill(HEADLINE);
   await expect(preview.getByRole("heading", { level: 1 })).toHaveText(SHOWN);
-  await expect(page.getByText("Draft saved")).toBeVisible();
+  await expect(page.getByText("Saved · Not live yet", { exact: true })).toBeVisible();
   expect(await db.sql("SELECT live_json FROM config WHERE host = ?", HOST)).toEqual([{ live_json: null }]);
 
   await page.getByLabel("Headline").fill("");
   await expect(page.getByText("Add a headline.")).toBeVisible();
   await expect(page.getByText("Preview out of date: it shows the last version that could be rendered.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Publish", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Put it live", exact: true })).toBeDisabled();
   await page.getByLabel("Headline").fill(HEADLINE);
 
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
-  await expect(page.getByText("Published", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText("The draft matches the live page.")).toBeVisible();
-  await expect(page.getByRole("listitem").filter({ hasText: SHOWN })).toContainText("Latest");
+  await page.getByRole("button", { name: "Put it live", exact: true }).click();
+  await expect(page.getByText("It's live", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Live · matches your draft", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /^Earlier versions/ }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: SHOWN })).toContainText("live now");
 
   const deployed = mock.deployedAssets("deparked-sites");
   const index = deployed.get(`/sites/${HOST}/index.html`);
@@ -212,15 +213,15 @@ test("every variant can be picked, and the gradient variant takes the gradient p
   await seedDomain(db);
   await login();
   await page.goto(`${urls.admin}/admin/d/${HOST}`);
-  const designs = page.getByRole("radiogroup", { name: "Design" });
+  const designs = page.getByRole("radiogroup", { name: "Look" });
   for (const name of ["Sky", "Gradient", "Editorial", "Mono", "Split"]) {
     await expect(designs.getByRole("radio", { name })).toBeEnabled();
   }
   const backgrounds = page.getByRole("radiogroup", { name: "Background" });
   await designs.getByRole("radio", { name: "Gradient" }).click();
-  // Sky's photo is not drawn by this design: the variant's own gradient replaces it.
+  // Sky's photo is not drawn by this look, so it is not offered: the variant's own gradient replaces it.
   await expect(backgrounds.getByRole("radio", { name: /^Dusk/ })).toBeChecked();
-  await expect(backgrounds.getByRole("radio", { name: /^Sky/ })).toBeDisabled();
+  await expect(backgrounds.getByRole("radio", { name: /^Sky/ })).toHaveCount(0);
   for (const name of ["Dawn", "Tide", "Meadow", "Ember", "Dusk"]) {
     await backgrounds.getByText(name, { exact: true }).click();
     await expect(backgrounds.getByRole("radio", { name: new RegExp(`^${name}`) })).toBeChecked();
@@ -259,7 +260,7 @@ test("Publish shows old and new values, the preview's links stay put, and a wait
   await page.goto(hostUrl(HOST, `/admin/d/${HOST}`));
   const preview = page.frameLocator(`iframe[title="Preview of ${HOST}"]`);
   await expect(preview.getByRole("heading", { level: 1 })).toHaveText(HOST);
-  await expect(page.getByText("The draft matches the live page.")).toBeVisible();
+  await expect(page.getByText("Live · matches your draft", { exact: true })).toBeVisible();
 
   // A link in the preview goes nowhere and says why.
   const link = preview.locator("a[href]").first();
@@ -273,11 +274,14 @@ test("Publish shows old and new values, the preview's links stay put, and a wait
   expect(frame?.url()).toBe("about:srcdoc");
 
   await page.getByLabel("Headline").fill(HEADLINE);
+  // The header says how many changes are not live yet; they open as old and new values.
+  await page.getByRole("button", { name: "1 change not live yet" }).click();
   const changes = page.getByRole("listitem").filter({ hasText: "Headline" }).first();
-  await expect(page.getByText("Publish changes 1 field:")).toBeVisible();
+  await expect(page.getByText("Putting it live changes 1 field:")).toBeVisible();
   await expect(changes).toContainText(`“${live.headline}”`);
   await expect(changes).toContainText(`“${HEADLINE}”`);
-  await expect(page.getByText("Draft saved")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText(/^Saved ·/)).toBeVisible();
 
   // Another publish holds the lock: waiting for it ends with a notice, focus on Publish, and nothing published.
   const [deployment] = await db.sql<{ id: number }>(
@@ -289,7 +293,7 @@ test("Publish shows old and new values, the preview's links stay put, and a wait
     deployment?.id ?? 0,
     now + 60_000,
   );
-  const publish = page.getByRole("button", { name: "Publish", exact: true });
+  const publish = page.getByRole("button", { name: "Put it live", exact: true });
   await publish.click();
   await expect(page.getByText("Another publish is running", { exact: true })).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "Wait until it has finished" }).click();

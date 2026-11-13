@@ -1,4 +1,5 @@
 import {
+  countNewOffers,
   type Db,
   type Domain,
   getConfig,
@@ -107,17 +108,20 @@ export type DomainDetail = DomainSummary & {
   mail: OfferMail;
   /** A change to the domain that stopped half-way, or null. */
   pending: PendingChange | null;
+  /** Its offers still marked new, for the Offers tab's count. */
+  newOffers: number;
 };
 
 /** One managed domain. Null for a host that is not managed, or was removed. */
 export async function loadDomain(db: Db, host: string): Promise<DomainDetail | null> {
   const domain = await getDomain(db, host);
   if (domain === undefined || domain.status === "removed") return null;
-  const [addresses, config, pages, ledger] = await Promise.all([
+  const [addresses, config, pages, ledger, newOffers] = await Promise.all([
     listNotifyAddresses(db),
     getConfig(db, host),
     listSiteFilesByHost(db, host),
     listLedger(db, { host }),
+    countNewOffers(db, host),
   ]);
   const verified = verifiedOf(addresses);
   return {
@@ -129,5 +133,6 @@ export async function loadDomain(db: Db, host: string): Promise<DomainDetail | n
     notifyVerified: domain.notifyEmail !== null && verified.has(domain.notifyEmail),
     mail: offerMail(domain.notifyEmail, addresses),
     pending: pendingChange({ ...domain, ledger, hasPages: pages.length > 0 }),
+    newOffers,
   };
 }
