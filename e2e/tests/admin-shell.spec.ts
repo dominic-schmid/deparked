@@ -57,15 +57,18 @@ test("the owner goes from an empty workspace to a handled offer, an export and a
   await page.reload();
   await expect(row("example.com")).toContainText("2 (2 new)");
 
-  const inboxLink = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Offers/ });
-  await expect(inboxLink).toContainText("3");
-  await inboxLink.click();
-  const offers = page.getByRole("main").getByRole("listitem");
+  const offersLink = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Offers/ });
+  await expect(offersLink).toContainText("3");
+  await offersLink.click();
+  const offers = page.getByRole("region", { name: "List of offers" }).getByRole("listitem");
   await expect(offers).toHaveCount(3);
   await expect(offers.first()).toContainText("Grace");
-  await offers.first().getByRole("button", { name: "Mark as replied" }).click();
-  await expect(offers.first()).toContainText("Replied");
-  await expect(inboxLink).toContainText("2");
+  // The newest offer shows in full beside the list.
+  const selected = page.getByRole("region", { name: "Selected offer" });
+  await expect(selected).toContainText("Grace offers");
+  await selected.getByRole("button", { name: "I already replied" }).click();
+  await expect(selected).toContainText("Replied");
+  await expect(offersLink).toContainText("2");
   expect(await db.sql("SELECT status FROM offers WHERE name = ?", "Grace")).toEqual([{ status: "replied" }]);
 
   const anonymous = await request.get(`${urls.admin}/admin/offers.csv`, { maxRedirects: 0 });
@@ -74,7 +77,7 @@ test("the owner goes from an empty workspace to a handled offer, an export and a
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("link", { name: "Export CSV" }).click(),
+    page.getByRole("link", { name: "Download as a spreadsheet" }).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/^offers-\d{4}-\d{2}-\d{2}\.csv$/);
   const csv = await readFile(await download.path(), "utf8");

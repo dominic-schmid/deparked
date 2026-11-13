@@ -76,3 +76,19 @@ export function replyHref(email: string, host: string): string {
   const address = encodeURIComponent(email).replace(/%40/g, "@");
   return `mailto:${address}?subject=${encodeURIComponent(`Your offer for ${host}`)}`;
 }
+
+/** "Austria" for `AT`; the code itself when the browser does not know it; null without one. */
+export function countryName(code: string | null): string | null {
+  if (code === null || code === "") return null;
+  try {
+    return new Intl.DisplayNames(LOCALE, { type: "region" }).of(code.toUpperCase()) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+/** The first word of the buyer's name, for a button; long names end in an ellipsis there. */
+export function firstName(name: string): string {
+  const first = name.trim().split(/\s+/)[0] ?? "";
+  return first.length > 18 ? `${first.slice(0, 17)}…` : first;
+}

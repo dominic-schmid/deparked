@@ -1,7 +1,7 @@
 import { expect, TEST_RELEASE, TEST_TOKEN, test } from "../fixtures";
 
 // The v1 acceptance flow, one piece handing over to the next with nothing seeded in between: install, password,
-// the first-run wizard (notify address, first domain, which gets that address by itself), edit and publish, a visitor's offer, the inbox and the mail.
+// the first-run wizard (notify address, first domain, which gets that address by itself), edit and publish, a visitor's offer, Offers and the mail.
 const HOST = "example.com";
 const OWNER = "owner@example.com";
 const PASSWORD = "a-long-new-password";
@@ -16,7 +16,7 @@ const TURNSTILE_STUB = `window.turnstile = {
   reset() {},
 };`;
 
-test("install, set up, add a domain, publish it, take an offer and read it in the inbox", async ({
+test("install, set up, add a domain, publish it, take an offer and read it under Offers", async ({
   page,
   context,
   urls,
@@ -125,9 +125,9 @@ test("install, set up, add a domain, publish it, take an offer and read it in th
     expect(mock.callsTo("turnstile.siteverify")).toHaveLength(1);
   });
 
-  await test.step("the offer is in the inbox and the owner got the mail", async () => {
-    await page.goto(`${urls.admin}/admin/inbox`);
-    const offers = page.getByRole("main").getByRole("listitem");
+  await test.step("the offer is under Offers and the owner got the mail", async () => {
+    await page.goto(`${urls.admin}/admin/offers`);
+    const offers = page.getByRole("region", { name: "List of offers" }).getByRole("listitem");
     await expect(offers).toHaveCount(1);
     await expect(offers.first()).toContainText("Ada Example");
     await expect(offers.first()).toContainText("12,500");

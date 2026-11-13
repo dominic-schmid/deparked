@@ -1,63 +1,41 @@
-import type { Offer, OfferCursor, OfferSort, OfferStatus } from "@deparked/db";
+import type { OfferCursor, OfferSort, OfferStatus } from "@deparked/db";
 import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
+import { BottomSheet } from "@deparked/ui/arc/bottom-sheet";
+import { ButtonGroup } from "@deparked/ui/arc/button-group";
+import { CopyButton } from "@deparked/ui/arc/copy-button";
+import { EmptyState } from "@deparked/ui/arc/empty-state";
+import { ScrollArea } from "@deparked/ui/arc/scroll-area";
+import { SegmentedControl } from "@deparked/ui/arc/segmented-control";
+import { Select } from "@deparked/ui/arc/select";
+import { Skeleton } from "@deparked/ui/arc/skeleton";
 import { Badge } from "@deparked/ui/badge";
 import { Button } from "@deparked/ui/button";
-import { Link, useRouter } from "@tanstack/react-router";
+import { cn } from "@deparked/ui/lib/utils";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Download, Mail, TriangleAlert } from "lucide-react";
-import { type ReactNode, useId, useState } from "react";
+import { Globe, Mail, TrendingUp, TriangleAlert } from "lucide-react";
+import { Fragment, type ReactNode, useState, useSyncExternalStore } from "react";
+import type { OfferItem } from "../server/offers";
 import { getOffers, setOfferStatus } from "../server/offers.functions";
-import { formatMoney, replyHref } from "./format";
+import { countryName, firstName, formatMoneyShort, relativeTime, replyHref } from "./format";
+import { useHydrated } from "./hydrated";
+import { offerContextLine, STATUS_ACTIONS, STATUS_FILTERS, STATUS_NOTE } from "./offer-copy";
+import { PageThumbnail } from "./thumbnail";
 import { RelativeTime } from "./time";
 
 export type OfferFilter = { host?: string | undefined; status?: OfferStatus | undefined };
 /** What a list shows: the filter, and its order (newest first when unset). */
 export type OfferQuery = OfferFilter & { sort?: OfferSort | undefined };
 
-export const SELECT_CLASS =
-  "h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30";
-
-const SORT_LABEL: Record<OfferSort, string> = { newest: "Newest first", highest: "Highest offer first" };
-
-/** The inbox's order. "Newest first" is the default and leaves the URL without `sort`. */
-export function SortSelect(props: { value: OfferSort | undefined; onChange: (sort: OfferSort | undefined) => void }) {
-  const id = useId();
-  return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
-        Sort
-      </label>
-      <select
-        id={id}
-        value={props.value ?? "newest"}
-        onChange={(event) => props.onChange(event.target.value === "highest" ? "highest" : undefined)}
-        className={SELECT_CLASS}
-      >
-        {(Object.keys(SORT_LABEL) as OfferSort[]).map((sort) => (
-          <option key={sort} value={sort}>
-            {SORT_LABEL[sort]}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-const STATUS_LABEL: Record<OfferStatus, string> = { new: "New", replied: "Replied", ignored: "Ignored" };
-export const STATUS_FILTERS: readonly { status: OfferStatus | undefined; label: string }[] = [
-  { status: undefined, label: "All" },
-  { status: "new", label: "New" },
-  { status: "replied", label: "Replied" },
-  { status: "ignored", label: "Ignored" },
-];
-
-function countryName(code: string): string {
-  try {
-    return new Intl.DisplayNames("en", { type: "region" }).of(code.toUpperCase()) ?? code;
-  } catch {
-    return code;
-  }
-}
+/** What the Offers screens load: the first page, the offer a link points to when the page lacks it, counts. */
+export type OffersData = {
+  offers: OfferItem[];
+  next: OfferCursor | null;
+  selected: OfferItem | null;
+  newCount: number;
+  anyOffers: boolean;
+  now: number;
+};
 
 export function exportHref(filter: OfferFilter): string {
   const search = new URLSearchParams();
@@ -67,166 +45,369 @@ export function exportHref(filter: OfferFilter): string {
   return `/admin/offers.csv${query === "" ? "" : `?${query}`}`;
 }
 
-export function ExportButton({ filter }: { filter: OfferFilter }) {
+// The labels stay for screen readers; the controls say what they hold.
+const QUIET_LABEL = "[&_label]:sr-only";
+
+/** Status (New with its count, Replied, Ignored, All), domain and order, each one a query parameter. */
+export function OfferFilters(props: {
+  query: OfferQuery;
+  newCount: number;
+  /** The domain filter's choices; left out on a domain's own Offers tab. */
+  hosts?: readonly string[];
+  onChange: (query: OfferQuery) => void;
+}) {
+  const { query } = props;
   return (
-    <Button asChild variant="outline" size="sm">
-      <a href={exportHref(filter)} download>
-        <Download aria-hidden="true" />
-        Export CSV
-      </a>
-    </Button>
+    <div className="flex min-w-0 flex-wrap items-center gap-2 max-sm:w-full">
+      <SegmentedControl
+        label="Show"
+        value={query.status ?? "all"}
+        options={STATUS_FILTERS.map((option) => ({
+          value: option.value,
+          label: option.label,
+          accessory:
+            option.value === "new" && props.newCount > 0 ? (
+              <span className="rounded-full bg-tangerine px-1.5 text-xs font-semibold text-tangerine-foreground tabular-nums">
+                {props.newCount > 99 ? "99+" : props.newCount}
+              </span>
+            ) : undefined,
+        }))}
+        onValueChange={(value) => {
+          const status = STATUS_FILTERS.find((option) => option.value === value)?.value;
+          props.onChange({ ...query, status: status === "all" ? undefined : status });
+        }}
+      />
+      {props.hosts === undefined ? null : (
+        <div className={cn(QUIET_LABEL, "w-48 max-w-full min-w-0 max-sm:flex-[1_1_9rem]")}>
+          <Select
+            label="Domain"
+            value={query.host ?? "all"}
+            options={[
+              { value: "all", label: "All domains" },
+              ...props.hosts.map((host) => ({ value: host, label: host })),
+            ]}
+            onValueChange={(value) => props.onChange({ ...query, host: value === "all" ? undefined : value })}
+          />
+        </div>
+      )}
+      <div className={cn(QUIET_LABEL, "w-40 min-w-0 max-sm:flex-[1_1_8rem]")}>
+        <Select
+          label="Order"
+          value={query.sort ?? "newest"}
+          options={[
+            { value: "newest", label: "Newest first" },
+            { value: "highest", label: "Highest first" },
+          ]}
+          onValueChange={(value) => props.onChange({ ...query, sort: value === "highest" ? "highest" : undefined })}
+        />
+      </div>
+    </div>
   );
 }
 
-const LONG_MESSAGE = 280;
+const subscribeWide = (onChange: () => void) => {
+  const media = window.matchMedia(WIDE);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+};
+const WIDE = "(min-width: 64rem)";
 
-function Message({ text }: { text: string }) {
-  const body = (
-    <p dir="auto" className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">
-      {text}
-    </p>
-  );
-  if (text.length <= LONG_MESSAGE) return body;
-  return (
-    <details className="group">
-      <summary className="cursor-pointer list-none rounded-sm text-sm [&::-webkit-details-marker]:hidden outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-        <span dir="auto" className="line-clamp-2 [overflow-wrap:anywhere] group-open:hidden">
-          {text}
-        </span>
-        <span className="font-medium underline underline-offset-4 group-open:hidden">Show the whole message</span>
-        <span className="hidden font-medium underline underline-offset-4 group-open:inline">Hide the message</span>
-      </summary>
-      <div className="mt-2">{body}</div>
-    </details>
+/** True from 1024 px up, where the list and the offer sit side by side. False on the server. */
+function useWide(): boolean {
+  return useSyncExternalStore(
+    subscribeWide,
+    () => window.matchMedia(WIDE).matches,
+    () => false,
   );
 }
 
-function OfferCard(props: {
-  offer: Offer;
+function UnreadDot({ status }: { status: OfferStatus }) {
+  if (status !== "new") return <span aria-hidden="true" className="size-2 shrink-0" />;
+  return (
+    <span className="size-2 shrink-0 rounded-full bg-tangerine">
+      <span className="sr-only">, new</span>
+    </span>
+  );
+}
+
+function OfferRow(props: {
+  offer: OfferItem;
+  status: OfferStatus;
   now: number;
   showHost: boolean;
-  busy: boolean;
-  error: string | undefined;
-  onStatus: (status: OfferStatus) => void;
+  /** `linked`: the URL picks it. `default`: shown beside the list because nothing is picked (wide screens only). */
+  shown: "linked" | "default" | undefined;
+  current: boolean;
 }) {
   const { offer } = props;
-  const others = (["new", "replied", "ignored"] as const).filter((status) => status !== offer.status);
-  const actionLabel: Record<OfferStatus, string> = {
-    new: "Mark as new",
-    replied: "Mark as replied",
-    ignored: "Ignore",
-  };
   return (
-    <li className="flex flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="min-w-0 text-lg font-semibold tabular-nums [overflow-wrap:anywhere]">
-          {formatMoney(offer.amountMinor, offer.currency)}
-        </p>
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Badge variant={offer.status === "new" ? "default" : "secondary"}>{STATUS_LABEL[offer.status]}</Badge>
-          <RelativeTime time={offer.createdAt} now={props.now} />
-        </p>
+    <li>
+      <Link
+        to="."
+        search={(previous) => ({ ...previous, offer: offer.id })}
+        resetScroll={false}
+        aria-current={props.current ? "true" : undefined}
+        data-shown={props.shown}
+        className="flex min-h-16 items-center gap-3.5 rounded-[18px] px-3.5 py-3 outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[shown=linked]:bg-tangerine/12 lg:data-[shown=default]:bg-tangerine/12 max-sm:gap-3 max-sm:px-2.5 motion-reduce:transition-none"
+      >
+        <PageThumbnail
+          host={offer.host}
+          className="h-10 w-[52px] shrink-0 rounded-[9px] ring-1 ring-foreground/10 ring-inset [&>span]:hidden"
+        />
+        <span className="flex min-w-0 flex-1 flex-col gap-px">
+          <span dir="auto" className={cn("truncate", props.status === "new" ? "font-semibold" : "font-medium")}>
+            {offer.name}
+          </span>
+          <span className="flex min-w-0 gap-1.5 text-[13.5px] text-muted-foreground">
+            {props.showHost ? (
+              <>
+                <span translate="no" className="truncate">
+                  {offer.host}
+                </span>
+                <span aria-hidden="true">·</span>
+              </>
+            ) : null}
+            <span className="shrink-0 whitespace-nowrap">{relativeTime(offer.createdAt, props.now)}</span>
+          </span>
+        </span>
+        <span className="shrink-0 font-heading text-xl font-bold tracking-[-0.01em] tabular-nums max-sm:text-lg">
+          {formatMoneyShort(offer.amountMinor, offer.currency)}
+        </span>
+        <UnreadDot status={props.status} />
+      </Link>
+    </li>
+  );
+}
+
+/** The buyer's own words, as a speech bubble. A long message scrolls inside it. */
+function Message({ text }: { text: string | null }) {
+  if (text === null || text.trim() === "") {
+    return <p className="text-muted-foreground">No message, just the offer.</p>;
+  }
+  return (
+    <ScrollArea
+      label="Message"
+      maxHeight="16rem"
+      className="rounded-[6px_20px_20px_20px] bg-background"
+      viewportClassName="px-[18px] py-4"
+    >
+      <p dir="auto" className="text-[17px] leading-[1.45] whitespace-pre-wrap [overflow-wrap:anywhere]">
+        {text}
+      </p>
+    </ScrollArea>
+  );
+}
+
+/** Mark-as links for a browser without JavaScript: each opens a page that asks once and saves with a plain form. */
+function NoScriptActions(props: { offer: OfferItem; status: OfferStatus; back: string }) {
+  return (
+    <noscript>
+      <style>{"[data-needs-script]{display:none!important}"}</style>
+      <span className="flex flex-wrap gap-x-4 gap-y-2">
+        {STATUS_ACTIONS[props.status].map((action) => (
+          <a
+            key={action.status}
+            href={`/admin/offer-status?${new URLSearchParams({ id: props.offer.id, status: action.status, back: props.back })}`}
+            className="inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+          >
+            {action.label}
+          </a>
+        ))}
+      </span>
+    </noscript>
+  );
+}
+
+/**
+ * The amount, the loudest thing on the screen. Long amounts step down a size, and only break after a group
+ * separator, never inside one.
+ */
+function Amount({ text }: { text: string }) {
+  const size =
+    text.length <= 9
+      ? "text-[clamp(2.75rem,2rem+2.5vw,4rem)]"
+      : text.length <= 13
+        ? "text-[clamp(2.25rem,1.6rem+2vw,3rem)]"
+        : "text-[clamp(1.75rem,1.3rem+1.5vw,2.25rem)]";
+  const groups = text.split(/(?<=,)/);
+  return (
+    <span className={cn("font-heading leading-none font-bold tracking-[-0.03em] tabular-nums", size)}>
+      {groups.map((group, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: the groups of one number, in order
+        <Fragment key={index}>
+          {index === 0 ? null : <wbr />}
+          {group}
+        </Fragment>
+      ))}
+    </span>
+  );
+}
+
+/** One offer in full: the amount first, who and for which domain, their words, how to reach them, what to do. */
+function OfferDetail(props: {
+  offer: OfferItem;
+  status: OfferStatus;
+  now: number;
+  busy: boolean;
+  error: string | undefined;
+  back: string;
+  onStatus: (status: OfferStatus) => void;
+}) {
+  const { offer, status } = props;
+  const country = countryName(offer.country);
+  const context = offerContextLine(offer);
+  const note = STATUS_NOTE[status];
+  return (
+    <article aria-label={`Offer from ${offer.name}`} className="flex min-w-0 flex-col gap-[22px]">
+      <div className="flex flex-wrap items-center gap-x-[18px] gap-y-4">
+        <PageThumbnail
+          host={offer.host}
+          className="h-[92px] w-[132px] shrink-0 rounded-[14px] ring-1 ring-foreground/10 ring-inset max-sm:h-[69px] max-sm:w-[99px]"
+        />
+        <h2 className="flex min-w-0 flex-1 basis-56 flex-col gap-1">
+          <span dir="auto" className="text-[13.5px] font-normal text-muted-foreground [overflow-wrap:anywhere]">
+            {offer.name} offers
+          </span>
+          <Amount text={formatMoneyShort(offer.amountMinor, offer.currency)} />
+          <span className="text-[13.5px] font-normal text-muted-foreground [overflow-wrap:anywhere]">
+            for <span translate="no">{offer.host}</span> · <RelativeTime time={offer.createdAt} now={props.now} />
+          </span>
+        </h2>
+        {note === null ? null : <Badge variant="secondary">{note}</Badge>}
       </div>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
-        {props.showHost ? (
-          <>
-            <dt className="text-muted-foreground">Domain</dt>
-            <dd className="[overflow-wrap:anywhere]">
-              <Link
-                to="/admin/d/$host/offers"
-                params={{ host: offer.host }}
-                className="rounded-sm underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                {offer.host}
-              </Link>
-            </dd>
-          </>
-        ) : null}
-        <dt className="text-muted-foreground">From</dt>
-        <dd dir="auto" className="[overflow-wrap:anywhere]">
-          {offer.name}
-        </dd>
-        <dt className="text-muted-foreground">Email</dt>
-        <dd className="[overflow-wrap:anywhere]">{offer.email}</dd>
-        {offer.country ? (
-          <>
-            <dt className="text-muted-foreground">Country</dt>
-            <dd className="[overflow-wrap:anywhere]">{countryName(offer.country)}</dd>
-          </>
-        ) : null}
+
+      <Message text={offer.message} />
+
+      <dl className="flex flex-wrap gap-x-[26px] gap-y-2.5 text-sm text-muted-foreground">
+        <div className="flex max-w-full min-w-0 items-center gap-2">
+          <dt>
+            <Mail aria-hidden="true" className="size-4" />
+            <span className="sr-only">Email</span>
+          </dt>
+          <dd className="flex min-w-0 items-center gap-1 text-foreground">
+            <span translate="no" className="min-w-0 [overflow-wrap:anywhere]">
+              {offer.email}
+            </span>
+            <CopyButton value={offer.email} label="Copy the buyer's email" iconOnly variant="plain" />
+          </dd>
+        </div>
+        {country === null ? null : (
+          <div className="flex items-center gap-2">
+            <dt>
+              <Globe aria-hidden="true" className="size-4" />
+              <span className="sr-only">Country</span>
+            </dt>
+            <dd>{country}</dd>
+          </div>
+        )}
+        {context === null ? null : (
+          <div className="flex items-center gap-2">
+            <dt>
+              <TrendingUp aria-hidden="true" className="size-4" />
+              <span className="sr-only">On this domain</span>
+            </dt>
+            <dd>{context}</dd>
+          </div>
+        )}
       </dl>
-      {offer.message ? <Message text={offer.message} /> : <p className="text-sm text-muted-foreground">No message.</p>}
+
       {offer.emailStatus === "failed" ? (
         <Alert>
           <TriangleAlert aria-hidden="true" />
           <AlertTitle>The notification email was not sent</AlertTitle>
           <AlertDescription className="[overflow-wrap:anywhere]">
-            This offer is only here in the inbox.{offer.emailError ? ` Error: ${offer.emailError}` : ""}
+            This offer is only here in Offers.{offer.emailError ? ` Error: ${offer.emailError}` : ""}
           </AlertDescription>
         </Alert>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button asChild size="sm">
-          <a href={replyHref(offer.email, offer.host)}>
-            <Mail aria-hidden="true" />
-            Reply by email
-          </a>
-        </Button>
-        {others.map((status) => (
-          <Button
-            key={status}
-            variant="outline"
-            size="sm"
-            aria-disabled={props.busy}
-            onClick={() => {
-              if (!props.busy) props.onStatus(status);
-            }}
-          >
-            {actionLabel[status]}
+
+      <div className="flex flex-col gap-3 border-t pt-5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button asChild variant={status === "new" ? "accent" : "outline"} size="lg" className="max-w-full">
+            <a href={replyHref(offer.email, offer.host)}>
+              <span className="truncate">Reply to {firstName(offer.name)}</span>
+            </a>
           </Button>
-        ))}
+          <div data-needs-script="">
+            <ButtonGroup
+              label="Mark this offer"
+              disabled={props.busy}
+              items={STATUS_ACTIONS[status].map((action) => ({
+                id: action.status,
+                label: action.label,
+                onSelect: () => props.onStatus(action.status),
+              }))}
+            />
+          </div>
+          <NoScriptActions offer={offer} status={status} back={props.back} />
+        </div>
+        {props.error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {props.error}
+          </p>
+        ) : null}
       </div>
-      {props.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {props.error}
-        </p>
-      ) : null}
-    </li>
+    </article>
   );
 }
 
-type Page = { offers: Offer[]; next: OfferCursor | null; now: number };
+const PANE = "min-w-0 rounded-[28px] bg-card p-7 shadow-lift max-sm:p-5";
 
 /**
- * The inbox: offers in the query's order, with "Load more". Mount it with a `key` made of the query, so a new
+ * The Offers screen under its filters: a compact list and, from 1024 px up, the selected offer beside it. On
+ * smaller screens the offer opens in a bottom sheet. The selection is `?offer=` in the URL, so reload and back
+ * keep it; without it the newest (or highest) offer shows. Before and without JavaScript the selected offer is
+ * part of the page, so every offer can be read and answered. Mount it with a `key` made of the query, so a new
  * filter or order starts from the loader's first page again.
  */
-export function OfferList(props: { first: Page; filter: OfferQuery; showHost: boolean; empty: ReactNode }) {
+export function OffersView(props: {
+  data: OffersData;
+  query: OfferQuery;
+  selectedId: string | undefined;
+  showHost: boolean;
+  /** Where the page is, for the no-JavaScript status forms to come back to. */
+  back: string;
+  empty: ReactNode;
+}) {
   const router = useRouter();
+  const navigate = useNavigate();
+  const hydrated = useHydrated();
+  const wide = useWide();
   const loadPage = useServerFn(getOffers);
   const changeStatus = useServerFn(setOfferStatus);
-  const [offers, setOffers] = useState(props.first.offers);
-  const [next, setNext] = useState(props.first.next);
+  const [offers, setOffers] = useState(props.data.offers);
+  const [next, setNext] = useState(props.data.next);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  // Status changes show at once and stay until the next load says the same.
+  const [statuses, setStatuses] = useState<Readonly<Record<string, OfferStatus>>>({});
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
 
-  const setStatusOf = (id: string, status: OfferStatus) =>
-    setOffers((current) => current.map((offer) => (offer.id === id ? { ...offer, status } : offer)));
+  const statusOf = (offer: OfferItem) => statuses[offer.id] ?? offer.status;
+  const linked =
+    props.selectedId === undefined
+      ? undefined
+      : (offers.find((offer) => offer.id === props.selectedId) ??
+        (props.data.selected?.id === props.selectedId ? props.data.selected : undefined));
+  const shown = linked ?? offers[0];
+  const sheetOpen = hydrated && !wide && linked !== undefined;
+  // The sheet keeps showing its offer while it slides away.
+  const [sheetOffer, setSheetOffer] = useState(linked);
+  if (linked !== undefined && linked !== sheetOffer) setSheetOffer(linked);
 
-  async function onStatus(offer: Offer, status: OfferStatus) {
-    const previous = offer.status;
+  async function onStatus(offer: OfferItem, status: OfferStatus) {
+    const previous = statusOf(offer);
     setBusy((current) => new Set(current).add(offer.id));
     setErrors(({ [offer.id]: _, ...rest }) => rest);
-    setStatusOf(offer.id, status);
+    setStatuses((current) => ({ ...current, [offer.id]: status }));
     try {
       const result = await changeStatus({ data: { id: offer.id, status } });
       if (!result.ok) throw new Error("gone");
-      // The badge in the navigation counts new offers.
+      // The navigation's badge and the New count follow.
       await router.invalidate();
     } catch {
-      setStatusOf(offer.id, previous);
+      setStatuses((current) => ({ ...current, [offer.id]: previous }));
       setErrors((current) => ({ ...current, [offer.id]: "That did not save. Check the connection and try again." }));
     } finally {
       setBusy((current) => {
@@ -242,7 +423,7 @@ export function OfferList(props: { first: Page; filter: OfferQuery; showHost: bo
     setLoading(true);
     setLoadError(false);
     try {
-      const page = await loadPage({ data: { ...props.filter, before: next } });
+      const page = await loadPage({ data: { ...props.query, before: next } });
       setOffers((current) => [...current, ...page.offers]);
       setNext(page.next);
     } catch {
@@ -252,47 +433,115 @@ export function OfferList(props: { first: Page; filter: OfferQuery; showHost: bo
     }
   }
 
-  if (offers.length === 0) return <>{props.empty}</>;
+  if (offers.length === 0 && linked === undefined) return <>{props.empty}</>;
+
+  const detailOf = (offer: OfferItem) => (
+    <OfferDetail
+      key={offer.id}
+      offer={offer}
+      status={statusOf(offer)}
+      now={props.data.now}
+      busy={busy.has(offer.id)}
+      error={errors[offer.id]}
+      back={props.back}
+      onStatus={(status) => void onStatus(offer, status)}
+    />
+  );
+
   return (
-    <>
-      <ul className="flex flex-col gap-3">
-        {offers.map((offer) => (
-          <OfferCard
-            key={offer.id}
-            offer={offer}
-            now={props.first.now}
-            showHost={props.showHost}
-            busy={busy.has(offer.id)}
-            error={errors[offer.id]}
-            onStatus={(status) => void onStatus(offer, status)}
-          />
-        ))}
-      </ul>
-      <div className="mt-6 flex flex-col items-center gap-2" aria-live="polite">
-        {next !== null ? (
-          <Button variant="outline" aria-disabled={loading} onClick={() => void loadMore()}>
-            {loading ? "Loading…" : "Load more"}
-          </Button>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {offers.length === 1 ? "That is the only offer." : `That is all ${offers.length} offers.`}
-          </p>
-        )}
-        {loadError ? <p className="text-sm text-destructive">More offers could not be loaded. Try again.</p> : null}
-      </div>
-    </>
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+      <section aria-label="List of offers" className="flex min-w-0 flex-col rounded-3xl bg-card p-2 shadow-lift">
+        <ul className="flex flex-col gap-0.5">
+          {offers.map((offer) => (
+            <OfferRow
+              key={offer.id}
+              offer={offer}
+              status={statusOf(offer)}
+              now={props.data.now}
+              showHost={props.showHost}
+              shown={offer.id !== shown?.id ? undefined : linked === undefined ? "default" : "linked"}
+              current={offer.id === shown?.id && (linked !== undefined || wide)}
+            />
+          ))}
+        </ul>
+        <div className="flex flex-col items-center gap-1 px-3 pt-2 pb-1 text-center" aria-live="polite">
+          {next !== null ? (
+            <Button variant="ghost" aria-disabled={loading} onClick={() => void loadMore()}>
+              {loading ? "Loading…" : "Load more"}
+            </Button>
+          ) : offers.length > 1 ? (
+            <p className="py-2 text-[13.5px] text-muted-foreground">That is all {offers.length} offers.</p>
+          ) : null}
+          {loadError ? <p className="text-sm text-destructive">More offers could not be loaded. Try again.</p> : null}
+          <a
+            href={exportHref(props.query)}
+            download
+            className="inline-flex min-h-11 items-center rounded-sm px-2 text-[13.5px] text-muted-foreground underline underline-offset-4 outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            Download as a spreadsheet
+          </a>
+        </div>
+      </section>
+
+      {shown === undefined ? null : (
+        <section
+          aria-label="Selected offer"
+          className={cn(
+            PANE,
+            "lg:sticky lg:top-6",
+            // Phones get the sheet once the page runs; before that (or without JavaScript) a linked offer sits on
+            // top of the list.
+            hydrated || linked === undefined ? "max-lg:hidden" : "max-lg:order-first",
+          )}
+        >
+          {detailOf(shown)}
+        </section>
+      )}
+
+      {hydrated && !wide ? (
+        <BottomSheet
+          open={sheetOpen}
+          onOpenChange={(open) => {
+            if (!open)
+              void navigate({ to: ".", search: (previous) => ({ ...previous, offer: undefined }), replace: true });
+          }}
+          title={sheetOffer === undefined ? "Offer" : `Offer from ${firstName(sheetOffer.name)}`}
+          detents={[0.92]}
+          closeLabel="Close the offer"
+        >
+          {sheetOffer === undefined ? null : detailOf(sheetOffer)}
+        </BottomSheet>
+      ) : null}
+    </div>
   );
 }
 
-export function NoOffers({ filtered }: { filtered: boolean }) {
+/** Nothing to show: no offer yet at all, or none under this filter. Each says what brings one, or how to widen it. */
+export function NoOffers(props: { title: string; description: string; action?: ReactNode; icon: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed p-8 text-center">
-      <h2 className="font-medium">{filtered ? "No offers match this filter" : "No offers yet"}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {filtered
-          ? "Pick another status or domain to see more."
-          : "When a visitor sends an offer from one of your pages, it shows up here and in your email."}
-      </p>
+    <EmptyState
+      title={props.title}
+      description={props.description}
+      icon={props.icon}
+      action={props.action}
+      className="rounded-[28px] bg-card py-14 shadow-lift"
+    />
+  );
+}
+
+/** While a filter loads: the list's rows and the offer beside it, as placeholders in their own places. */
+export function OffersPending() {
+  return (
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+      <div className="flex flex-col gap-5 rounded-3xl bg-card p-5 shadow-lift">
+        {Array.from({ length: 5 }, (_, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: placeholders without identity
+          <Skeleton key={index} label="Loading offers" avatar lines={2} />
+        ))}
+      </div>
+      <div className={cn(PANE, "max-lg:hidden")}>
+        <Skeleton label="Loading the offer" avatar lines={5} />
+      </div>
     </div>
   );
 }

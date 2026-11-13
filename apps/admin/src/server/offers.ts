@@ -1,11 +1,15 @@
 import {
   type Db,
+  getOffer,
   listOffers,
   OFFER_SORTS,
   OFFER_STATUSES,
   type Offer,
+  type OfferCursor,
   type OfferPage,
   type OfferStatus,
+  offerOrdinals,
+  offerStatsForHosts,
   setOfferStatus,
 } from "@deparked/db";
 import { z } from "zod";
@@ -13,6 +17,7 @@ import { decimalAmount } from "../components/format";
 import { hostSchema } from "./domains";
 
 const statusSchema = z.enum(OFFER_STATUSES);
+export const offerIdSchema = z.string().min(1).max(64);
 
 /** Which offers a list or an export shows. Both filters are optional. */
 export const offerFilterSchema = z.object({
@@ -23,11 +28,13 @@ export type OfferFilter = z.infer<typeof offerFilterSchema>;
 
 export const offerPageSchema = offerFilterSchema.extend({
   sort: z.enum(OFFER_SORTS).optional(),
-  before: z.object({ key: z.number().int().nonnegative(), id: z.string().min(1).max(64) }).optional(),
+  before: z.object({ key: z.number().int().nonnegative(), id: offerIdSchema }).optional(),
+  /** The offer the screen shows in full. Read on its own when it is not on this page. */
+  selected: offerIdSchema.optional(),
 });
 export type OfferPageInput = z.infer<typeof offerPageSchema>;
 
-export const offerStatusChangeSchema = z.object({ id: z.string().min(1).max(64), status: statusSchema });
+export const offerStatusChangeSchema = z.object({ id: offerIdSchema, status: statusSchema });
 
 export const INBOX_PAGE_SIZE = 25;
 
@@ -38,14 +45,63 @@ function where(filter: OfferFilter): { host?: string; status?: OfferStatus } {
   };
 }
 
-/** One page of the inbox, newest or highest first. Pass the page's `next` back as `before` for the next page. */
-export function loadOffers(db: Db, input: OfferPageInput): Promise<OfferPage> {
-  return listOffers(db, {
+/**
+ * Where an offer stands on its domain: the how-manieth it is (1 = the first the domain got), of how many, and the
+ * domain's best offer. Amounts in different currencies are compared as stored, as everywhere else.
+ */
+export type OfferContext = { ordinal: number; total: number; bestAmountMinor: number; bestCurrency: string };
+
+/** An offer as the Offers screen shows it. `context` is null only if the offer vanished while it was read. */
+export type OfferItem = Offer & { context: OfferContext | null };
+
+export type OfferItemPage = { offers: OfferItem[]; next: OfferCursor | null };
+
+/** Two queries for any number of offers: their places on their domains, and those domains' totals and best. */
+async function withContext(db: Db, list: Offer[]): Promise<OfferItem[]> {
+  if (list.length === 0) return [];
+  const [ordinals, stats] = await Promise.all([
+    offerOrdinals(
+      db,
+      list.map((offer) => offer.id),
+    ),
+    offerStatsForHosts(db, [...new Set(list.map((offer) => offer.host))]),
+  ]);
+  const byHost = new Map(stats.map((stat) => [stat.host, stat]));
+  return list.map((offer) => {
+    const ordinal = ordinals.get(offer.id);
+    const stat = byHost.get(offer.host);
+    return {
+      ...offer,
+      context:
+        ordinal === undefined || stat === undefined
+          ? null
+          : {
+              ordinal,
+              total: stat.total,
+              bestAmountMinor: stat.bestAmountMinor,
+              bestCurrency: stat.bestCurrency,
+            },
+    };
+  });
+}
+
+/** One page of offers, newest or highest first. Pass the page's `next` back as `before` for the next page. */
+export async function loadOffers(db: Db, input: OfferPageInput): Promise<OfferItemPage> {
+  const page: OfferPage = await listOffers(db, {
     ...where(input),
     ...(input.sort === undefined ? {} : { sort: input.sort }),
     ...(input.before === undefined ? {} : { before: input.before }),
     limit: INBOX_PAGE_SIZE,
   });
+  return { offers: await withContext(db, page.offers), next: page.next };
+}
+
+/** One offer with its context, for a link to an offer that is not on the first page. Null when there is none. */
+export async function loadOffer(db: Db, id: string): Promise<OfferItem | null> {
+  const offer = await getOffer(db, id);
+  if (offer === undefined) return null;
+  const [item] = await withContext(db, [offer]);
+  return item ?? null;
 }
 
 /** False when no offer has that id. */
@@ -54,6 +110,14 @@ export function changeOfferStatus(
   input: z.infer<typeof offerStatusChangeSchema> & { now: number },
 ): Promise<boolean> {
   return setOfferStatus(db, input);
+}
+
+// The Offers screens: everything, or one domain's tab. Anything else is not a place to send the owner back to.
+const BACK_PATH = /^\/admin\/(?:offers|d\/[a-z0-9.-]+\/offers)(?:\?[\w%=&.-]*)?$/;
+
+/** Where the no-JavaScript status form returns to: the Offers screen it came from, else all offers. */
+export function offerBackPath(value: unknown): string {
+  return typeof value === "string" && BACK_PATH.test(value) ? value : "/admin/offers";
 }
 
 // Excel, Sheets and LibreOffice run a cell that starts with one of these as a formula. Buyers write the cells.

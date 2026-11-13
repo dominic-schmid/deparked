@@ -16,7 +16,7 @@ import {
 } from "../server/analytics-shape";
 import type { DomainOverview } from "../server/domains";
 import { ConversionValue, formatCompactCount, formatConversion, formatCount, VisitsSparkline } from "./analytics";
-import { formatMoneyShort, relativeTime, replyHref } from "./format";
+import { countryName, firstName, formatMoneyShort, relativeTime, replyHref } from "./format";
 import { greeting, HOME_VIEW_COOKIE, type HomeView } from "./home-copy";
 import { OfferMailBadge } from "./offer-mail";
 import { StatusDot, statusLabel } from "./status";
@@ -42,21 +42,6 @@ export type BestOffer = {
   currency: string;
   createdAt: number;
 };
-
-function countryName(code: string | null): string | null {
-  if (code === null) return null;
-  try {
-    return new Intl.DisplayNames("en", { type: "region" }).of(code) ?? code;
-  } catch {
-    return code;
-  }
-}
-
-/** The first word of the buyer's name, for the button; long names end in an ellipsis there. */
-function firstName(name: string): string {
-  const first = name.trim().split(/\s+/)[0] ?? "";
-  return first.length > 18 ? `${first.slice(0, 17)}…` : first;
-}
 
 /** The highest offer nobody has answered yet: money first, then who, then one button to answer. */
 export function BestOfferCard({ offer, now, waiting }: { offer: BestOffer; now: number; waiting: number }) {
@@ -91,7 +76,8 @@ export function BestOfferCard({ offer, now, waiting }: { offer: BestOffer; now: 
         <div className="flex flex-wrap items-center gap-2">
           {waiting > 1 ? (
             <Link
-              to="/admin/inbox"
+              to="/admin/offers"
+              search={{ status: "new" }}
               className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-[#c9cee6] outline-none hover:text-white focus-visible:ring-[3px] focus-visible:ring-ring/60"
             >
               All {formatCount(waiting)} new
