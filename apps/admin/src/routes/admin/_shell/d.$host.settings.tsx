@@ -17,7 +17,7 @@ function DomainSettings() {
   const { domain } = domainRoute.useLoaderData();
   const { addresses } = Route.useLoaderData();
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-5">
       <NotifyPicker host={domain.host} current={domain.notifyEmail} addresses={addresses} />
       <DomainActions host={domain.host} status={domain.status} pending={domain.pending} />
     </div>

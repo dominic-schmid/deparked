@@ -1,29 +1,25 @@
 import type { NotifyAddress } from "@deparked/db";
-import { Alert, AlertDescription } from "@deparked/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
-import { Field, FieldLabel } from "@deparked/ui/field";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@deparked/ui/select";
+import { Alert } from "@deparked/ui/arc/alert";
+import { Select } from "@deparked/ui/arc/select";
 import { Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { NotifyResult } from "../server/notify";
 import { pickNotify } from "../server/notify.functions";
+import { SettingsSection, TEXT_LINK } from "./settings-ui";
 
-const TEXT_LINK =
-  "rounded-sm font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
-
-/** Picks where a domain's offers are emailed, from the verified notify addresses only. */
+/** Picks where a domain's offers are emailed, from the confirmed notify addresses only. */
 export function NotifyPicker(props: { host: string; current: string | null; addresses: NotifyAddress[] }) {
   const router = useRouter();
   const pick = useServerFn(pickNotify);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<NotifyResult | null>(null);
-  const id = useId();
   const verified = props.addresses.filter((address) => address.verifiedAt !== null);
   // A pending current address (given by default) shows as picked, but cannot be picked again.
   const pendingCurrent = props.current !== null && !verified.some((address) => address.email === props.current);
 
   async function onPick(email: string) {
+    if (email === props.current) return;
     setBusy(true);
     setResult(null);
     try {
@@ -37,52 +33,44 @@ export function NotifyPicker(props: { host: string; current: string | null; addr
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Where offers go</CardTitle>
-        <CardDescription>
-          Every offer is kept under Offers, and emailed to this address. Only verified addresses can get it.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {verified.length === 0 ? (
-          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
-            {props.current === null
-              ? "No verified address yet. "
-              : `Offers go to ${props.current} once it is verified. `}
-            <Link to="/admin/settings" className={TEXT_LINK}>
-              {props.current === null ? "Add one in Notify addresses" : "Verify it in Notify addresses"}
-            </Link>
-            .
-          </p>
-        ) : (
-          <Field>
-            <FieldLabel htmlFor={id}>Send offers to</FieldLabel>
-            <Select value={props.current ?? undefined} onValueChange={onPick} disabled={busy}>
-              <SelectTrigger id={id} className="w-full max-w-sm" title={props.current ?? undefined}>
-                <SelectValue placeholder="Pick an address" />
-              </SelectTrigger>
-              <SelectContent>
-                {pendingCurrent && props.current !== null ? (
-                  <SelectItem value={props.current} disabled>
-                    {props.current} (not verified yet)
-                  </SelectItem>
-                ) : null}
-                {verified.map((address) => (
-                  <SelectItem key={address.email} value={address.email}>
-                    {address.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        )}
+    <SettingsSection
+      title="Send offers to"
+      lead="Every offer is kept under Offers, and emailed to this address. Only confirmed addresses can get it."
+    >
+      {verified.length === 0 ? (
+        <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          {props.current === null
+            ? "No confirmed address yet. "
+            : `Offers go to ${props.current} once it is confirmed. `}
+          <Link to="/admin/settings" className={TEXT_LINK}>
+            {props.current === null ? "Add an address" : "Confirm it in Settings"}
+          </Link>
+          .
+        </p>
+      ) : (
+        <div className="w-full max-w-sm min-w-0 [overflow-wrap:anywhere]">
+          <Select
+            label="Address"
+            placeholder="Pick an address"
+            disabled={busy}
+            {...(props.current === null ? {} : { value: props.current })}
+            options={[
+              ...(pendingCurrent && props.current !== null
+                ? [{ value: props.current, label: `${props.current} (not confirmed yet)`, disabled: true }]
+                : []),
+              ...verified.map((address) => ({ value: address.email, label: address.email })),
+            ]}
+            onValueChange={(email) => void onPick(email)}
+          />
+        </div>
+      )}
+      <div aria-live="polite" className="empty:hidden">
         {result === null ? null : (
-          <Alert variant={result.ok ? "default" : "destructive"} role={result.ok ? "status" : "alert"}>
-            <AlertDescription className="[overflow-wrap:anywhere]">{result.message}</AlertDescription>
+          <Alert tone={result.ok ? "success" : "danger"} title={result.ok ? "Saved" : "Not saved"}>
+            <span className="[overflow-wrap:anywhere]">{result.message}</span>
           </Alert>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
