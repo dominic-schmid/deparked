@@ -2,11 +2,11 @@ import { cn } from "@deparked/ui/lib/utils";
 import type { DisplayStatus } from "../server/domains";
 
 const STATUS: Record<DisplayStatus, { label: string; dot: string }> = {
-  live: { label: "Live", dot: "bg-emerald-500" },
-  email_pending: { label: "Email pending", dot: "bg-amber-500" },
+  live: { label: "Live", dot: "bg-positive" },
+  email_pending: { label: "Email pending", dot: "bg-caution" },
   draft: { label: "Draft", dot: "bg-muted-foreground/50" },
   off: { label: "Off", dot: "border border-muted-foreground/60" },
-  error: { label: "Error", dot: "bg-destructive" },
+  error: { label: "Error", dot: "bg-negative" },
 };
 
 export function statusLabel(status: DisplayStatus): string {
