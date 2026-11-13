@@ -36,7 +36,11 @@ test("the owner goes from an empty workspace to a handled offer, an export and a
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Three offers are waiting for you.");
   await expect(page.getByRole("heading", { name: "All domains" })).toBeVisible();
   // Each domain is a window: its state or next step, and its offers as a price tag.
-  const card = (host: string) => page.getByRole("article").filter({ hasText: host });
+  const card = (host: string) =>
+    page
+      .getByRole("region", { name: /^All domains/ })
+      .getByRole("article")
+      .filter({ hasText: host });
   await expect(card("example.com")).toContainText("Live");
   await expect(card("example.com").getByRole("link", { name: /^2 offers · \$9,900\s*, 2 new$/ })).toBeVisible();
   await expect(card("example.org").getByRole("link", { name: "Finish its page" })).toHaveAttribute(

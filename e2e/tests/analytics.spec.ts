@@ -31,7 +31,11 @@ test("visits, conversion, referrers and countries come from Web Analytics next t
   );
 
   const page = await login();
-  const card = (host: string) => page.getByRole("article").filter({ hasText: host });
+  const card = (host: string) =>
+    page
+      .getByRole("region", { name: /^All domains/ })
+      .getByRole("article")
+      .filter({ hasText: host });
   await expect(card("example.com")).toContainText("10 visits in 30 days");
   await expect(card("example.org").getByRole("link", { name: "Set up visits" })).toHaveAttribute(
     "href",
@@ -85,10 +89,19 @@ test("a rejected token leaves the page readable, says what to fix, and is not re
     "href",
     "/admin/settings/cloudflare",
   );
-  await expect(page.getByRole("article").filter({ hasText: "example.com" })).toContainText("Visits unavailable");
+  await expect(
+    page
+      .getByRole("region", { name: /^All domains/ })
+      .getByRole("article")
+      .filter({ hasText: "example.com" }),
+  ).toContainText("Visits unavailable");
   // A domain without a site is not set up, whether or not the read worked, and says how to fix it.
   await expect(
-    page.getByRole("article").filter({ hasText: "example.org" }).getByRole("link", { name: "Set up visits" }),
+    page
+      .getByRole("region", { name: /^All domains/ })
+      .getByRole("article")
+      .filter({ hasText: "example.org" })
+      .getByRole("link", { name: "Set up visits" }),
   ).toHaveAttribute("href", "/admin/add?host=example.org");
   await page.getByRole("radio", { name: "List" }).click();
   await expect(page.getByRole("row").filter({ hasText: "example.com" })).toContainText("Unavailable");
