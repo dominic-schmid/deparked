@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@deparked/ui/*": ["./src/*"]
+    }
+  },
+  "include": ["src/css-modules.d.ts", "src/components/arc", "src/arc-ssr.test.tsx"],
+  "exclude": []
+}

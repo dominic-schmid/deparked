@@ -47,6 +47,67 @@ Ruixen's registry has no plain primitives (button, input, dialog and so on); it 
 | `src/components/arc/tooltip/` | Arc `tooltip` | MIT | yes | Radix import from `radix-ui`; `animate` spread for `exactOptionalPropertyTypes` |
 | `src/components/arc/progress/` | Arc `progress` | MIT | yes | none |
 | `src/components/arc/toast/` | Arc `toast` | MIT | yes | none |
+| `src/components/arc/action-button/` | Arc `action-button` | MIT | yes | none |
+| `src/components/arc/alert/` | Arc `alert` | MIT | yes | none |
+| `src/components/arc/animated-counter/` | Arc `animated-counter` | MIT | yes | none |
+| `src/components/arc/announcement-bar/` | Arc `announcement-bar` | MIT | yes | none |
+| `src/components/arc/avatar/` | Arc `avatar` | MIT | yes | none |
+| `src/components/arc/bar-chart/` | Arc `bar-chart` | MIT | yes | none |
+| `src/components/arc/bottom-sheet/` | Arc `bottom-sheet` | MIT | yes | none |
+| `src/components/arc/breadcrumb/` | Arc `breadcrumb` | MIT | yes | none |
+| `src/components/arc/button-group/` | Arc `button-group` | MIT | yes | none |
+| `src/components/arc/card/` | Arc `card` | MIT | yes | none |
+| `src/components/arc/chip-group/` | Arc `chip-group` | MIT | yes | none |
+| `src/components/arc/code-block/` | Arc `code-block` | MIT | yes | none |
+| `src/components/arc/color-picker/` | Arc `color-picker` | MIT | yes | none |
+| `src/components/arc/combobox/` | Arc `combobox` | MIT | yes | none |
+| `src/components/arc/command-palette/` | Arc `command-palette` (block) | MIT | yes | none |
+| `src/components/arc/confirm-morph/` | Arc `confirm-morph` | MIT | yes | none |
+| `src/components/arc/context-menu/` | Arc `context-menu` | MIT | yes | none |
+| `src/components/arc/copy-button/` | Arc `copy-button` | MIT | yes | none |
+| `src/components/arc/countdown/` | Arc `countdown` | MIT | yes | none |
+| `src/components/arc/dialog/` | Arc `dialog` | MIT | yes | none |
+| `src/components/arc/drawer/` | Arc `drawer` | MIT | yes | none |
+| `src/components/arc/dropdown-menu/` | Arc `dropdown-menu` | MIT | yes | none |
+| `src/components/arc/empty-state/` | Arc `empty-state` | MIT | yes | none |
+| `src/components/arc/expandable-card/` | Arc `expandable-card` | MIT | yes | none |
+| `src/components/arc/expandable-text/` | Arc `expandable-text` | MIT | yes | none |
+| `src/components/arc/expanding-search/` | Arc `expanding-search` | MIT | yes | none |
+| `src/components/arc/filter-toolbar/` | Arc `filter-toolbar` | MIT | yes | none |
+| `src/components/arc/hold-to-confirm/` | Arc `hold-to-confirm` | MIT | yes | none |
+| `src/components/arc/hover-card/` | Arc `hover-card` | MIT | yes | none |
+| `src/components/arc/inline-edit/` | Arc `inline-edit` | MIT | yes | none |
+| `src/components/arc/line-chart/` | Arc `line-chart` | MIT | yes | none |
+| `src/components/arc/mention-input/` | Arc `mention-input` | MIT | yes | none |
+| `src/components/arc/metric-card/` | Arc `metric-card` | MIT | yes | none |
+| `src/components/arc/money-input/` | Arc `money-input` | MIT | yes | none |
+| `src/components/arc/number-field/` | Arc `number-field` | MIT | yes | none |
+| `src/components/arc/onboarding-checklist/` | Arc `onboarding-checklist` | MIT | yes | none |
+| `src/components/arc/pagination/` | Arc `pagination` | MIT | yes | none |
+| `src/components/arc/password-field/` | Arc `password-field` | MIT | yes | none |
+| `src/components/arc/password-strength/` | Arc `password-strength` | MIT | yes | none |
+| `src/components/arc/radio-cards/` | Arc `radio-cards` | MIT | yes | none |
+| `src/components/arc/radio-group/` | Arc `radio-group` | MIT | yes | none |
+| `src/components/arc/resizable-panels/` | Arc `resizable-panels` | MIT | yes | none |
+| `src/components/arc/scroll-area/` | Arc `scroll-area` | MIT | yes | none |
+| `src/components/arc/search-field/` | Arc `search-field` | MIT | yes | none |
+| `src/components/arc/segmented-control/` | Arc `segmented-control` | MIT | yes | none |
+| `src/components/arc/select/` | Arc `select` | MIT | yes | none |
+| `src/components/arc/skeleton/` | Arc `skeleton` | MIT | yes | none |
+| `src/components/arc/sortable-data-table/` | Arc `sortable-data-table` | MIT | yes | none |
+| `src/components/arc/sparkline/` | Arc `sparkline` | MIT | yes | none |
+| `src/components/arc/split-button/` | Arc `split-button` | MIT | yes | none |
+| `src/components/arc/stepper/` | Arc `stepper` | MIT | yes | none |
+| `src/components/arc/tabs/` | Arc `tabs` | MIT | yes | none |
+| `src/components/arc/tag-input/` | Arc `tag-input` | MIT | yes | none |
+| `src/components/arc/text-morph/` | Arc `text-morph` (dependency of `color-picker`) | MIT | yes | none |
+| `src/components/arc/theme-switch/` | Arc `theme-switch` | MIT | yes | none |
+| `src/components/arc/timeline/` | Arc `timeline` | MIT | yes | none |
+| `src/components/arc/toast-stack/` | Arc `toast-stack` | MIT | yes | none |
+| `src/components/arc/toggle-group/` | Arc `toggle-group` | MIT | yes | none |
+| `src/components/arc/usage-meter/` | Arc `usage-meter` | MIT | yes | none |
+| `src/components/arc/user-menu/` | Arc `user-menu` | MIT | yes | none |
+| `src/components/arc/lib/arc-provider.tsx`, `lib/use-copy-feedback.ts` | Arc registry `lib/` files (dependencies of `avatar`, `breadcrumb`, `copy-button`) | MIT | no | none |
 | `src/components/arc/input/input.module.css`, `textarea/textarea.module.css` | Arc `input`, `textarea` (stylesheets only) | MIT | no | the `.tsx` files are not copied: Arc's field bundles its label and messages, so `ui/input.tsx` and `ui/textarea.tsx` put its stylesheet on a bare element |
 | `src/components/ruixen/spark-chart.tsx` | <https://ruixen.com/r/spark-chart> | MIT | hover only | formatted; index reads typed for `noUncheckedIndexedAccess`; no label room reserved without `formatValue`; draw-in only with `motion-safe` |
 | `src/components/ruixen/wizard-stepper.tsx` | <https://ruixen.com/r/wizard-stepper> | MIT | animation and click only | formatted; one prop type widened for `exactOptionalPropertyTypes` |
@@ -54,6 +115,8 @@ Ruixen's registry has no plain primitives (button, input, dialog and so on); it 
 `src/components/ui/{button,badge,input,textarea,switch,checkbox,popover,tooltip,progress,toast}.tsx` are wrappers over the Arc files: they keep the shadcn export names and props (`variant`, `size`, `asChild`) where call sites use them.
 
 `src/lib/utils.ts` (`cn`) is shadcn/ui's helper, MIT. `src/styles/globals.css` is written for this repo; its token names follow shadcn/ui's theme convention.
+
+The new Arc folders (everything under `src/components/arc/` that is not listed above with changes) are byte-for-byte what `https://uiarc.dev/r/<name>.json` serves, checked on 2026-11-13, and nothing imports them yet. Their `.tsx` files do not pass this repo's `exactOptionalPropertyTypes`, so they are typechecked by `packages/ui/tsconfig.arc.json` (the flag off) and excluded from `tsconfig.json`; Biome's formatter, linter and import sorting are off for the whole `arc/` folder. Arc declares `@radix-ui/react-{dialog,dropdown-menu,popover,select,tabs}`, so `packages/ui` depends on them next to the `radix-ui` package the older Arc files import from. When a component gets used, either type its props for the flag (and record it in "Local changes") or move it out of the exclude list.
 
 ## Adding a component
 

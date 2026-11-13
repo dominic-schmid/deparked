@@ -11,6 +11,8 @@
 @import "../components/arc/foundation.css" layer(arc);
 
 @source "../components";
+/* Vendored Arc sources use CSS modules; their class-name strings are not Tailwind utilities. */
+@source not "../components/arc";
 
 @custom-variant dark {
   &:where(.dark, .dark *) {
