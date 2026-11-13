@@ -84,6 +84,7 @@ function DomainOffersPage() {
         <OfferFilters
           query={query}
           newCount={data.newCount}
+          path={`/admin/d/${host}/offers`}
           onChange={(next) => void navigate({ search: { status: next.status, sort: next.sort } })}
         />
       ) : null}

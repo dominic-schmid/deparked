@@ -157,6 +157,20 @@ test("without JavaScript every offer reads and its status still changes", async 
   });
   const nojs = await context.newPage();
   await nojs.goto(`${urls.admin}/admin/offers`);
+  // The filters are plain links: status, order and domain.
+  const filters = nojs.getByRole("navigation", { name: "Filter offers" });
+  await filters.getByRole("link", { name: "Highest first" }).click();
+  await expect(nojs).toHaveURL(/\/admin\/offers\?sort=highest$/);
+  await expect(list(nojs).first()).toContainText("Grace Hopper");
+  await filters.getByText("Domain: All domains").click();
+  await filters.getByRole("link", { name: HOST }).click();
+  await expect(nojs).toHaveURL(/host=example\.com/);
+  await filters.getByRole("link", { name: "Replied" }).click();
+  await expect(nojs).toHaveURL(/status=replied/);
+  await expect(nojs.getByRole("heading", { name: "No replied offers for example.com" })).toBeVisible();
+  await filters.getByRole("link", { name: "All", exact: true }).click();
+  await expect(nojs).not.toHaveURL(/status=/);
+  await expect(list(nojs)).toHaveCount(2);
   await nojs.getByRole("link", { name: /Grace Hopper/ }).click();
   await expect(detail(nojs).getByRole("heading", { level: 2 })).toContainText("Grace Hopper offers$8,500");
   await expect(detail(nojs).getByRole("link", { name: "Reply to Grace" })).toHaveAttribute("href", /^mailto:/);
@@ -164,7 +178,8 @@ test("without JavaScript every offer reads and its status still changes", async 
   await detail(nojs).getByRole("link", { name: "Not interested" }).click();
   await expect(nojs.getByRole("heading", { level: 1 })).toHaveText("Not interested in this offer?");
   await nojs.getByRole("button", { name: "Not interested" }).click();
-  await expect(nojs).toHaveURL(/\/admin\/offers\?offer=[0-9A-Z]{26}$/);
+  // Back where it came from, filters kept.
+  await expect(nojs).toHaveURL(/\/admin\/offers\?host=example\.com&sort=highest&offer=[0-9A-Z]{26}$/);
   await expect(detail(nojs)).toContainText("Not interested");
   expect(await db.sql("SELECT status FROM offers WHERE name = ?", "Grace Hopper")).toEqual([{ status: "ignored" }]);
   await context.close();

@@ -54,54 +54,133 @@ export function OfferFilters(props: {
   newCount: number;
   /** The domain filter's choices; left out on a domain's own Offers tab. */
   hosts?: readonly string[];
+  /** The screen's path, for the plain links that stand in for the controls without JavaScript. */
+  path: string;
   onChange: (query: OfferQuery) => void;
 }) {
   const { query } = props;
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2 max-sm:w-full">
-      <SegmentedControl
-        label="Show"
-        value={query.status ?? "all"}
-        options={STATUS_FILTERS.map((option) => ({
-          value: option.value,
-          label: option.label,
-          accessory:
-            option.value === "new" && props.newCount > 0 ? (
-              <span className="rounded-full bg-tangerine px-1.5 text-xs font-semibold text-tangerine-foreground tabular-nums">
-                {props.newCount > 99 ? "99+" : props.newCount}
-              </span>
-            ) : undefined,
-        }))}
-        onValueChange={(value) => {
-          const status = STATUS_FILTERS.find((option) => option.value === value)?.value;
-          props.onChange({ ...query, status: status === "all" ? undefined : status });
-        }}
-      />
-      {props.hosts === undefined ? null : (
-        <div className={cn(QUIET_LABEL, "w-48 max-w-full min-w-0 max-sm:flex-[1_1_9rem]")}>
+      <NoScriptFilters query={query} hosts={props.hosts} path={props.path} />
+      <div data-needs-script="" className="contents">
+        <SegmentedControl
+          label="Show"
+          value={query.status ?? "all"}
+          options={STATUS_FILTERS.map((option) => ({
+            value: option.value,
+            label: option.label,
+            accessory:
+              option.value === "new" && props.newCount > 0 ? (
+                <span className="rounded-full bg-tangerine px-1.5 text-xs font-semibold text-tangerine-foreground tabular-nums">
+                  {props.newCount > 99 ? "99+" : props.newCount}
+                </span>
+              ) : undefined,
+          }))}
+          onValueChange={(value) => {
+            const status = STATUS_FILTERS.find((option) => option.value === value)?.value;
+            props.onChange({ ...query, status: status === "all" ? undefined : status });
+          }}
+        />
+        {props.hosts === undefined ? null : (
+          <div className={cn(QUIET_LABEL, "w-48 max-w-full min-w-0 max-sm:flex-[1_1_9rem]")}>
+            <Select
+              label="Domain"
+              value={query.host ?? "all"}
+              options={[
+                { value: "all", label: "All domains" },
+                ...props.hosts.map((host) => ({ value: host, label: host })),
+              ]}
+              onValueChange={(value) => props.onChange({ ...query, host: value === "all" ? undefined : value })}
+            />
+          </div>
+        )}
+        <div className={cn(QUIET_LABEL, "w-40 min-w-0 max-sm:flex-[1_1_8rem]")}>
           <Select
-            label="Domain"
-            value={query.host ?? "all"}
+            label="Order"
+            value={query.sort ?? "newest"}
             options={[
-              { value: "all", label: "All domains" },
-              ...props.hosts.map((host) => ({ value: host, label: host })),
+              { value: "newest", label: "Newest first" },
+              { value: "highest", label: "Highest first" },
             ]}
-            onValueChange={(value) => props.onChange({ ...query, host: value === "all" ? undefined : value })}
+            onValueChange={(value) => props.onChange({ ...query, sort: value === "highest" ? "highest" : undefined })}
           />
         </div>
-      )}
-      <div className={cn(QUIET_LABEL, "w-40 min-w-0 max-sm:flex-[1_1_8rem]")}>
-        <Select
-          label="Order"
-          value={query.sort ?? "newest"}
-          options={[
-            { value: "newest", label: "Newest first" },
-            { value: "highest", label: "Highest first" },
-          ]}
-          onValueChange={(value) => props.onChange({ ...query, sort: value === "highest" ? "highest" : undefined })}
-        />
       </div>
     </div>
+  );
+}
+
+/** A filter as a URL on this screen: the same query parameters the controls write. */
+export function filterHref(path: string, query: OfferQuery): string {
+  const search = new URLSearchParams();
+  if (query.status !== undefined) search.set("status", query.status);
+  if (query.host !== undefined) search.set("host", query.host);
+  if (query.sort !== undefined) search.set("sort", query.sort);
+  const text = search.toString();
+  return text === "" ? path : `${path}?${text}`;
+}
+
+const NOSCRIPT_LINK =
+  "inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium underline-offset-4 hover:underline aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground";
+
+/**
+ * Without JavaScript the controls cannot run (the shell holds them until it hydrates), so each choice is a plain
+ * link. The domains sit in a disclosure, which needs no script either.
+ */
+function NoScriptFilters(props: { query: OfferQuery; hosts: readonly string[] | undefined; path: string }) {
+  const { path } = props;
+  // A domain's own tab has no domain choice, and its URL no `host`.
+  const query = props.hosts === undefined ? { ...props.query, host: undefined } : props.query;
+  const current = (match: boolean) => (match ? "page" : undefined);
+  return (
+    <noscript>
+      <style>{"[data-needs-script]{display:none!important}"}</style>
+      <nav aria-label="Filter offers" className="flex flex-wrap items-center gap-x-1 gap-y-1">
+        {STATUS_FILTERS.map((option) => {
+          const status = option.value === "all" ? undefined : option.value;
+          return (
+            <a
+              key={option.value}
+              href={filterHref(path, { ...query, status })}
+              aria-current={current(query.status === status)}
+              className={NOSCRIPT_LINK}
+            >
+              {option.label}
+            </a>
+          );
+        })}
+        <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
+        {(["newest", "highest"] as const).map((sort) => (
+          <a
+            key={sort}
+            href={filterHref(path, { ...query, sort: sort === "highest" ? "highest" : undefined })}
+            aria-current={current((query.sort ?? "newest") === sort)}
+            className={NOSCRIPT_LINK}
+          >
+            {sort === "highest" ? "Highest first" : "Newest first"}
+          </a>
+        ))}
+        {props.hosts === undefined ? null : (
+          <details className="w-full">
+            <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 text-sm font-medium">
+              Domain: {query.host ?? "All domains"}
+            </summary>
+            <span className="flex flex-wrap gap-1">
+              {[undefined, ...props.hosts].map((host) => (
+                <a
+                  key={host ?? ""}
+                  href={filterHref(path, { ...query, host })}
+                  aria-current={current(query.host === host)}
+                  className={cn(NOSCRIPT_LINK, "[overflow-wrap:anywhere]")}
+                >
+                  {host ?? "All domains"}
+                </a>
+              ))}
+            </span>
+          </details>
+        )}
+      </nav>
+    </noscript>
   );
 }
 
@@ -491,9 +570,14 @@ export function OffersView(props: {
             "lg:sticky lg:top-6",
             // Phones get the sheet once the page runs; before that (or without JavaScript) a linked offer sits on
             // top of the list.
-            hydrated || linked === undefined ? "max-lg:hidden" : "max-lg:order-first",
+            "max-lg:order-first max-lg:hidden",
           )}
+          data-inline-offer={linked === undefined ? undefined : ""}
         >
+          {/* Phones open the offer in a sheet; without JavaScript there is none, so it shows above the list. */}
+          <noscript>
+            <style>{"@media (max-width:63.999rem){[data-inline-offer]{display:block!important}}"}</style>
+          </noscript>
           {detailOf(shown)}
         </section>
       )}

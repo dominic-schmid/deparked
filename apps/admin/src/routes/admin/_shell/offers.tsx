@@ -95,6 +95,7 @@ function OffersPage() {
             query={query}
             newCount={data.newCount}
             hosts={domains.map((domain) => domain.host)}
+            path="/admin/offers"
             onChange={(next) => void navigate({ search: { ...next, offer: undefined } })}
           />
         ) : null}
