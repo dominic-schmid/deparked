@@ -30,6 +30,19 @@ export function formatMoney(amountMinor: number, currency: string): string {
   }
 }
 
+/** Like `formatMoney`, without the cents when there are none: $8,500 but $8,500.50. For headline amounts. */
+export function formatMoneyShort(amountMinor: number, currency: string): string {
+  const digits = currencyDigits(currency);
+  if (amountMinor % 10 ** digits !== 0) return formatMoney(amountMinor, currency);
+  try {
+    return new Intl.NumberFormat(LOCALE, { style: "currency", currency, maximumFractionDigits: 0 }).format(
+      amountMinor / 10 ** digits,
+    );
+  } catch {
+    return formatMoney(amountMinor, currency);
+  }
+}
+
 const UNITS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", 365 * 86_400_000],
   ["month", 30 * 86_400_000],

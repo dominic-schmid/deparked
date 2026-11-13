@@ -9,8 +9,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowRight, CircleAlert, MailCheck, RotateCw } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { z } from "zod";
-import archivo from "../../../../install/public/fonts/archivo-latin.woff2?url";
-import newsreader from "../../../../install/public/fonts/newsreader-latin.woff2?url";
+import display from "../../../../install/public/fonts/bricolage-grotesque-latin.woff2?url";
+import body from "../../../../install/public/fonts/instrument-sans-latin.woff2?url";
 import { DomainPicker } from "../../components/add-domain";
 import { OnboardingShell, Screen, ScreenTitle, Spinner } from "../../components/onboarding";
 import { PageError } from "../../components/page";
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/admin/welcome")({
   staleTime: 0,
   head: () => ({
     meta: [{ title: "Set up Deparked · Deparked" }],
-    links: [archivo, newsreader].map((href) => ({
+    links: [body, display].map((href) => ({
       rel: "preload",
       as: "font",
       type: "font/woff2",

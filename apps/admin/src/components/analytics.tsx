@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from "@deparked/ui/alert";
+import { Alert } from "@deparked/ui/arc/alert";
 import { Button } from "@deparked/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@deparked/ui/popover";
 import { SparkChart } from "@deparked/ui/ruixen/spark-chart";
@@ -62,22 +62,19 @@ const TEXT_LINK =
 export function AnalyticsProblemAlert({ problem }: { problem: AnalyticsProblem }) {
   const router = useRouter();
   return (
-    <Alert className="mb-6">
-      <AlertTitle>Visits are not available right now</AlertTitle>
-      <AlertDescription>
-        <p>{problem.message}</p>
-        {problem.credentials ? (
-          <p>
-            <Link to="/admin/settings/cloudflare" className={TEXT_LINK}>
-              Check the Cloudflare token
-            </Link>
-          </p>
-        ) : (
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => router.invalidate()}>
-            Try again
-          </Button>
-        )}
-      </AlertDescription>
+    <Alert tone="warning" title="Visits are not available right now" className="mb-6">
+      <p>{problem.message}</p>
+      {problem.credentials ? (
+        <p>
+          <Link to="/admin/settings/cloudflare" className={TEXT_LINK}>
+            Check the Cloudflare token
+          </Link>
+        </p>
+      ) : (
+        <Button variant="outline" size="sm" className="mt-2" onClick={() => router.invalidate()}>
+          Try again
+        </Button>
+      )}
     </Alert>
   );
 }

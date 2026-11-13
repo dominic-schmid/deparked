@@ -1,21 +1,36 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.6.7/schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": [
       "**",
       "!apps/install/dist",
       "!apps/install/public/assets",
       "!apps/sites/public/catalog",
+      "!packages/ui/types",
       "!**/*.generated.ts",
       "!scripts/hooks",
       "!**/*.md",
       "!**/routeTree.gen.ts"
     ]
   },
-  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
-  "css": { "parser": { "tailwindDirectives": true } },
-  "linter": { "enabled": true },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "linter": {
+    "enabled": true
+  },
   "overrides": [
     {
       "includes": ["packages/ui/src/components/ui/**", "packages/ui/src/components/ruixen/**"],
@@ -27,24 +42,48 @@
             "noStaticElementInteractions": "off",
             "noSvgWithoutTitle": "off"
           },
-          "suspicious": { "noArrayIndexKey": "off", "noDoubleEquals": "off" }
+          "suspicious": {
+            "noArrayIndexKey": "off",
+            "noDoubleEquals": "off"
+          }
         }
       }
     },
     {
       "includes": ["packages/ui/src/components/arc/**"],
-      "formatter": { "enabled": false },
-      "assist": { "enabled": false },
+      "formatter": {
+        "enabled": false
+      },
+      "assist": {
+        "enabled": false
+      },
       "linter": {
         "enabled": false,
         "rules": {
-          "a11y": { "useSemanticElements": "off", "noSvgWithoutTitle": "off" },
-          "complexity": { "noImportantStyles": "off" },
-          "correctness": { "noUnknownPseudoClass": "off", "useExhaustiveDependencies": "off" },
-          "suspicious": { "noArrayIndexKey": "off", "useIterableCallbackReturn": "off" }
+          "a11y": {
+            "useSemanticElements": "off",
+            "noSvgWithoutTitle": "off"
+          },
+          "complexity": {
+            "noImportantStyles": "off"
+          },
+          "correctness": {
+            "noUnknownPseudoClass": "off",
+            "useExhaustiveDependencies": "off"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "off",
+            "useIterableCallbackReturn": "off"
+          }
         }
       }
     }
   ],
-  "assist": { "actions": { "source": { "organizeImports": "on" } } }
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
 }

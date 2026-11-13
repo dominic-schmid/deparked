@@ -36,16 +36,22 @@ function verifiedOf(addresses: NotifyAddress[]): Set<string> {
   return new Set(addresses.filter((address) => address.verifiedAt !== null).map((address) => address.email));
 }
 
-async function verifiedEmails(db: Db): Promise<Set<string>> {
-  return verifiedOf(await listNotifyAddresses(db));
-}
-
 export type DomainSummary = { host: string; status: DisplayStatus };
 
-/** Every managed domain with its status, by host: the workspace switcher and the command palette. */
-export async function loadDomainSummaries(db: Db): Promise<DomainSummary[]> {
-  const [domains, verified] = await Promise.all([listDomains(db), verifiedEmails(db)]);
-  return domains.map((domain) => ({ host: domain.host, status: displayStatus(domain, verified) }));
+/** The address offers go to, for the account menu: a verified one, else the newest added. Null without any. */
+export function offersEmail(addresses: Pick<NotifyAddress, "email" | "verifiedAt" | "createdAt">[]): string | null {
+  const verified = addresses.find((address) => address.verifiedAt !== null);
+  return (verified ?? addresses.toSorted((a, b) => b.createdAt - a.createdAt)[0])?.email ?? null;
+}
+
+/** Every managed domain with its status, by host (the domain switcher and search), and the offers address. */
+export async function loadDomainSummaries(db: Db): Promise<{ domains: DomainSummary[]; offersEmail: string | null }> {
+  const [domains, addresses] = await Promise.all([listDomains(db), listNotifyAddresses(db)]);
+  const verified = verifiedOf(addresses);
+  return {
+    domains: domains.map((domain) => ({ host: domain.host, status: displayStatus(domain, verified) })),
+    offersEmail: offersEmail(addresses),
+  };
 }
 
 export type DomainOverview = DomainSummary & {

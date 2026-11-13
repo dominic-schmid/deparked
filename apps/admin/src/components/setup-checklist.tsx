@@ -1,9 +1,9 @@
+import { Card } from "@deparked/ui/arc/card";
 import { Button } from "@deparked/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@deparked/ui/card";
 import { cn } from "@deparked/ui/lib/utils";
 import { Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { dismissSetupChecklist } from "../server/domains.functions";
 import { checkNotify } from "../server/notify.functions";
@@ -49,7 +49,11 @@ function CheckButton({ onResult }: { onResult: (text: string) => void }) {
   );
 }
 
-/** "Finish setting up" on the overview: the four steps of a working install, each with its state and one action. */
+/**
+ * "Finish setting up" on the home screen: the four steps of a working install, each with its real state and the one
+ * action that does it. Read-only: a step is done when the server says so, never by a tick. An Arc card; hiding it
+ * hides it for good, and Settings and Add a domain still reach everything.
+ */
 export function SetupChecklistCard({ checklist }: { checklist: SetupChecklist }) {
   const router = useRouter();
   const dismiss = useServerFn(dismissSetupChecklist);
@@ -73,9 +77,9 @@ export function SetupChecklistCard({ checklist }: { checklist: SetupChecklist })
             Offers go to <Email>{email}</Email>.
           </>
         ) : (
-          "Offers are kept in the inbox, and emailed once an address is verified."
+          "Offers are kept here, and emailed once an address is verified."
         ),
-      action: linkAction(<Link to="/admin/settings">Add address</Link>),
+      action: linkAction(<Link to="/admin/settings">Add an address</Link>),
     },
     verify: {
       title: "Verify the address",
@@ -132,71 +136,62 @@ export function SetupChecklistCard({ checklist }: { checklist: SetupChecklist })
   const count = checklist.steps.filter((step) => step.done).length;
 
   return (
-    <Card className="mb-6 gap-4">
-      <CardHeader>
-        <CardTitle>
-          <h2>Finish setting up</h2>
-        </CardTitle>
-        <CardDescription>
-          <span className="tabular-nums">
-            {count} of {checklist.steps.length}
-          </span>{" "}
-          done. This card goes away by itself once the last step is done.
-        </CardDescription>
-        <CardAction>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-mt-1 -mr-2 text-muted-foreground"
-            title="Hide these steps for good. Everything stays reachable from Settings and Add domain."
-            onClick={async () => {
-              setHidden(true);
-              try {
-                await dismiss();
-              } finally {
-                await router.invalidate();
-              }
-            }}
-          >
-            <X aria-hidden="true" />
-            Hide
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        <ol className="flex flex-col divide-y rounded-lg border">
-          {checklist.steps.map((step, index) => {
-            const { title, detail, action } = copy[step.id];
-            return (
-              <li
-                key={step.id}
-                className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-4"
+    <Card
+      title="Finish setting up"
+      description={`${count} of ${checklist.steps.length} done. This card goes away by itself once the last step is done.`}
+      // A container, not a target: it neither lifts nor shadows on hover.
+      className="w-full max-w-2xl border-transparent shadow-lift transform-none! data-[hover]:shadow-lift [&_h3]:font-heading [&_h3]:text-xl [&_h3]:font-bold [&_p]:max-w-none"
+      action={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground"
+          title="Hide these steps for good. Everything stays reachable from Settings and Add a domain."
+          onClick={async () => {
+            setHidden(true);
+            try {
+              await dismiss();
+            } finally {
+              await router.invalidate();
+            }
+          }}
+        >
+          Hide for good
+        </Button>
+      }
+    >
+      <ol className="mt-4 flex flex-col divide-y divide-border rounded-2xl bg-background/60">
+        {checklist.steps.map((step, index) => {
+          const { title, detail, action } = copy[step.id];
+          return (
+            <li
+              key={step.id}
+              className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-4"
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "mt-px grid size-6 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums sm:mt-0",
+                  step.done ? "bg-positive text-white" : "border border-input text-muted-foreground",
+                )}
               >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "mt-px grid size-6 shrink-0 place-items-center rounded-full border text-xs font-semibold tabular-nums sm:mt-0",
-                    step.done ? "border-primary bg-primary text-primary-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {step.done ? <Check className="size-3.5" strokeWidth={3} /> : index + 1}
-                </span>
-                <div className="min-w-0">
-                  <p className={cn("text-sm font-medium", step.done && "text-muted-foreground")}>
-                    {title}
-                    <span className="sr-only">{step.done ? " (done)" : " (to do)"}</span>
-                  </p>
-                  <p className="text-sm text-pretty text-muted-foreground">{detail}</p>
-                </div>
-                {step.done || action === undefined ? null : <div className="col-start-2 sm:col-start-3">{action}</div>}
-              </li>
-            );
-          })}
-        </ol>
-        <p aria-live="polite" className="mt-3 text-sm empty:hidden [overflow-wrap:anywhere]">
-          {note}
-        </p>
-      </CardContent>
+                {step.done ? <Check className="size-3.5" strokeWidth={3} /> : index + 1}
+              </span>
+              <div className="min-w-0">
+                <p className={cn("text-sm font-medium", step.done && "text-muted-foreground line-through")}>
+                  {title}
+                  <span className="sr-only">{step.done ? " (done)" : " (to do)"}</span>
+                </p>
+                <p className="text-sm text-pretty text-muted-foreground">{detail}</p>
+              </div>
+              {step.done || action === undefined ? null : <div className="col-start-2 sm:col-start-3">{action}</div>}
+            </li>
+          );
+        })}
+      </ol>
+      <p aria-live="polite" className="mt-3 text-sm empty:hidden [overflow-wrap:anywhere]">
+        {note}
+      </p>
     </Card>
   );
 }

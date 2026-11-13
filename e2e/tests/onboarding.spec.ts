@@ -60,9 +60,11 @@ test("going on unverified, then skipping the domain, lands on the overview with 
   await page.waitForURL(`${urls.admin}/admin`);
   await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
 
-  // The steps left wait on the overview, with their real state; verifying ticks one off there.
+  // The steps left wait on the home screen, with their real state and nothing to tick by hand.
   const steps = page.getByRole("listitem").filter({ hasText: /to do|done/ });
   await expect(page.getByRole("heading", { name: "Finish setting up" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByText("1 of 4 done", { exact: false })).toBeVisible();
   await expect(steps.filter({ hasText: "Add an address for offers" })).toContainText("(done)");
   await expect(steps.filter({ hasText: "Verify the address" })).toContainText(OWNER);
   mock.verifyAddress(OWNER);

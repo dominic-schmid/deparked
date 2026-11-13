@@ -172,6 +172,32 @@ export async function loadPublishState(
   };
 }
 
+export type Thumbnail = { html: string; source: "live" | "draft" | "default" };
+
+/**
+ * The domain's page for the home screen's window: the live page, else the draft before the first publish, else the
+ * defaults. Rendered as the editor's preview is. Null for a host that is not managed (or a config that cannot render).
+ */
+export async function loadThumbnail(
+  input: { db: Db; catalog: Catalog },
+  host: string,
+  origin: string,
+): Promise<Thumbnail | null> {
+  const domain = await getDomain(input.db, host);
+  if (domain === undefined || domain.status === "removed") return null;
+  const stored = await getConfig(input.db, host);
+  const live = readStored(stored?.liveJson);
+  const draft = readStored(stored?.draftJson);
+  const [config, source]: [Config, Thumbnail["source"]] =
+    live !== null && live !== "unreadable"
+      ? [live, "live"]
+      : draft !== null && draft !== "unreadable"
+        ? [draft, "draft"]
+        : [defaultConfig(), "default"];
+  const preview = renderPreview(input, host, config, origin);
+  return preview.ok ? { html: preview.html, source } : null;
+}
+
 /** Everything the editor of one domain starts from. Null for a host that is not managed. */
 export async function loadEditor(
   input: { db: Db; catalog: Catalog; now: () => number },

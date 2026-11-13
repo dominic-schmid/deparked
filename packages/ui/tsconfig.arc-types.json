@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.arc.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "./src/components/arc",
+    "outDir": "./types/arc"
+  },
+  "include": ["src/css-modules.d.ts", "src/components/arc"]
+}

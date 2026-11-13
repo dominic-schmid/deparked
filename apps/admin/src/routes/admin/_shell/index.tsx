@@ -1,22 +1,22 @@
+import { EmptyState } from "@deparked/ui/arc/empty-state";
 import { Button } from "@deparked/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deparked/ui/table";
+import { cn } from "@deparked/ui/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Plus, Store } from "lucide-react";
+import { useState } from "react";
+import { AnalyticsProblemAlert } from "../../../components/analytics";
 import {
-  AnalyticsProblemAlert,
-  ConversionValue,
-  formatCompactCount,
-  formatConversion,
-  VisitsSparkline,
-} from "../../../components/analytics";
-import { formatMoney } from "../../../components/format";
-import { OfferMailBadge } from "../../../components/offer-mail";
-import { PageError, PageHeader, PagePending } from "../../../components/page";
+  AddDomainCard,
+  BestOfferCard,
+  DomainTable,
+  Greeting,
+  ViewSwitch,
+  VisitsCard,
+  WindowCard,
+} from "../../../components/home";
+import { homeHeadline, statusSummary } from "../../../components/home-copy";
+import { PageError, PagePending } from "../../../components/page";
 import { SetupChecklistCard } from "../../../components/setup-checklist";
-import { StatusLabel } from "../../../components/status";
-import { RelativeTime } from "../../../components/time";
-import { type NoSiteReason, type VisitsCellState, visitsCellState } from "../../../server/analytics-shape";
-import type { DomainOverview } from "../../../server/domains";
 import { getAnalytics, getOverview } from "../../../server/domains.functions";
 
 export const Route = createFileRoute("/admin/_shell/")({
@@ -24,218 +24,89 @@ export const Route = createFileRoute("/admin/_shell/")({
     const [overview, visits] = await Promise.all([getOverview(), getAnalytics()]);
     return { ...overview, visits };
   },
-  head: () => ({ meta: [{ title: "All domains · Deparked" }] }),
-  component: OverviewPage,
+  head: () => ({ meta: [{ title: "Domains · Deparked" }] }),
+  component: HomePage,
   pendingComponent: PagePending,
   errorComponent: PageError,
 });
 
-const TEXT_LINK =
-  "rounded-sm font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
+function HomePage() {
+  const { domains, visits, checklist, bestOffer, view: savedView, now } = Route.useLoaderData();
+  const [view, setView] = useState(savedView);
+  const waiting = domains.reduce((sum, domain) => sum + domain.newOffers, 0);
+  const empty = domains.length === 0;
 
-const HOST_LINK =
-  "rounded-sm font-medium underline-offset-4 outline-none [overflow-wrap:anywhere] hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50";
-
-function AddDomainButton() {
-  return (
-    <Button asChild>
-      <Link to="/admin/add">
-        <Plus aria-hidden="true" />
-        Add domain
-      </Link>
-    </Button>
-  );
-}
-
-function Muted({ children }: { children: string }) {
-  return <span className="text-muted-foreground">{children}</span>;
-}
-
-const NOT_COUNTED: Record<Exclude<NoSiteReason, "missing">, string> = {
-  off: "Not counted while off",
-  adding: "Counted once it is added",
-};
-
-function VisitsCell({ state, host }: { state: VisitsCellState; host: string }) {
-  switch (state.kind) {
-    case "unavailable":
-      return <Muted>Unavailable</Muted>;
-    case "no-visits":
-      return <Muted>No visits yet</Muted>;
-    case "not-set-up":
-      if (state.reason !== "missing") return <Muted>{NOT_COUNTED[state.reason]}</Muted>;
-      return (
-        <span className="text-muted-foreground">
-          Not set up.{" "}
-          <Link to="/admin/add" search={{ host }} className={TEXT_LINK}>
-            Set it up
+  const side = bestOffer ? (
+    <BestOfferCard offer={bestOffer} now={now} waiting={waiting} />
+  ) : empty ? (
+    <EmptyState
+      title="No domains yet"
+      description="Each domain you add gets its own for-sale page and an offer form."
+      icon={<Store className="size-6" strokeWidth={1.5} />}
+      className="rounded-[28px] bg-card shadow-lift"
+      action={
+        <Button asChild variant="accent" size="lg">
+          <Link to="/admin/add">
+            <Plus aria-hidden="true" />
+            Add a domain
           </Link>
-        </span>
-      );
-    case "ok":
-      return (
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="tabular-nums">
-            {formatCompactCount(state.visits.last7)} / {formatCompactCount(state.visits.last30)}
-          </span>
-          <VisitsSparkline daily={state.visits.daily} />
-        </span>
-      );
-  }
-}
-
-function ConversionCell({ state, domain }: { state: VisitsCellState; domain: DomainOverview }) {
-  const conversion = state.kind === "ok" ? formatConversion(domain.recentOffers, state.visits.last30) : null;
-  if (conversion === null) {
-    return (
-      <span className="text-muted-foreground">
-        <span aria-hidden="true">–</span>
-        <span className="sr-only">None</span>
-      </span>
-    );
-  }
-  return <ConversionValue value={conversion} />;
-}
-
-function OffersCell({ domain }: { domain: DomainOverview }) {
-  if (domain.offers === 0) return <span className="text-muted-foreground">None</span>;
-  return (
-    <Link
-      to="/admin/d/$host/offers"
-      params={{ host: domain.host }}
-      className="rounded-sm tabular-nums underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-    >
-      {domain.offers.toLocaleString("en")}
-      {domain.newOffers > 0 ? ` (${domain.newOffers.toLocaleString("en")} new)` : ""}
-    </Link>
+        </Button>
+      }
+    />
+  ) : (
+    <VisitsCard visits={visits} />
   );
-}
 
-function BestCell({ best }: { best: DomainOverview["best"] }) {
-  if (best === null) return <span className="text-muted-foreground">None</span>;
-  return <span className="tabular-nums [overflow-wrap:anywhere]">{formatMoney(best.amountMinor, best.currency)}</span>;
-}
-
-function StatusCell({ domain }: { domain: DomainOverview }) {
   return (
-    <span className="flex flex-col items-start gap-1">
-      <StatusLabel status={domain.status} />
-      {domain.status === "email_pending" ? <OfferMailBadge host={domain.host} mail={domain.mail} /> : null}
-    </span>
-  );
-}
-
-function PublishedCell({ time, now }: { time: number | null; now: number }) {
-  if (time === null) return <span className="text-muted-foreground">Never</span>;
-  return <RelativeTime time={time} now={now} />;
-}
-
-function OverviewPage() {
-  const { domains, visits, checklist, now } = Route.useLoaderData();
-  const card = checklist === null ? null : <SetupChecklistCard checklist={checklist} />;
-
-  if (domains.length === 0) {
-    return (
-      <>
-        {card}
-        <div className="mx-auto mt-12 flex max-w-md flex-col items-center gap-4 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">No domains yet</h1>
-          <p className="text-muted-foreground">
-            Add a domain from your Cloudflare account to give it a for-sale page and an offer form.
-          </p>
-          <AddDomainButton />
+    <div className="flex flex-col gap-9">
+      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col justify-center gap-2.5">
+          <Greeting />
+          <h1 className="font-heading text-[clamp(2.25rem,1.5rem+2.8vw,3.25rem)] leading-[1.04] font-bold tracking-[-0.02em] text-balance [overflow-wrap:anywhere]">
+            {homeHeadline(domains)}
+          </h1>
+          <p className="text-[17px] text-pretty text-muted-foreground">{statusSummary(domains)}</p>
         </div>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <PageHeader
-        title="All domains"
-        description={domains.length === 1 ? "1 domain" : `${domains.length} domains`}
-        actions={<AddDomainButton />}
-      />
-      {card}
-      {visits.ok ? null : <AnalyticsProblemAlert problem={visits.problem} />}
-      <div className="hidden rounded-xl border lg:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead scope="col">Domain</TableHead>
-              <TableHead scope="col">Status</TableHead>
-              <TableHead scope="col">Visits, 7 / 30 days</TableHead>
-              <TableHead scope="col">Offers</TableHead>
-              <TableHead scope="col">Conversion, 30 days</TableHead>
-              <TableHead scope="col">Best offer</TableHead>
-              <TableHead scope="col">Last published</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {domains.map((domain) => (
-              <TableRow key={domain.host}>
-                <TableHead scope="row" className="max-w-72 py-3 whitespace-normal">
-                  <Link to="/admin/d/$host" params={{ host: domain.host }} className={HOST_LINK}>
-                    {domain.host}
-                  </Link>
-                </TableHead>
-                <TableCell>
-                  <StatusCell domain={domain} />
-                </TableCell>
-                <TableCell>
-                  <VisitsCell state={visitsCellState(domain, visits)} host={domain.host} />
-                </TableCell>
-                <TableCell>
-                  <OffersCell domain={domain} />
-                </TableCell>
-                <TableCell>
-                  <ConversionCell state={visitsCellState(domain, visits)} domain={domain} />
-                </TableCell>
-                <TableCell className="max-w-48 whitespace-normal">
-                  <BestCell best={domain.best} />
-                </TableCell>
-                <TableCell>
-                  <PublishedCell time={domain.publishedAt} now={now} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        {side}
       </div>
-      <ul className="flex flex-col gap-3 lg:hidden">
-        {domains.map((domain) => (
-          <li key={domain.host} className="rounded-xl border bg-card p-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <Link to="/admin/d/$host" params={{ host: domain.host }} className={`min-w-0 ${HOST_LINK}`}>
-                {domain.host}
-              </Link>
-              <StatusCell domain={domain} />
+
+      {checklist === null ? null : <SetupChecklistCard checklist={checklist} />}
+
+      {empty ? null : (
+        <section aria-labelledby="all-domains" className="flex flex-col gap-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="all-domains" className="font-heading text-xl font-bold tracking-[-0.01em]">
+              All domains{" "}
+              <span className="font-sans text-base font-medium text-muted-foreground tabular-nums">
+                {domains.length.toLocaleString("en")}
+              </span>
+            </h2>
+            <ViewSwitch view={view} onChange={setView} />
+          </div>
+          {visits.ok ? null : <AnalyticsProblemAlert problem={visits.problem} />}
+          {view === "list" ? (
+            <div className="max-sm:hidden">
+              <DomainTable domains={domains} visits={visits} now={now} />
             </div>
-            <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Visits, 7 / 30 days</dt>
-              <dd>
-                <VisitsCell state={visitsCellState(domain, visits)} host={domain.host} />
-              </dd>
-              <dt className="text-muted-foreground">Offers</dt>
-              <dd>
-                <OffersCell domain={domain} />
-              </dd>
-              <dt className="text-muted-foreground">Conversion, 30 days</dt>
-              <dd>
-                <ConversionCell state={visitsCellState(domain, visits)} domain={domain} />
-              </dd>
-              <dt className="text-muted-foreground">Best offer</dt>
-              <dd>
-                <BestCell best={domain.best} />
-              </dd>
-              <dt className="text-muted-foreground">Last published</dt>
-              <dd>
-                <PublishedCell time={domain.publishedAt} now={now} />
-              </dd>
-            </dl>
-          </li>
-        ))}
-      </ul>
-    </>
+          ) : null}
+          {/* Phones always get the windows: compact rows read better there than a table. */}
+          <ul
+            className={cn(
+              "grid grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-5 max-sm:gap-3",
+              view === "list" && "sm:hidden",
+            )}
+          >
+            {domains.map((domain) => (
+              <li key={domain.host} className="flex min-w-0 flex-col [&>*]:flex-1">
+                <WindowCard domain={domain} visits={visits} />
+              </li>
+            ))}
+            <li className="flex flex-col [&>*]:flex-1">
+              <AddDomainCard />
+            </li>
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }

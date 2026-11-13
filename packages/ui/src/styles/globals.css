@@ -25,73 +25,91 @@
   }
 }
 
+/*
+ * "Shop Window": a cool ground with white surfaces, ink text and one tangerine accent. Elevation comes from soft
+ * layered shadows; hairlines are for structure only.
+ */
 :root {
   color-scheme: light;
-  --radius: 0.75rem;
-  --background: oklch(0.99 0.003 120);
-  --foreground: oklch(0.22 0.035 128);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.035 128);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.035 128);
-  --primary: oklch(0.26 0.045 128);
-  --primary-foreground: oklch(0.985 0.005 120);
-  --secondary: oklch(0.955 0.008 120);
-  --secondary-foreground: oklch(0.26 0.045 128);
-  --muted: oklch(0.955 0.008 120);
-  --muted-foreground: oklch(0.48 0.02 128);
-  --hover: oklch(0.945 0.012 120);
-  --hover-foreground: oklch(0.26 0.045 128);
-  --destructive: oklch(0.5 0.17 33);
-  --border: oklch(0.91 0.008 120);
-  --input: oklch(0.87 0.01 120);
-  --ring: oklch(0.6 0.03 128);
+  --radius: 0.875rem;
+  --background: #f3f5fa;
+  --foreground: #14162b;
+  --card: #ffffff;
+  --card-foreground: #14162b;
+  --popover: #ffffff;
+  --popover-foreground: #14162b;
+  --primary: #14162b;
+  --primary-foreground: #ffffff;
+  --secondary: #e9ecf5;
+  --secondary-foreground: #14162b;
+  --muted: #e9ecf5;
+  --muted-foreground: #4a4f6b;
+  --hover: #e4e7f1;
+  --hover-foreground: #14162b;
+  --destructive: #c2360f;
+  --border: #e4e7f1;
+  --input: #c9cee6;
+  --ring: #c2360f;
+  /* Fills for status marks (dots, rings). Text in these tones uses --success, --warning and --danger. */
+  --positive: #1f9d6b;
+  --caution: #f3c24b;
+  --negative: #c2360f;
+  --tangerine: #ff6a3d;
+  --tangerine-foreground: #14162b;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
     color-scheme: dark;
-    --background: oklch(0.17 0.012 128);
-    --foreground: oklch(0.97 0.005 120);
-    --card: oklch(0.21 0.014 128);
-    --card-foreground: oklch(0.97 0.005 120);
-    --popover: oklch(0.21 0.014 128);
-    --popover-foreground: oklch(0.97 0.005 120);
-    --primary: oklch(0.97 0.005 120);
-    --primary-foreground: oklch(0.22 0.035 128);
-    --secondary: oklch(0.27 0.015 128);
-    --secondary-foreground: oklch(0.97 0.005 120);
-    --muted: oklch(0.27 0.015 128);
-    --muted-foreground: oklch(0.72 0.015 125);
-    --hover: oklch(0.3 0.018 128);
-    --hover-foreground: oklch(0.97 0.005 120);
-    --destructive: oklch(0.68 0.17 30);
-    --border: oklch(1 0 0 / 12%);
-    --input: oklch(1 0 0 / 16%);
-    --ring: oklch(0.6 0.02 128);
+    --background: #0e1020;
+    --foreground: #f3f5fa;
+    --card: #181a2e;
+    --card-foreground: #f3f5fa;
+    --popover: #1f2238;
+    --popover-foreground: #f3f5fa;
+    --primary: #f3f5fa;
+    --primary-foreground: #14162b;
+    --secondary: #24273f;
+    --secondary-foreground: #f3f5fa;
+    --muted: #24273f;
+    --muted-foreground: #a9aecb;
+    --hover: #2a2d47;
+    --hover-foreground: #f3f5fa;
+    --destructive: #ff7a5c;
+    --border: #272a42;
+    --input: #3b3f5c;
+    --ring: #ff9a78;
+    --positive: #3cc98f;
+    --caution: #f3c24b;
+    --negative: #ff7a5c;
+    --tangerine: #ff7a50;
   }
 }
 
 .dark {
   color-scheme: dark;
-  --background: oklch(0.17 0.012 128);
-  --foreground: oklch(0.97 0.005 120);
-  --card: oklch(0.21 0.014 128);
-  --card-foreground: oklch(0.97 0.005 120);
-  --popover: oklch(0.21 0.014 128);
-  --popover-foreground: oklch(0.97 0.005 120);
-  --primary: oklch(0.97 0.005 120);
-  --primary-foreground: oklch(0.22 0.035 128);
-  --secondary: oklch(0.27 0.015 128);
-  --secondary-foreground: oklch(0.97 0.005 120);
-  --muted: oklch(0.27 0.015 128);
-  --muted-foreground: oklch(0.72 0.015 125);
-  --hover: oklch(0.3 0.018 128);
-  --hover-foreground: oklch(0.97 0.005 120);
-  --destructive: oklch(0.68 0.17 30);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.6 0.02 128);
+  --background: #0e1020;
+  --foreground: #f3f5fa;
+  --card: #181a2e;
+  --card-foreground: #f3f5fa;
+  --popover: #1f2238;
+  --popover-foreground: #f3f5fa;
+  --primary: #f3f5fa;
+  --primary-foreground: #14162b;
+  --secondary: #24273f;
+  --secondary-foreground: #f3f5fa;
+  --muted: #24273f;
+  --muted-foreground: #a9aecb;
+  --hover: #2a2d47;
+  --hover-foreground: #f3f5fa;
+  --destructive: #ff7a5c;
+  --border: #272a42;
+  --input: #3b3f5c;
+  --ring: #ff9a78;
+  --positive: #3cc98f;
+  --caution: #f3c24b;
+  --negative: #ff7a5c;
+  --tangerine: #ff7a50;
 }
 
 /*
@@ -105,25 +123,32 @@
   --surface-raised: var(--popover);
   --surface-muted: var(--secondary);
   --text-secondary: var(--muted-foreground);
-  --text-muted: color-mix(in oklab, var(--muted-foreground) 78%, var(--background));
-  --border-subtle: color-mix(in oklab, var(--border) 55%, var(--background));
+  --text-muted: color-mix(in oklab, var(--muted-foreground) 88%, var(--card));
+  --border-subtle: color-mix(in oklab, var(--border) 55%, var(--card));
   --border-strong: var(--input);
-  --accent: var(--primary);
-  --accent-strong: var(--primary);
-  --accent-subtle: color-mix(in oklab, var(--primary) 10%, transparent);
-  --accent-foreground: var(--primary-foreground);
+  /* The accent is tangerine, with ink on it. Its strong step is the text-safe version (links, focus, marks). */
+  --accent: var(--tangerine);
+  --accent-strong: color-mix(in oklab, var(--tangerine) 55%, var(--destructive));
+  --accent-subtle: color-mix(in oklab, var(--tangerine) 14%, transparent);
+  --accent-foreground: var(--tangerine-foreground);
   --control-on: var(--primary);
   --control-glyph: var(--primary-foreground);
   --control-track: var(--input);
   --control-track-hover: color-mix(in oklab, var(--input) 85%, var(--foreground));
   --danger: var(--destructive);
+  --success: color-mix(in oklab, var(--positive) 80%, var(--foreground));
+  --warning: color-mix(in oklab, var(--caution) 45%, var(--foreground));
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --radius-control: calc(var(--radius) - 2px);
-  --radius-panel: calc(var(--radius) + 4px);
-  --radius-surface: calc(var(--radius) + 8px);
+  --radius-control: var(--radius);
+  --radius-panel: 1.25rem;
+  --radius-surface: 1.5rem;
   --control-height-sm: 2rem;
-  --control-height-md: 2.25rem;
-  --control-height-lg: 2.5rem;
+  --control-height-md: 2.5rem;
+  --control-height-lg: 2.75rem;
+  /* Soft, layered and tinted with the ink, so surfaces lift off the ground without a border. */
+  --shadow-resting: 0 1px 2px rgb(20 22 43 / 0.06);
+  --shadow-raised: 0 1px 2px rgb(20 22 43 / 0.06), 0 8px 24px rgb(20 22 43 / 0.06);
+  --shadow-floating: 0 4px 12px rgb(20 22 43 / 0.06), 0 24px 56px rgb(20 22 43 / 0.16);
   /* Tailwind's type scale uses the same names; keep its values so every text-* class reads as before. */
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -135,9 +160,16 @@
   --text-4xl: 2.25rem;
   --text-5xl: 3rem;
   --tracking-body: 0;
-  --tracking-display: 0;
-  --font-body: "Archivo", ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif;
-  --font-display: var(--font-body);
+  --tracking-display: -0.02em;
+  --font-body: "Instrument Sans", ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Bricolage Grotesque", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* A finger gets 44px controls; a mouse keeps the denser 40px. */
+@media (pointer: coarse) {
+  :root {
+    --control-height-md: 2.75rem;
+  }
 }
 
 /*
@@ -148,11 +180,11 @@
   --focus-outline-width: 0px;
 }
 
-/* Arc's dark-only tokens (status tones, shadows, switch thumb) for the system setting and the `.dark` class. */
+/* Arc's dark-only tokens (switch thumb, shadows) for the system setting and the `.dark` class. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light, [data-theme="light"]) {
     --control-thumb: oklch(97% 0 0);
-    --control-thumb-on: oklch(19% 0 0);
+    --control-thumb-on: #14162b;
     --control-thumb-shadow:
       0 0 0 0.5px oklch(0% 0 0 / 0.3), 0 1px 2px oklch(0% 0 0 / 0.35), 0 2px 6px oklch(0% 0 0 / 0.2);
     --tone-teal: oklch(79% 0.13 182);
@@ -162,18 +194,19 @@
     --tone-rose: oklch(71% 0.155 8);
     --tone-amber: oklch(83% 0.12 78);
     --tone-green: oklch(79% 0.14 162);
-    --success: var(--tone-green);
-    --warning: var(--tone-amber);
+    --success: var(--positive);
+    --warning: var(--caution);
     --info: var(--tone-sky);
-    --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.18);
-    --shadow-raised: 0 8px 22px oklch(0% 0 0 / 0.22);
-    --shadow-floating: 0 22px 55px oklch(0% 0 0 / 0.34);
+    --accent-strong: color-mix(in oklab, var(--tangerine) 70%, white);
+    --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.3);
+    --shadow-raised: 0 1px 2px oklch(0% 0 0 / 0.3), 0 10px 28px oklch(0% 0 0 / 0.3);
+    --shadow-floating: 0 22px 55px oklch(0% 0 0 / 0.45);
   }
 }
 
 :root.dark {
   --control-thumb: oklch(97% 0 0);
-  --control-thumb-on: oklch(19% 0 0);
+  --control-thumb-on: #14162b;
   --control-thumb-shadow:
     0 0 0 0.5px oklch(0% 0 0 / 0.3), 0 1px 2px oklch(0% 0 0 / 0.35), 0 2px 6px oklch(0% 0 0 / 0.2);
   --tone-teal: oklch(79% 0.13 182);
@@ -183,17 +216,20 @@
   --tone-rose: oklch(71% 0.155 8);
   --tone-amber: oklch(83% 0.12 78);
   --tone-green: oklch(79% 0.14 162);
-  --success: var(--tone-green);
-  --warning: var(--tone-amber);
+  --success: var(--positive);
+  --warning: var(--caution);
   --info: var(--tone-sky);
-  --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.18);
-  --shadow-raised: 0 8px 22px oklch(0% 0 0 / 0.22);
-  --shadow-floating: 0 22px 55px oklch(0% 0 0 / 0.34);
+  --accent-strong: color-mix(in oklab, var(--tangerine) 70%, white);
+  --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.3);
+  --shadow-raised: 0 1px 2px oklch(0% 0 0 / 0.3), 0 10px 28px oklch(0% 0 0 / 0.3);
+  --shadow-floating: 0 22px 55px oklch(0% 0 0 / 0.45);
 }
 
 @theme inline {
-  --font-sans: "Archivo", ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "Newsreader", ui-serif, Georgia, serif;
+  --font-sans: var(--font-body);
+  /* The display face (`font-heading`). `font-serif` keeps its name for the screens that used it for headings. */
+  --font-heading: var(--font-display);
+  --font-serif: var(--font-display);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -216,6 +252,15 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-tangerine: var(--tangerine);
+  --color-tangerine-foreground: var(--tangerine-foreground);
+  --color-positive: var(--positive);
+  --color-caution: var(--caution);
+  --color-negative: var(--negative);
+  /* `shadow-rest`, `shadow-lift`, `shadow-float`: Arc's three elevations. */
+  --shadow-rest: var(--shadow-resting);
+  --shadow-lift: var(--shadow-raised);
+  --shadow-float: var(--shadow-floating);
 }
 
 /* Used by the Ruixen spark chart's draw-in animation. */
@@ -231,5 +276,10 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Page and section headings in the display face, on every screen; a class on the heading still wins. */
+  h1,
+  h2 {
+    font-family: var(--font-display);
   }
 }

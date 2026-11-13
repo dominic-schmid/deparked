@@ -313,6 +313,9 @@ importers:
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
+      subset-font:
+        specifier: 2.9.0
+        version: 2.9.0
       tailwindcss:
         specifier: ^4.3.5
         version: 4.3.5

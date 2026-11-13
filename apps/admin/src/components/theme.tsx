@@ -1,17 +1,7 @@
-import { Button } from "@deparked/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@deparked/ui/dropdown-menu";
-import { Moon, Sun } from "lucide-react";
 import { useSyncExternalStore } from "react";
 
 const KEY = "deparked-theme";
-const THEMES = ["system", "light", "dark"] as const;
-type Theme = (typeof THEMES)[number];
+export type Theme = "system" | "light" | "dark";
 
 /**
  * Runs before the first paint: a stored choice puts `.dark` or `.light` on <html>, and `data-theme` (Arc's switch)
@@ -70,30 +60,7 @@ function choose(theme: Theme): void {
   for (const listener of listeners) listener();
 }
 
-const LABELS: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark" };
-
-export function ThemeToggle() {
-  const theme = useSyncExternalStore(subscribe, stored, () => "system" as const);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Colour theme">
-          <Sun className="dark:hidden" aria-hidden="true" />
-          <Moon className="hidden dark:block" aria-hidden="true" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuRadioGroup
-          value={theme}
-          onValueChange={(value) => choose(THEMES.find((item) => item === value) ?? "system")}
-        >
-          {THEMES.map((item) => (
-            <DropdownMenuRadioItem key={item} value={item}>
-              {LABELS[item]}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+/** The stored colour theme ("system" without a choice) and the function that changes it, for the account menu. */
+export function useTheme(): [Theme, (theme: Theme) => void] {
+  return [useSyncExternalStore(subscribe, stored, () => "system" as const), choose];
 }
