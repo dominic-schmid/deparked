@@ -57,9 +57,10 @@ for (const file of page.outputFiles) {
   else writeFileSync(file.path, file.contents);
 }
 
+// Tailwind's own entry run by this Node, not the node_modules/.bin shim: the shim is a shell script, which Windows cannot execute.
 const { stdout } = await promisify(execFile)(
-  `${repo}node_modules/.bin/tailwindcss`,
-  ["--input", "src/ui/styles.css", "--minify"],
+  process.execPath,
+  [`${repo}node_modules/@tailwindcss/cli/dist/index.mjs`, "--input", "src/ui/styles.css", "--minify"],
   { cwd: root, maxBuffer: 16 * 1024 * 1024 },
 );
 // Arc's styles sit in Tailwind's `components` layer, so a utility class on an Arc component still overrides it.

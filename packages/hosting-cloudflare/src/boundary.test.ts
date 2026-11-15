@@ -79,7 +79,7 @@ describe("the hosting adapter boundary", () => {
       if (["apps", "packages", "e2e"].includes(entry.name)) continue;
       for (const file of sourceFiles(join(ROOT, entry.name))) {
         // The release lists the token permissions it needs, from the one list the installer checks.
-        if (relative(ROOT, file) === "scripts/build-release.ts") continue;
+        if (relative(ROOT, file) === join("scripts", "build-release.ts")) continue;
         for (const match of readFileSync(file, "utf8").matchAll(SPECIFIER)) {
           if (reachesCf(file, match[1] ?? "")) offenders.push(`${relative(ROOT, file)} imports ${match[1]}`);
         }
