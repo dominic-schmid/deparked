@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { type Config, defaultConfig, LIMITS, parseConfig, VARIANTS } from "@deparked/config";
 import { describe, expect, it } from "vitest";
 import { contrastRatio, type RenderOptions, render, renderPlaceholder, variants } from "./index";
 import { catalog } from "./release-catalog";
 
-const PUBLIC = new URL("../../../apps/sites/public", import.meta.url).pathname;
+const PUBLIC = fileURLToPath(new URL("../../../apps/sites/public", import.meta.url));
 // Cloudflare's documented always-passes test sitekey.
 const options: RenderOptions = { catalog, sitekey: "1x00000000000000000000AA" };
 const gzipped = (text: string | Buffer) => gzipSync(text, { level: 9 }).length;
