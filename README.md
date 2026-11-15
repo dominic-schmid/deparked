@@ -48,6 +48,7 @@ of the admin Worker; the installer keeps it in memory for the request it is sent
 | -- | -- |
 | Account · Workers Scripts · Edit | installs and updates the two Deparked Workers and publishes your pages |
 | Account · D1 · Edit | sets up and updates the Deparked database |
+| Account · Account Settings · Read | lists the visitor statistics sites it made (Edit alone cannot) |
 | Account · Account Settings · Edit | creates a visitor statistics site (Web Analytics) for each domain |
 | Account · Account Analytics · Read | reads visitor numbers for the overview |
 | Account · Turnstile · Edit | sets up the bot check of the offer form |

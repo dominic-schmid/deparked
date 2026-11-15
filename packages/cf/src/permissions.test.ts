@@ -18,19 +18,20 @@ describe("tokenTemplateUrl", () => {
     expect(JSON.parse(url.searchParams.get("permissionGroupKeys") ?? "")).toEqual([
       { key: "workers_scripts", type: "edit" },
       { key: "d1", type: "edit" },
+      { key: "account_settings", type: "read" },
       { key: "account_settings", type: "edit" },
       { key: "account_analytics", type: "read" },
-      { key: "turnstile", type: "edit" },
-      { key: "email_routing_addresses", type: "edit" },
+      { key: "challenge_widgets", type: "edit" },
+      { key: "email_routing_address", type: "edit" },
       { key: "zone", type: "read" },
       { key: "workers_routes", type: "edit" },
       { key: "dns", type: "edit" },
       { key: "zone_transform_rules", type: "edit" },
-      { key: "dynamic_url_redirects", type: "edit" },
+      { key: "dynamic_redirect", type: "edit" },
       { key: "zone_settings", type: "edit" },
-      { key: "email_routing_rules", type: "edit" },
+      { key: "email_routing_rule", type: "edit" },
     ]);
-    expect(TOKEN_PERMISSIONS).toHaveLength(13);
+    expect(TOKEN_PERMISSIONS).toHaveLength(14);
   });
 
   it("names the token as asked", () => {
