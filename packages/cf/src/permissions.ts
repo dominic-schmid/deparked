@@ -12,9 +12,11 @@ export interface TokenPermission {
 
 /**
  * Every permission the one token needs: the install (Workers, D1), the admin's daily work (bot check, visitor
- * statistics, offer emails) and adding domains (the zone rows). The keys follow the format of Cloudflare's
- * prefilled token link, which is undocumented: only `workers_scripts` was seen working (spike, 2026-11-11), the
- * other keys are assumed until a real-account run confirms them.
+ * statistics, offer emails) and adding domains (the zone rows). A key is the `label` of Cloudflare's permission
+ * group without its `_read`/`_write` ending (Turnstile Sites Write is `challenge_widgets_write`, so
+ * `challenge_widgets`). Cloudflare drops an unknown key from a user token link without a word
+ * (developers.cloudflare.com/fundamentals/api/how-to/account-owned-token-template/), so every key here is checked
+ * against that list.
  */
 export const TOKEN_PERMISSIONS: readonly TokenPermission[] = [
   {
@@ -25,6 +27,13 @@ export const TOKEN_PERMISSIONS: readonly TokenPermission[] = [
     why: "installs and updates the two Deparked Workers and publishes your pages",
   },
   { key: "d1", type: "edit", scope: "account", label: "D1", why: "sets up and updates the Deparked database" },
+  {
+    key: "account_settings",
+    type: "read",
+    scope: "account",
+    label: "Account Settings",
+    why: "lists the visitor statistics sites (Web Analytics) it made: Edit alone cannot",
+  },
   {
     key: "account_settings",
     type: "edit",
@@ -40,14 +49,14 @@ export const TOKEN_PERMISSIONS: readonly TokenPermission[] = [
     why: "reads visitor numbers for the overview",
   },
   {
-    key: "turnstile",
+    key: "challenge_widgets",
     type: "edit",
     scope: "account",
     label: "Turnstile",
     why: "sets up the bot check of the offer form",
   },
   {
-    key: "email_routing_addresses",
+    key: "email_routing_address",
     type: "edit",
     scope: "account",
     label: "Email Routing Addresses",
@@ -76,7 +85,7 @@ export const TOKEN_PERMISSIONS: readonly TokenPermission[] = [
     why: "maps each domain onto its own pages",
   },
   {
-    key: "dynamic_url_redirects",
+    key: "dynamic_redirect",
     type: "edit",
     scope: "zone",
     label: "Dynamic URL Redirects",
@@ -90,7 +99,7 @@ export const TOKEN_PERMISSIONS: readonly TokenPermission[] = [
     why: "turns on Cloudflare's email service for a domain, only when you allow it",
   },
   {
-    key: "email_routing_rules",
+    key: "email_routing_rule",
     type: "edit",
     scope: "zone",
     label: "Email Routing Rules",
