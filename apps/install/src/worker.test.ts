@@ -7,7 +7,7 @@ import { sha256Hex } from "@deparked/provision";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildFakeRelease } from "../../../packages/provision/src/test-release";
 import type { CheckResponse, FinishResponse, StepResponse } from "./api";
-import type { Env } from "./server/config";
+import { type Env, PINNED_RELEASE } from "./server/config";
 import worker from "./worker";
 
 const TOKEN = "test-token-never-shown-0123";
@@ -232,11 +232,12 @@ describe("the installer API", () => {
     expect((await worker.fetch(new Request(`${ORIGIN}/api/check`), env)).status).toBe(405);
   });
 
-  it("explains that there is nothing to install before the first release", async () => {
+  it("installs the release pinned in its source when no Worker variables name another", async () => {
     const { RELEASE_VERSION: _, RELEASE_SHA256: __, ...unpinned } = env;
     env = unpinned;
-    const checked = await call<CheckResponse>("/api/check", { token: TOKEN });
-    expect(checked).toMatchObject({ ok: false, error: "no-release" });
+    const status = await (await worker.fetch(new Request(`${ORIGIN}/api/status`), env)).json();
+    expect(status).toMatchObject({ pinnedRelease: PINNED_RELEASE?.version });
+    expect(PINNED_RELEASE?.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it("serves health and the page", async () => {

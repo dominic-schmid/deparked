@@ -11,7 +11,10 @@ export interface Pin {
  * Set after each release is published (the release workflow prints the hash). Null until the first release: the
  * installer then explains that there is nothing to install yet.
  */
-export const PINNED_RELEASE: Pin | null = null;
+export const PINNED_RELEASE: Pin | null = {
+  version: "0.1.0",
+  sha256: "a57059c996dceb66a20ca0afcab9a432244443f04c47a0209254f8bdb8f30f02",
+};
 
 export const INSTALLER_VERSION: string = packageJson.version;
 
