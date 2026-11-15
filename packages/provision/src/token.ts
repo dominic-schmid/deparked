@@ -21,7 +21,7 @@ export async function checkTokenPermissions(
 ): Promise<{ missing: PermissionGap[]; unchecked: PermissionGap[] }> {
   let zoneId: string | undefined;
   try {
-    zoneId = (await cf.zones.list({}, { perPage: 5, maxPages: 1 }))[0]?.id;
+    zoneId = (await cf.zones.page({ page: 1, perPage: 1 })).zones[0]?.id;
   } catch (error) {
     if (!(error instanceof CloudflareApiError && error.status === 403)) throw error;
   }
