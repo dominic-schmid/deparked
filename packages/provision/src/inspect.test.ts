@@ -43,7 +43,7 @@ describe("looking at a domain before attaching it", () => {
       "example.com shows a website today. Deparked will take over the address: visitors get the for-sale page instead. Your site and its settings stay untouched, and Turn off brings it back. example.com/shop* keeps going to your Worker shop. example.com has no email set up. Deparked will turn on Cloudflare's email service for it, so offers can be sent from this domain.",
     );
     expect(mock.calls.every((call) => call.method === "GET")).toBe(true);
-    expect(mock.calls).toHaveLength(7);
+    expect(mock.calls).toHaveLength(9);
   });
 
   it("says that an empty domain shows nothing today", async () => {
@@ -97,5 +97,68 @@ describe("looking at a domain before attaching it", () => {
       mx: { state: "cloudflare" },
     });
     expect(inspection.summary).toContain("example.com is already set up in Deparked.");
+  });
+});
+
+describe("redirects set up outside Deparked", () => {
+  const blockersFor = async (seed: (context: Awaited<ReturnType<typeof setup>>) => unknown) => {
+    const context = await setup();
+    await seed(context);
+    return (await inspectDomain(context.ctx, HOST)).blockers;
+  };
+
+  it("blocks on a redirect rule for every hostname of the zone, naming where to delete it", async () => {
+    const blockers = await blockersFor(({ cf }) =>
+      cf.rulesets.addRule(ZONE.id, "http_request_dynamic_redirect", {
+        action: "redirect",
+        description: "to my site",
+        expression: "true",
+        action_parameters: { from_value: { status_code: 301, target_url: { value: "https://elsewhere.example" } } },
+      }),
+    );
+    expect(blockers).toEqual([expect.stringContaining('The redirect rule "to my site"')]);
+    expect(blockers[0]).toContain("Rules → Redirect Rules");
+  });
+
+  it("leaves a redirect rule for another hostname of the zone alone", async () => {
+    const blockers = await blockersFor(({ cf }) =>
+      cf.rulesets.addRule(ZONE.id, "http_request_dynamic_redirect", {
+        action: "redirect",
+        description: "old blog",
+        expression: 'http.host eq "blog.example.com"',
+        action_parameters: { from_value: { status_code: 301, target_url: { value: "https://elsewhere.example" } } },
+      }),
+    );
+    expect(blockers).toEqual([]);
+  });
+
+  it("blocks on a forwarding page rule for the domain or its www", async () => {
+    const blockers = await blockersFor(({ mock }) => {
+      mock.state.pageRules.set(ZONE.id, [
+        {
+          id: "pr-1",
+          status: "active",
+          targets: [{ target: "url", constraint: { operator: "matches", value: "*example.com/*" } }],
+          actions: [{ id: "forwarding_url", value: { url: "https://elsewhere.example/$2", status_code: 301 } }],
+        },
+        {
+          id: "pr-2",
+          status: "active",
+          targets: [{ target: "url", constraint: { operator: "matches", value: "shop.example.org/*" } }],
+          actions: [{ id: "forwarding_url", value: { url: "https://elsewhere.example", status_code: 301 } }],
+        },
+      ]);
+    });
+    expect(blockers).toEqual([expect.stringContaining("The page rule for *example.com/*")]);
+  });
+
+  it("blocks on a bulk redirect whose source is the domain", async () => {
+    const blockers = await blockersFor(({ mock }) => {
+      mock.state.bulkRedirects.push(
+        { list: "moves", source_url: "example.com/", target_url: "https://elsewhere.example/" },
+        { list: "moves", source_url: "other.example/", target_url: "https://elsewhere.example/" },
+      );
+    });
+    expect(blockers).toEqual([expect.stringContaining('The bulk redirect example.com/ in the list "moves"')]);
   });
 });

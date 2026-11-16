@@ -94,6 +94,7 @@ describe("domains", () => {
       status: "placeholder",
       notifyEmail: NOTIFY,
       senderHost: null,
+      emailRoutingState: "none",
       turnstileSecretName: "TURNSTILE_SECRET_1",
       liveJson: null,
       liveSchemaVersion: null,

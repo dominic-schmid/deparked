@@ -1,9 +1,11 @@
 import { CloudflareApiError, type WorkerRoute } from "@deparked/cf";
 import {
+  deleteTurnstileWidget,
   getDomain,
   type LedgerEntry,
   type LedgerResource,
   listDomains,
+  listTurnstileWidgets,
   markLedgerUndone,
   setDomainStatus,
   syncTurnstileHostnameCount,
@@ -70,7 +72,10 @@ function undoEffect(host: string, entry: LedgerEntry): Effect {
     case "dns_record":
       return { kind: "remove", what: `the address record Deparked added for ${key ?? host}` };
     case "turnstile_hostname":
-      return { kind: "remove", what: `${host}'s place in the bot check` };
+      return {
+        kind: "remove",
+        what: `${host}'s place in the bot check (the bot check too, when no other domain uses it)`,
+      };
     case "analytics_site":
       return { kind: "remove", what: `visitor statistics for ${host} (the collected numbers are deleted)` };
     case "email_routing": {
@@ -116,6 +121,12 @@ interface UndoStepInput {
   undo: (ctx: ProvisionContext, entries: LedgerEntry[]) => Promise<Effect[]>;
   /** Clears the step's fields on the `domains` row. */
   clearRow?: (ctx: ProvisionContext) => Promise<void>;
+  /**
+   * Set on steps that leave what visitors get unchanged: after a failure the owner may skip them. Skipping closes
+   * the ledger entries and clears the row (`clearRow`, else `skipRow`) without calling Cloudflare.
+   */
+  skipHow?: string;
+  skipRow?: (ctx: ProvisionContext) => Promise<void>;
 }
 
 function undoStep(input: UndoStepInput): Step {
@@ -141,6 +152,18 @@ function undoStep(input: UndoStepInput): Step {
       await input.clearRow?.(ctx);
       return { effects: [...reportEffects(host, list), ...notes] };
     },
+    ...(input.skipHow === undefined
+      ? {}
+      : {
+          skip: {
+            how: input.skipHow,
+            async run(ctx: ProvisionContext) {
+              for (const entry of await entries(ctx)) await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
+              await (input.clearRow ?? input.skipRow)?.(ctx);
+              return { effects: [] };
+            },
+          },
+        }),
   };
 }
 
@@ -157,13 +180,7 @@ function stopEmailStep(host: string): Step {
     async undo(ctx, entries) {
       const notes: Effect[] = [];
       if (entries.length === 0) return notes;
-      // Domains that kept their own mail and send through this one move to another sender first.
-      const domains = await listDomains(ctx.db);
-      const replacement = pickSenderHost(domains, host, null);
-      for (const domain of domains) {
-        if (domain.host === host || domain.senderHost !== host) continue;
-        await updateDomain(ctx.db, { host: domain.host, patch: { senderHost: replacement }, now: ctx.now() });
-      }
+      await moveDependentSenders(ctx, host);
       for (const entry of entries) {
         const zoneId = entry.zoneId ?? "";
         // An attach that failed right after writing the entry down never turned the service on.
@@ -199,9 +216,21 @@ function stopEmailStep(host: string): Step {
       return notes;
     },
     async clearRow(ctx) {
+      await moveDependentSenders(ctx, host);
       await updateDomain(ctx.db, { host, patch: { emailRoutingState: "none", senderHost: null }, now: ctx.now() });
     },
+    skipHow: `In Cloudflare, open ${host} → Email → Email Routing and turn it off (Settings → Disable). If ${host} had other mail before Deparked, put its MX records back under DNS.`,
   });
+}
+
+/** Domains that kept their own mail and send through this one move to another sender. Safe to repeat. */
+async function moveDependentSenders(ctx: ProvisionContext, host: string): Promise<void> {
+  const domains = await listDomains(ctx.db);
+  const replacement = pickSenderHost(domains, host, null);
+  for (const domain of domains) {
+    if (domain.host === host || domain.senderHost !== host) continue;
+    await updateDomain(ctx.db, { host: domain.host, patch: { senderHost: replacement }, now: ctx.now() });
+  }
 }
 
 function stopAnalyticsStep(host: string): Step {
@@ -224,13 +253,16 @@ function stopAnalyticsStep(host: string): Step {
         now: ctx.now(),
       });
     },
+    skipHow: `In Cloudflare, open Analytics & Logs → Web Analytics and delete the site ${host}.`,
   });
 }
 
 /**
- * Frees the place the domain holds, which is what `domains.turnstile_widget_id` says and nothing else. The
- * widget's hostname list is read right before it is written. The widget and its secret stay: they are shared,
- * and the next domain takes the free place.
+ * Frees the place the domain holds, which is what `domains.turnstile_widget_id` says and nothing else. While
+ * another domain holds the widget, the host leaves its hostname list (read right before it is written) and the
+ * widget and its secret stay for the next domain. The last domain to leave deletes the widget, its secret on the
+ * admin and the hub's ledger entry for it: Cloudflare refuses an empty hostname list, and nothing should be
+ * left behind that no domain uses.
  */
 function stopBotCheckStep(host: string): Step {
   return undoStep({
@@ -241,9 +273,25 @@ function stopBotCheckStep(host: string): Step {
     async rowPending(ctx) {
       return (await getDomain(ctx.db, host))?.turnstileWidgetId != null;
     },
+    skipHow: `In Cloudflare, open Turnstile and remove ${host} from the hostnames of its "deparked-…" widget, or delete that widget when ${host} is its only hostname.`,
+    async skipRow(ctx) {
+      const held = (await getDomain(ctx.db, host))?.turnstileWidgetId ?? null;
+      if (held === null) return;
+      await updateDomain(ctx.db, { host, patch: { turnstileWidgetId: null }, now: ctx.now() });
+      await syncTurnstileHostnameCount(ctx.db, held);
+      const holders = (await listDomains(ctx.db, { includeRemoved: true })).filter(
+        (domain) => domain.turnstileWidgetId === held,
+      );
+      // The owner deletes the widget by hand: forget it, so the next domain gets a new one.
+      if (holders.length === 0) await deleteTurnstileWidget(ctx.db, held);
+    },
     async undo(ctx) {
       const held = (await getDomain(ctx.db, host))?.turnstileWidgetId ?? null;
       if (held === null) return [];
+      const others = (await listDomains(ctx.db, { includeRemoved: true })).filter(
+        (domain) => domain.host !== host && domain.turnstileWidgetId === held,
+      );
+      if (others.length === 0) return deleteBotCheck(ctx, host, held);
       const widget = (await ctx.cf.turnstile.list()).find((candidate) => candidate.sitekey === held);
       if (widget?.domains.includes(host) === true) {
         await unlessGone(
@@ -258,6 +306,23 @@ function stopBotCheckStep(host: string): Step {
       return [];
     },
   });
+}
+
+/** The last domain of a widget leaves: the widget, its secret and their records go. Each part is safe to repeat. */
+async function deleteBotCheck(ctx: ProvisionContext, host: string, sitekey: string): Promise<Effect[]> {
+  const row = (await listTurnstileWidgets(ctx.db)).find((widget) => widget.sitekey === sitekey);
+  await unlessGone(ctx.cf.turnstile.delete(sitekey));
+  if (row !== undefined) await unlessGone(ctx.cf.workers.deleteSecret(workerNames(ctx).admin, row.secretName));
+  await updateDomain(ctx.db, { host, patch: { turnstileWidgetId: null }, now: ctx.now() });
+  await deleteTurnstileWidget(ctx.db, sitekey);
+  for (const entry of await activeLedger(ctx, null)) {
+    if (entry.resource === "secret" && row !== undefined && entry.cfId === row.secretName) {
+      await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
+    }
+  }
+  return [
+    { kind: "remove", what: `the bot check ${row?.name ?? sitekey} and its secret key: no other domain used it` },
+  ];
 }
 
 function stopDnsStep(host: string): Step {
@@ -419,13 +484,19 @@ export async function describeRemoval(ctx: ProvisionContext, hostInput: string):
   const entries = (await activeLedger(ctx, host))
     .filter(exists)
     .toSorted((a, b) => order.indexOf(a.resource) - order.indexOf(b.resource));
+  const held = (await getDomain(ctx.db, host))?.turnstileWidgetId ?? null;
+  const shared =
+    held !== null &&
+    (await listDomains(ctx.db, { includeRemoved: true })).some(
+      (domain) => domain.host !== host && domain.turnstileWidgetId === held,
+    );
   return {
     host,
     effects: entries.map((entry) => undoEffect(host, entry)),
     keeps: [
       `the design and wording of ${host}`,
       `the offers ${host} received`,
-      "the bot check itself and its secret key, which other domains share",
+      ...(shared ? ["the bot check itself and its secret key, which other domains share"] : []),
     ],
   };
 }

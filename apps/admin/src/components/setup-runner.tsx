@@ -11,11 +11,11 @@ import { retryWait } from "./setup-retry";
 
 export type StepRun = (state: SetupState) => Promise<{ ok: true; value: StepView } | SetupFailure>;
 
-export type RowStatus = "pending" | "running" | "waiting" | "done" | "skipped" | "failed" | "blocked";
+export type RowStatus = "pending" | "running" | "waiting" | "done" | "skipped" | "manual" | "failed" | "blocked";
 
 type Row = { id: string; title: string; status: RowStatus; effects: SetupEffect[] };
 
-type Problem = { kind: "failed" | "blocked"; message: string; credentialsRejected: boolean };
+type Problem = { kind: "failed" | "blocked"; message: string; credentialsRejected: boolean; skipHow?: string };
 
 const STUCK =
   "This step kept going without finishing. Nothing is lost and every step is safe to repeat: try again in a minute.";
@@ -26,6 +26,7 @@ export const STATUS_WORDS: Record<RowStatus, string> = {
   waiting: "Waiting for another change to finish",
   done: "Done",
   skipped: "Already set, nothing to do",
+  manual: "Left for you to do by hand",
   failed: "Failed",
   blocked: "Needs you",
 };
@@ -43,6 +44,8 @@ export function StatusIcon({ status }: { status: RowStatus }) {
       return <Check aria-hidden="true" className={cn(className, "text-emerald-600 dark:text-emerald-400")} />;
     case "skipped":
       return <Minus aria-hidden="true" className={cn(className, "text-muted-foreground")} />;
+    case "manual":
+      return <Minus aria-hidden="true" className={cn(className, "text-amber-600 dark:text-amber-400")} />;
     default:
       return <CircleAlert aria-hidden="true" className={cn(className, "text-destructive")} />;
   }
@@ -109,6 +112,7 @@ export function useStepRunner(props: {
       const index = state.current.next;
       mark(index, busyTries > 0 ? "waiting" : "running");
       let result: Awaited<ReturnType<StepRun>>;
+      const skipping = state.current.skip === true;
       try {
         result = await run(state.current);
       } catch {
@@ -119,6 +123,8 @@ export function useStepRunner(props: {
         };
       }
       if (!alive.current) return;
+      // A skip is asked for once: a retry after it runs the step again.
+      state.current = { next: state.current.next };
       if (!result.ok) {
         mark(index, "failed");
         setProblem({ kind: "failed", message: result.message, credentialsRejected: result.credentialsRejected });
@@ -143,15 +149,22 @@ export function useStepRunner(props: {
       busyTries = 0;
       if (view.outcome === "failed" || view.outcome === "blocked") {
         mark(index, view.outcome);
-        setProblem({ kind: view.outcome, message: view.message, credentialsRejected: view.credentialsRejected });
+        setProblem({
+          kind: view.outcome,
+          message: view.message,
+          credentialsRejected: view.credentialsRejected,
+          ...(view.skipHow === undefined ? {} : { skipHow: view.skipHow }),
+        });
         break;
       }
       if (view.outcome !== "finished") {
-        mark(
-          index,
-          view.outcome === "ran" ? "done" : "skipped",
-          view.effects.filter((e) => e.kind !== "reuse"),
-        );
+        if (skipping) mark(index, "manual", view.effects);
+        else
+          mark(
+            index,
+            view.outcome === "ran" ? "done" : "skipped",
+            view.effects.filter((e) => e.kind !== "reuse"),
+          );
       }
       state.current = view.state;
       if (view.finished || view.outcome === "finished") {
@@ -174,7 +187,13 @@ export function useStepRunner(props: {
     };
   }, [go]);
 
-  return { rows, problem, running, announcement, retry: go };
+  /** Skips the failed step (only when the report offered it): the owner does it by hand, the rest runs. */
+  const skip = useCallback(() => {
+    state.current = { next: state.current.next, skip: true };
+    void go();
+  }, [go]);
+
+  return { rows, problem, running, announcement, retry: go, skip };
 }
 
 /** Runs a change with `useStepRunner` and shows every step as a row, with the problem and its way out under it. */
@@ -187,7 +206,7 @@ export function SetupRunner(props: {
   /** Shown next to "Check again" when a step needs the owner: where they can act on it. */
   blockedAction?: ReactNode;
 }) {
-  const { rows, problem, running, announcement, retry: go } = useStepRunner(props);
+  const { rows, problem, running, announcement, retry: go, skip } = useStepRunner(props);
 
   return (
     <div className="flex flex-col gap-4">
@@ -241,10 +260,20 @@ export function SetupRunner(props: {
         >
           <span className="block [overflow-wrap:anywhere]">{problem.message}</span>
           <span className="block">Every step is safe to repeat: nothing is done twice.</span>
+          {problem.skipHow === undefined ? null : (
+            <span className="mt-2 block [overflow-wrap:anywhere]">
+              Visitors see no difference if you skip this step and do it yourself: {problem.skipHow}
+            </span>
+          )}
           <span className="mt-2 flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => void go()} disabled={running}>
               {problem.kind === "failed" ? "Retry" : "Check again"}
             </Button>
+            {problem.skipHow === undefined ? null : (
+              <Button variant="ghost" size="sm" onClick={skip} disabled={running}>
+                Skip, I'll do it by hand
+              </Button>
+            )}
             {problem.kind === "blocked" ? props.blockedAction : null}
           </span>
         </Alert>

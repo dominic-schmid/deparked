@@ -114,6 +114,8 @@ export type OfferTarget = {
   status: DomainStatus;
   notifyEmail: string | null;
   senderHost: string | null;
+  /** `kept_external` with no `senderHost`: no domain can send this domain's offer emails. */
+  emailRoutingState: string;
   turnstileSecretName: string | null;
   liveJson: string | null;
   liveSchemaVersion: number | null;
@@ -127,6 +129,7 @@ export function getOfferTarget(db: Db, host: string): Promise<OfferTarget | unde
       status: domains.status,
       notifyEmail: domains.notifyEmail,
       senderHost: domains.senderHost,
+      emailRoutingState: domains.emailRoutingState,
       turnstileSecretName: turnstileWidgets.secretName,
       liveJson: config.liveJson,
       liveSchemaVersion: config.liveSchemaVersion,

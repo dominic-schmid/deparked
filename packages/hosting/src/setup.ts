@@ -72,6 +72,8 @@ export type SetupChange = "attach" | "turn-off" | "remove";
 export interface SetupState {
   /** Index of the step the next call looks at. */
   next: number;
+  /** Skip that step after it failed, when the report offered it (`skipHow`): the owner does it by hand. */
+  skip?: boolean | undefined;
 }
 
 export interface SetupStepReport {
@@ -89,6 +91,8 @@ export interface SetupStepReport {
   finished: boolean;
   /** True on `failed` when the host refused the stored credentials or they lack a permission. */
   credentialsRejected: boolean;
+  /** On `failed`, when the owner may skip the step and do it by hand: what that means. */
+  skipHow?: string;
 }
 
 export interface DomainSetup {

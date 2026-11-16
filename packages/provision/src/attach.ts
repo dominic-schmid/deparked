@@ -637,6 +637,9 @@ function emailStep(host: string, options: AttachOptions): Step {
       const sender = pickSenderHost(await listDomains(ctx.db), host, row.senderHost);
       return sender === row.senderHost ? { kind: "settled" } : { kind: "keep", sender };
     }
+    // An earlier try wrote the mail records down and may have deleted them before enabling failed: finish that.
+    const replaced = findEntry(await activeLedger(ctx, host), "email_routing", zoneId);
+    if (replaced?.action === "changed") return { kind: "replace", mx: [] };
     const mx = await ctx.cf.zones.listDnsRecords(zoneId, { type: "MX", name: host });
     const state = classifyMx(mx, host);
     if (state === "external") {

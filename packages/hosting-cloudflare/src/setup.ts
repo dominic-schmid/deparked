@@ -144,6 +144,7 @@ export function createCloudflareDomainSetup(options: CloudflareSetupOptions): Do
         state: report.state,
         finished: report.finished,
         credentialsRejected: report.errorStatus === 401 || report.errorStatus === 403,
+        ...(report.skipHow === undefined ? {} : { skipHow: report.skipHow }),
       };
     },
 

@@ -79,6 +79,7 @@ function toSetupReport(report: StepReport): SetupStepReport {
     state: report.state,
     finished: report.finished,
     credentialsRejected: report.errorStatus === 401 || report.errorStatus === 403,
+    ...(report.skipHow === undefined ? {} : { skipHow: report.skipHow }),
   };
 }
 
@@ -205,7 +206,7 @@ export function createCloudflareHubSetup(options: CloudflareHubOptions): HubSetu
           };
         }
       }
-      return toSetupReport(await runNextStep(plan, { next: index }));
+      return toSetupReport(await runNextStep(plan, { next: index, ...(state.skip === true ? { skip: true } : {}) }));
     },
 
     async releaseStatus() {

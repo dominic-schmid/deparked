@@ -119,6 +119,14 @@ describe("adding a domain", () => {
     expect((await getDomain(db, HOST))?.notifyEmail).toBe("owner@example.com");
   });
 
+  it("gives the address as soon as the domain row exists, so an add that stops half way still has one", async () => {
+    await insertNotifyAddress(db, { email: "owner@example.com", now: clock });
+    mock.failNext({ route: "email.enableRouting", status: 500, times: 10 });
+    const views = await drive("attach");
+    expect(views.at(-1)).toMatchObject({ outcome: "failed", finished: false });
+    expect((await getDomain(db, HOST))?.notifyEmail).toBe("owner@example.com");
+  });
+
   it("a publish that needs several requests answers `working` and continues where it stopped", async () => {
     await arrange({ zones: [ZONE] }, 1);
     const views = await drive("attach");

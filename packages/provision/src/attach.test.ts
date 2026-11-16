@@ -61,8 +61,8 @@ describe("attaching a domain on a clean zone", () => {
     expect(reports.at(-1)).toMatchObject({ finished: true });
     expect(reports.slice(0, -1).every((report) => !report.finished)).toBe(true);
     for (const report of reports) expect(report.requests).toBeLessThanOrEqual(50);
-    // The routes step looks for a live site again right before it changes anything (an inspection, 7 requests).
-    expect(Math.max(...reports.map((report) => report.requests))).toBeLessThanOrEqual(16);
+    // The routes step looks for a live site again right before it changes anything (an inspection, 9 requests).
+    expect(Math.max(...reports.map((report) => report.requests))).toBeLessThanOrEqual(18);
   });
 
   it("creates the routes, rules, records, bot check, statistics and email, and the domains row", async () => {

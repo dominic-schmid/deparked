@@ -2,6 +2,7 @@ import { analyticsApi } from "./analytics";
 import { d1Api } from "./d1";
 import { emailApi } from "./email";
 import { type ClientOptions, createHttp } from "./http";
+import { redirectsApi } from "./redirects";
 import { rulesetsApi } from "./rulesets";
 import { tokensApi } from "./tokens";
 import { turnstileApi } from "./turnstile";
@@ -24,6 +25,7 @@ export function createCloudflareClient(options: ClientOptions) {
     accounts: accountsApi(http),
     zones: zonesApi(http),
     rulesets: rulesetsApi(http),
+    redirects: redirectsApi(http),
     workers: workersApi(http),
     d1: d1Api(http),
     turnstile: turnstileApi(http),
@@ -42,6 +44,8 @@ export type { ClientOptions, CloudflareErrorDetail, FetchLike, PageOptions } fro
 export { CloudflareApiError } from "./http";
 export type { TokenPermission } from "./permissions";
 export { PROBE_PERMISSION_LABELS, TOKEN_PERMISSIONS, tokenTemplateUrl } from "./permissions";
+export type { ForeignRedirect } from "./redirects";
+export { patternCoversHost } from "./redirects";
 export type {
   RedirectRuleInput,
   RewriteRuleInput,

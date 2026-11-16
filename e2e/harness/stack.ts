@@ -80,7 +80,8 @@ export async function startStack(): Promise<Stack> {
   const dir = mkdtempSync(resolve(TMP, "run-"));
   const persistTo = resolve(dir, "state");
   const assets = resolve(dir, "sites-assets");
-  const stops: (() => Promise<unknown>)[] = [() => Promise.resolve(rmSync(dir, { recursive: true, force: true }))];
+  // async, so a failed delete (Windows: workerd may still hold the folder) is caught by `stop` like any step.
+  const stops: (() => Promise<unknown>)[] = [async () => rmSync(dir, { recursive: true, force: true })];
   const stop = async () => {
     for (const step of stops.splice(0).reverse()) await step().catch(() => undefined);
   };

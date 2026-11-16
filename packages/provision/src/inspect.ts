@@ -52,6 +52,26 @@ export interface DomainInspection {
   summary: string;
 }
 
+/**
+ * A redirect rule takes the whole host away when it is for the host (a quoted `host`, `www.host` or a
+ * `.suffix` of it) or for every hostname of the zone (it names none, like `true`), and has no path condition.
+ * ponytail: a path condition counts as "leaves the rest alone", so `not starts_with(path, "/x")` slips through;
+ * parse the expression if that ever bites.
+ */
+export function redirectReachesHost(expression: string, host: string): boolean {
+  if (/http\.request\.uri\.path/.test(expression)) return false;
+  const quoted = [...expression.matchAll(/"([^"]*)"/g)].map((match) => (match[1] ?? "").toLowerCase());
+  const namesHost = quoted.some(
+    (text) =>
+      text === host ||
+      text === `www.${host}` ||
+      (text.startsWith(".") && `.${host}`.endsWith(text)) ||
+      text.includes(`//${host}`) ||
+      text.includes(`//www.${host}`),
+  );
+  return namesHost || !/http\.host|http\.request\.full_uri/.test(expression);
+}
+
 function coversHost(pattern: string, host: string): boolean {
   const name = pattern.split("/")[0] ?? "";
   if (name.startsWith("*")) return host.endsWith(name.slice(1)) || `www.${host}`.endsWith(name.slice(1));
@@ -114,7 +134,7 @@ function summarize(facts: Omit<DomainInspection, "summary">): string {
 }
 
 /**
- * Looks at what a domain does today, before anything changes. Read only: 7 requests for a domain of this
+ * Looks at what a domain does today, before anything changes. Read only: 9 requests for a domain of this
  * account, at most 4 for one that is not. Only what the ledger names counts as Deparked's.
  */
 export async function inspectDomain(ctx: ProvisionContext, hostInput: string): Promise<DomainInspection> {
@@ -155,6 +175,10 @@ export async function inspectDomain(ctx: ProvisionContext, hostInput: string): P
   const wildcardRecords = await ctx.cf.zones.listDnsRecords(zone.id, { name: `*.${host}` });
   const rewrite = await ctx.cf.rulesets.getEntrypoint(zone.id, "http_request_transform");
   const redirect = await ctx.cf.rulesets.getEntrypoint(zone.id, "http_request_dynamic_redirect");
+  const foreign = [
+    ...(await ctx.cf.redirects.pageRules(zone.id, host)),
+    ...(await ctx.cf.redirects.bulkRedirects(host)),
+  ];
 
   const ownedRecords = ownedIds(ledger, "dns_record");
   const ownedRoutes = ownedIds(ledger, "route");
@@ -201,6 +225,22 @@ export async function inspectDomain(ctx: ProvisionContext, hostInput: string): P
   for (const rule of [...rules.rewrite, ...rules.redirect]) {
     const twin = lookAlike(rule);
     if (twin !== undefined && !sameRule(rule, twin)) blockers.push(ruleConflictReason(host, twin.description));
+  }
+  // Redirects Cloudflare applies before Deparked's page ever runs: visitors, offers and /admin would all leave.
+  for (const rule of rules.redirect) {
+    if (lookAlike(rule) !== undefined || rule.enabled === false || !redirectReachesHost(rule.expression ?? "", host)) {
+      continue;
+    }
+    blockers.push(
+      `The redirect rule "${rule.description || rule.id}" sends visitors of ${host} elsewhere before Deparked's page can answer. Delete or turn it off in Cloudflare (${host} → Rules → Redirect Rules), then try again.`,
+    );
+  }
+  for (const found of foreign) {
+    blockers.push(
+      found.kind === "page-rule"
+        ? `The page rule for ${found.source} forwards visitors to ${found.target || "another address"} before Deparked's page can answer. Delete or turn it off in Cloudflare (${host} → Rules → Page Rules), then try again.`
+        : `The bulk redirect ${found.source} in the list "${found.list}" sends visitors to ${found.target || "another address"} before Deparked's page can answer. Remove it in Cloudflare (Bulk Redirects, under your account), then try again.`,
+    );
   }
 
   const facts = {

@@ -7,6 +7,7 @@ import {
   listOffers,
   publishConfig,
   setDomainStatus,
+  updateDomain,
   updateNotifyAddress,
 } from "@deparked/db";
 import { createTestDb, type ExecutedStatement, type TestD1 } from "@deparked/db/testing";
@@ -195,6 +196,15 @@ describe("POST /api/offer", () => {
     expect(await stored()).toMatchObject([{ emailStatus: "failed", emailError: "The email could not be sent." }]);
     expect(JSON.stringify(errors.mock.calls)).not.toContain("jane");
     errors.mockRestore();
+  });
+
+  it("says so, sending nothing, when the domain keeps its own mail and no other domain can send", async () => {
+    await updateDomain(db, { host: HOST, patch: { emailRoutingState: "kept_external", senderHost: null }, now: NOW });
+    expect((await postJson(offer())).status).toBe(200);
+    expect(hosting.sent).toEqual([]);
+    expect(await stored()).toMatchObject([
+      { emailStatus: "failed", emailError: expect.stringContaining("No domain can send this email"), notifiedTo: null },
+    ]);
   });
 
   it("keeps the offer when the notify address is not verified, or not set", async () => {
