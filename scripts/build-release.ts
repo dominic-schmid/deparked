@@ -8,7 +8,7 @@
 // repository's committed copy at the tag on raw.githubusercontent.com, which is byte for byte what the pack holds.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { contentHash } from "../packages/hosting/src/index.ts";
 
@@ -55,6 +55,11 @@ function contentType(path: string): string {
   return type;
 }
 
+/** A path in the release: relative and always with `/`, whichever system builds it. */
+function inRelease(from: string, file: string): string {
+  return relative(from, file).split(sep).join("/");
+}
+
 function walk(dir: string): string[] {
   return readdirSync(dir)
     .flatMap((name) => {
@@ -88,7 +93,7 @@ const sitesConfig = readJsonc(resolve(ROOT, "apps/sites/wrangler.jsonc"));
 const entries: Entry[] = [
   ...walk(resolve(ROOT, "apps/sites/public/catalog")).map((file) => ({
     pack: "catalog",
-    path: `/${relative(resolve(ROOT, "apps/sites/public"), file)}`,
+    path: `/${inRelease(resolve(ROOT, "apps/sites/public"), file)}`,
     content: readFileSync(file),
     contentType: contentType(file),
   })),
@@ -96,7 +101,7 @@ const entries: Entry[] = [
     .filter((file) => file.endsWith(".js"))
     .map((file) => ({
       pack: "admin-modules",
-      path: relative(adminServer, file),
+      path: inRelease(adminServer, file),
       content: readFileSync(file),
       contentType: "application/javascript+module",
     })),
@@ -104,12 +109,12 @@ const entries: Entry[] = [
     // `_headers` is asset configuration, not a served file: it travels in `workers.admin.headers`. The admin's
     // copy of the catalog (for the editor's preview) is the catalog pack: the installer uploads it to both Workers.
     .filter((file) => {
-      const path = relative(adminClient, file);
+      const path = inRelease(adminClient, file);
       return !file.endsWith(".assetsignore") && path !== "_headers" && !path.startsWith("catalog/");
     })
     .map((file) => ({
       pack: "admin-assets",
-      path: `/${relative(adminClient, file)}`,
+      path: `/${inRelease(adminClient, file)}`,
       content: readFileSync(file),
       contentType: contentType(file),
     })),
@@ -117,7 +122,7 @@ const entries: Entry[] = [
     .filter((file) => file.endsWith(".sql"))
     .map((file) => ({
       pack: "migrations",
-      path: relative(resolve(ROOT, "packages/db/migrations"), file),
+      path: inRelease(resolve(ROOT, "packages/db/migrations"), file),
       content: readFileSync(file),
       contentType: "application/sql",
     })),

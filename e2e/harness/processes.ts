@@ -115,6 +115,8 @@ export async function startWorker(options: {
       {
         cwd: ROOT,
         detached: true,
+        // A detached process gets its own console window on Windows; the output goes to the log anyway.
+        windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1", NO_COLOR: "1" },
       },
