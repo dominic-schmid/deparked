@@ -159,7 +159,12 @@ export function useStepRunner(props: {
       }
       if (view.outcome !== "finished") {
         if (skipping) mark(index, "manual", view.effects);
-        else mark(index, view.outcome === "ran" ? "done" : "skipped", view.effects.filter((e) => e.kind !== "reuse"));
+        else
+          mark(
+            index,
+            view.outcome === "ran" ? "done" : "skipped",
+            view.effects.filter((e) => e.kind !== "reuse"),
+          );
       }
       state.current = view.state;
       if (view.finished || view.outcome === "finished") {

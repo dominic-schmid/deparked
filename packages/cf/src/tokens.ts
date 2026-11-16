@@ -120,8 +120,7 @@ export function tokensApi(http: Http) {
           if (error.status === 403) report.missing.push(probe.permission);
           else if (error.status === 404) {
             if (probe.absentIsFine !== true) report.unknown.push(probe.permission);
-          }
-          else throw error;
+          } else throw error;
         }
       }
       return report;

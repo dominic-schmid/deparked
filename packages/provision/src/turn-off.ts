@@ -72,7 +72,10 @@ function undoEffect(host: string, entry: LedgerEntry): Effect {
     case "dns_record":
       return { kind: "remove", what: `the address record Deparked added for ${key ?? host}` };
     case "turnstile_hostname":
-      return { kind: "remove", what: `${host}'s place in the bot check (the bot check too, when no other domain uses it)` };
+      return {
+        kind: "remove",
+        what: `${host}'s place in the bot check (the bot check too, when no other domain uses it)`,
+      };
     case "analytics_site":
       return { kind: "remove", what: `visitor statistics for ${host} (the collected numbers are deleted)` };
     case "email_routing": {
@@ -317,7 +320,9 @@ async function deleteBotCheck(ctx: ProvisionContext, host: string, sitekey: stri
       await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
     }
   }
-  return [{ kind: "remove", what: `the bot check ${row?.name ?? sitekey} and its secret key: no other domain used it` }];
+  return [
+    { kind: "remove", what: `the bot check ${row?.name ?? sitekey} and its secret key: no other domain used it` },
+  ];
 }
 
 function stopDnsStep(host: string): Step {
