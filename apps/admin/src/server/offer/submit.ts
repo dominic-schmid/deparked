@@ -85,11 +85,20 @@ async function sendEmail(
   if (address === undefined || address.verifiedAt === null) {
     return { emailStatus: "failed", emailError: "The address for offers is not verified yet." };
   }
+  // A domain that keeps its own mail cannot sign Cloudflare's mail: without another domain to send from, the
+  // email would leave unsigned and be dropped by the inbox while looking "sent" here (DOM-377).
+  const senderHost = target.senderHost ?? (target.emailRoutingState === "kept_external" ? null : target.host);
+  if (senderHost === null) {
+    return {
+      emailStatus: "failed",
+      emailError: `No domain can send this email: ${target.host} keeps its own mail, and no other domain in Deparked sends offers.`,
+    };
+  }
   try {
     await deps.hosting.sendNotification(
       offerNotification({
         host: target.host,
-        senderHost: target.senderHost ?? target.host,
+        senderHost,
         to,
         currency,
         country: deps.country,
