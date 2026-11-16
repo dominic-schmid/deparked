@@ -64,21 +64,31 @@ export function emailApi(http: Http) {
     },
     /**
      * Enabling Email Routing replaces the apex MX records. This reads them first and refuses when they point at
-     * someone else's mail, unless the owner agreed (`replaceExistingMx: true`). 2 requests (before retries).
+     * someone else's mail, unless the owner agreed (`replaceExistingMx: true`). Cloudflare itself refuses to
+     * enable while other mail's MX records exist (409, code 2008), so with the owner's consent they are deleted
+     * first; the caller must have recorded them. 2 requests, plus one per deleted record (before retries).
      */
     async enableRouting(
       zone: Pick<Zone, "id" | "name">,
       consent: { replaceExistingMx: boolean },
     ): Promise<EmailRoutingSettings> {
       const call = "enable Email Routing";
-      const mx = await zonesApi(http).listDnsRecords(zone.id, { type: "MX", name: zone.name });
-      if (classifyMx(mx, zone.name) === "external" && !consent.replaceExistingMx) {
-        throw new CloudflareApiError({
-          call,
-          status: 0,
-          detail:
-            "the domain already receives mail elsewhere (existing MX records) and replacing them was not confirmed",
-        });
+      const zones = zonesApi(http);
+      const mx = await zones.listDnsRecords(zone.id, { type: "MX", name: zone.name });
+      if (classifyMx(mx, zone.name) === "external") {
+        if (!consent.replaceExistingMx) {
+          throw new CloudflareApiError({
+            call,
+            status: 0,
+            detail:
+              "the domain already receives mail elsewhere (existing MX records) and replacing them was not confirmed",
+          });
+        }
+        for (const record of mx) {
+          if (!hostname(record.content ?? "").endsWith(".mx.cloudflare.net")) {
+            await zones.deleteDnsRecord(zone.id, record.id);
+          }
+        }
       }
       return http.request(
         { call, method: "POST", path: `/zones/${segment(zone.id)}/email/routing/enable`, json: {} },

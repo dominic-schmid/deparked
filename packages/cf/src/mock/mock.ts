@@ -14,6 +14,7 @@ export type MockPermission =
   | "routes"
   | "dns"
   | "rulesets"
+  | "redirects"
   | "email_routing";
 
 /** The part of a D1 binding `attachDatabase` uses. */
@@ -153,6 +154,10 @@ export interface MockState {
   /** Keyed by `<zoneId>:<phase>`. */
   rulesets: Map<string, MockRuleset>;
   emailRouting: Map<string, boolean>;
+  /** Page rules by zone id, as Cloudflare lists them. */
+  pageRules: Map<string, { id: string; status: string; targets: unknown[]; actions: unknown[] }[]>;
+  /** The account's bulk redirects; each list is in use by an enabled rule. */
+  bulkRedirects: { list: string; source_url: string; target_url: string }[];
   widgets: MockWidget[];
   addresses: MockAddress[];
   analyticsSites: { siteTag: string; siteToken: string; host: string }[];
@@ -254,6 +259,8 @@ export function createMockCloudflare(seed: MockSeed = {}) {
     routes: new Map(),
     rulesets: new Map(),
     emailRouting: new Map(),
+    pageRules: new Map(),
+    bulkRedirects: [],
     widgets: [],
     addresses: [],
     analyticsSites: [],
@@ -681,6 +688,67 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         },
       },
       {
+        id: "redirects.pageRules",
+        method: "GET",
+        pattern: "/zones/:zone/pagerules",
+        permission: "zones",
+        handle: (context) => ({
+          result: (state.pageRules.get(zone(context).id) ?? []).filter(
+            (rule) => context.query.get("status") === null || rule.status === context.query.get("status"),
+          ),
+        }),
+      },
+      {
+        id: "redirects.bulkRuleset",
+        method: "GET",
+        pattern: `${account}/rulesets/phases/http_request_redirect/entrypoint`,
+        permission: "redirects",
+        handle: () => {
+          const lists = [...new Set(state.bulkRedirects.map((entry) => entry.list))];
+          if (lists.length === 0) throw new MockError(404, 10003, "could not find entrypoint ruleset in the phase");
+          return {
+            result: {
+              id: "bulk-ruleset",
+              phase: "http_request_redirect",
+              rules: lists.map((name, index) => ({
+                id: `bulk-rule-${index}`,
+                action: "redirect",
+                enabled: true,
+                expression: `http.request.full_uri in ${name}`,
+                action_parameters: { from_list: { name, key: "http.request.full_uri" } },
+              })),
+            },
+          };
+        },
+      },
+      {
+        id: "redirects.lists",
+        method: "GET",
+        pattern: `${account}/rules/lists`,
+        permission: "redirects",
+        handle: () => ({
+          result: [...new Set(state.bulkRedirects.map((entry) => entry.list))].map((name) => ({
+            id: `list-${name}`,
+            name,
+            kind: "redirect",
+          })),
+        }),
+      },
+      {
+        id: "redirects.listItems",
+        method: "GET",
+        pattern: `${account}/rules/lists/:list/items`,
+        permission: "redirects",
+        handle: (context) => {
+          const search = context.query.get("search") ?? "";
+          return {
+            result: state.bulkRedirects
+              .filter((entry) => `list-${entry.list}` === context.params.list && entry.source_url.includes(search))
+              .map((entry) => ({ redirect: { source_url: entry.source_url, target_url: entry.target_url } })),
+          };
+        },
+      },
+      {
         id: "rulesets.create",
         method: "POST",
         pattern: "/zones/:zone/rulesets",
@@ -1080,6 +1148,12 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         permission: "email_routing",
         handle: (context) => {
           const found = zone(context);
+          // Seen on the real API (DOM-377): other mail's MX records must be deleted first.
+          const foreign = (state.dnsRecords.get(found.id) ?? []).some(
+            (record) =>
+              record.type === "MX" && record.name === found.name && !record.content.endsWith(".mx.cloudflare.net"),
+          );
+          if (foreign) throw new MockError(409, 2008, "Non-Cloudflare MX records exist");
           state.emailRouting.set(found.id, true);
           state.dnsRecords.set(found.id, [
             ...(state.dnsRecords.get(found.id) ?? []).filter(

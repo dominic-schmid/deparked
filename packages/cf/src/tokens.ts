@@ -21,6 +21,8 @@ export interface PermissionProbe {
   permission: string;
   call: string;
   path: string;
+  /** A 404 means "allowed, nothing there yet" (an account without bulk redirects), not "unknown". */
+  absentIsFine?: boolean;
 }
 
 export interface PermissionReport {
@@ -51,6 +53,13 @@ export function tokensApi(http: Http) {
         call: "check Email Routing addresses permission",
         path: `${account}/email/routing/addresses`,
       },
+      {
+        permission: "Mass URL Redirects",
+        call: "check bulk redirect permission",
+        path: `${account}/rulesets/phases/http_request_redirect/entrypoint`,
+        absentIsFine: true,
+      },
+      { permission: "Account Rule Lists", call: "check rule lists permission", path: `${account}/rules/lists` },
       { permission: "Zone", call: "check Zone permission", path: "/zones" },
     ];
     if (zoneId === undefined) return list;
@@ -98,7 +107,7 @@ export function tokensApi(http: Http) {
      * Cloudflare has no call that lists a token's own permissions without the "API Tokens Read" permission,
      * so this sends one cheap read per permission: 403 means missing, 404 means unknown, any other failure throws.
      * A read can't prove write access: a read-only token passes here and fails on the first write.
-     * Exactly 6 requests, 11 with a `zoneId`: probes are never retried.
+     * Exactly 8 requests, 13 with a `zoneId`: probes are never retried.
      */
     async probePermissions(input: { zoneId?: string } = {}): Promise<PermissionReport> {
       const report: PermissionReport = { missing: [], unknown: [], checked: [] };
@@ -109,7 +118,9 @@ export function tokensApi(http: Http) {
         } catch (error) {
           if (!(error instanceof CloudflareApiError)) throw error;
           if (error.status === 403) report.missing.push(probe.permission);
-          else if (error.status === 404) report.unknown.push(probe.permission);
+          else if (error.status === 404) {
+            if (probe.absentIsFine !== true) report.unknown.push(probe.permission);
+          }
           else throw error;
         }
       }

@@ -53,6 +53,8 @@ of the admin Worker; the installer keeps it in memory for the request it is sent
 | Account · Account Analytics · Read | reads visitor numbers for the overview |
 | Account · Turnstile · Edit | sets up the bot check of the offer form |
 | Account · Email Routing Addresses · Edit | adds the address offers are sent to |
+| Account · Mass URL Redirects · Read | finds bulk redirects that would send a domain's visitors elsewhere |
+| Account · Account Rule Lists · Read | reads which addresses those bulk redirects cover |
 | Zone · Zone · Read | lists the domains in your account |
 | Zone · Workers Routes · Edit | points a domain at its for-sale page |
 | Zone · DNS · Edit | adds an address record where a domain has none, and looks at existing mail records |

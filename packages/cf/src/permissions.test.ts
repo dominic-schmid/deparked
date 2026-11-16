@@ -23,6 +23,8 @@ describe("tokenTemplateUrl", () => {
       { key: "account_analytics", type: "read" },
       { key: "challenge_widgets", type: "edit" },
       { key: "email_routing_address", type: "edit" },
+      { key: "mass_url_redirects", type: "read" },
+      { key: "account_rule_lists", type: "read" },
       { key: "zone", type: "read" },
       { key: "workers_routes", type: "edit" },
       { key: "dns", type: "edit" },
@@ -31,7 +33,7 @@ describe("tokenTemplateUrl", () => {
       { key: "zone_settings", type: "edit" },
       { key: "email_routing_rule", type: "edit" },
     ]);
-    expect(TOKEN_PERMISSIONS).toHaveLength(14);
+    expect(TOKEN_PERMISSIONS).toHaveLength(16);
   });
 
   it("names the token as asked", () => {

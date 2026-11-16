@@ -30,8 +30,15 @@ describe("token", () => {
     const before = client.requestCount;
     const report = await client.tokens.probePermissions({ zoneId: ZONE.id });
     expect(report.missing).toEqual(["D1", "Workers Routes"]);
-    expect(report.checked).toHaveLength(11);
-    expect(client.requestCount - before).toBe(11);
+    expect(report.checked).toHaveLength(13);
+    expect(client.requestCount - before).toBe(13);
+  });
+
+  it("names the two bulk redirect permissions, and takes an account without bulk redirects as allowed", async () => {
+    const { mock, client } = setup();
+    expect((await client.tokens.probePermissions()).unknown).toEqual([]);
+    mock.denyPermission("redirects");
+    expect((await client.tokens.probePermissions()).missing).toEqual(["Mass URL Redirects", "Account Rule Lists"]);
   });
 
   it("reports a 404 as unknown, not as a permission the token has", async () => {
@@ -41,7 +48,7 @@ describe("token", () => {
     expect(report.missing).toEqual([]);
   });
 
-  it("never retries a probe, so 11 probes stay 11 subrequests", async () => {
+  it("never retries a probe, so 13 probes stay 13 subrequests", async () => {
     const { mock, client } = setup();
     mock.failNext({ route: "d1.list", status: 429, times: 3 });
 
