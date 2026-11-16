@@ -175,8 +175,8 @@ async function publishStep(deps: SetupDeps, host: string, state: SetupState): Pr
  * One step of attaching (or turning on again) a domain. The browser calls it until `finished`.
  *
  * While the domain is off its placeholder step always publishes: rows left by a turn off that stopped half-way
- * do not prove the page is live. Publishing again sends only what the host lacks. Once finished, a domain without
- * a notify address gets the default one.
+ * do not prove the page is live. Publishing again sends only what the host lacks. After every step that moved, a
+ * domain without a notify address gets the default one.
  */
 export async function attachStep(
   deps: SetupDeps,
@@ -188,8 +188,11 @@ export async function attachStep(
     step?.id === PUBLISH_STEP && isOff((await getDomain(deps.db, host))?.status)
       ? await publishStep(deps, host, state)
       : await hostingStep(deps, "attach", host, state, input.confirmations);
-  // The domain row exists once a step has run: it gets the default address, so its offers never go nowhere.
-  if (result.finished) await fillMissingNotifyAddresses(deps.db, deps.publish.now());
+  // The domain gets the default address as soon as its row exists, not only once the add finishes: an add that
+  // stops half way, or the editor opened meanwhile, must not show "Send offers to" empty. Safe to repeat.
+  if (result.outcome === "ran" || result.outcome === "already-done" || result.finished) {
+    await fillMissingNotifyAddresses(deps.db, deps.publish.now());
+  }
   return result;
 }
 
