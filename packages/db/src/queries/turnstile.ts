@@ -20,6 +20,11 @@ export async function insertTurnstileWidget(
   return rows.length === 1;
 }
 
+/** Forgets a widget, once Cloudflare's copy and its secret are deleted. Safe to repeat. */
+export async function deleteTurnstileWidget(db: Db, sitekey: string): Promise<void> {
+  await db.delete(turnstileWidgets).where(eq(turnstileWidgets.sitekey, sitekey));
+}
+
 /** The fullest widget that still has a free hostname slot, so widgets fill up one after another. */
 export function findTurnstileWidgetWithFreeSlot(db: Db): Promise<TurnstileWidget | undefined> {
   return db

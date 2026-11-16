@@ -42,15 +42,31 @@ describe("turning a domain off", () => {
     expect((await getDomain(db, HOST))?.turnedOffAt).not.toBeNull();
   });
 
-  it("frees the place in the bot check but keeps the shared widget and its secret", async () => {
+  it("the last domain of a bot check deletes the widget and its secret: Cloudflare refuses an empty list", async () => {
     const { ctx, mock, db } = await setup();
     await runPlan(planAttachDomain(ctx, HOST));
+    const before = (await listLedger(db, { host: null, activeOnly: true })).length;
     await runPlan(planTurnOff(ctx, HOST));
 
-    expect(mock.state.widgets).toMatchObject([{ name: "deparked-1", domains: [] }]);
-    expect(await listTurnstileWidgets(db)).toMatchObject([{ name: "deparked-1", hostnameCount: 0 }]);
+    expect(mock.state.widgets).toEqual([]);
+    expect(await listTurnstileWidgets(db)).toEqual([]);
+    expect(mock.liveBindings("deparked-admin").map((binding) => binding.name)).not.toContain("TURNSTILE_SECRET_1");
+    expect(await listLedger(db, { host: null, activeOnly: true })).toHaveLength(before - 1);
+    expect(mock.callsTo("turnstile.update")).toEqual([]);
+  });
+
+  it("a domain that shares its bot check leaves the widget and its secret to the others", async () => {
+    const { ctx, mock, db } = await setup({ zones: [ZONE, { id: "zone-2", name: "example.org" }] });
+    await runPlan(planAttachDomain(ctx, HOST));
+    await runPlan(planAttachDomain(ctx, "example.org"));
+    await runPlan(planTurnOff(ctx, HOST));
+
+    expect(mock.state.widgets).toMatchObject([{ name: "deparked-1", domains: ["example.org"] }]);
+    expect(await listTurnstileWidgets(db)).toMatchObject([{ name: "deparked-1", hostnameCount: 1 }]);
     expect(mock.liveBindings("deparked-admin").map((binding) => binding.name)).toContain("TURNSTILE_SECRET_1");
-    expect(await listLedger(db, { host: null, activeOnly: true })).toHaveLength(1);
+    expect((await describeRemoval(ctx, "example.org")).keeps).not.toContain(
+      "the bot check itself and its secret key, which other domains share",
+    );
   });
 
   it("gives a taken-over route and replaced mail back, and leaves the owner's own things alone", async () => {
@@ -158,7 +174,7 @@ describe("removing a domain", () => {
     expect(removal.effects.map((effect) => `${effect.kind}: ${effect.what}`)).toEqual([
       "remove: Cloudflare's email service on example.com",
       "remove: visitor statistics for example.com (the collected numbers are deleted)",
-      "remove: example.com's place in the bot check",
+      "remove: example.com's place in the bot check (the bot check too, when no other domain uses it)",
       "remove: the address record Deparked added for www.example.com",
       "remove: the address record Deparked added for example.com",
       'remove: the rule "Deparked example.com: www to example.com"',

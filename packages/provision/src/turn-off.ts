@@ -1,9 +1,11 @@
 import { CloudflareApiError, type WorkerRoute } from "@deparked/cf";
 import {
+  deleteTurnstileWidget,
   getDomain,
   type LedgerEntry,
   type LedgerResource,
   listDomains,
+  listTurnstileWidgets,
   markLedgerUndone,
   setDomainStatus,
   syncTurnstileHostnameCount,
@@ -70,7 +72,7 @@ function undoEffect(host: string, entry: LedgerEntry): Effect {
     case "dns_record":
       return { kind: "remove", what: `the address record Deparked added for ${key ?? host}` };
     case "turnstile_hostname":
-      return { kind: "remove", what: `${host}'s place in the bot check` };
+      return { kind: "remove", what: `${host}'s place in the bot check (the bot check too, when no other domain uses it)` };
     case "analytics_site":
       return { kind: "remove", what: `visitor statistics for ${host} (the collected numbers are deleted)` };
     case "email_routing": {
@@ -228,9 +230,11 @@ function stopAnalyticsStep(host: string): Step {
 }
 
 /**
- * Frees the place the domain holds, which is what `domains.turnstile_widget_id` says and nothing else. The
- * widget's hostname list is read right before it is written. The widget and its secret stay: they are shared,
- * and the next domain takes the free place.
+ * Frees the place the domain holds, which is what `domains.turnstile_widget_id` says and nothing else. While
+ * another domain holds the widget, the host leaves its hostname list (read right before it is written) and the
+ * widget and its secret stay for the next domain. The last domain to leave deletes the widget, its secret on the
+ * admin and the hub's ledger entry for it: Cloudflare refuses an empty hostname list, and nothing should be
+ * left behind that no domain uses.
  */
 function stopBotCheckStep(host: string): Step {
   return undoStep({
@@ -244,6 +248,10 @@ function stopBotCheckStep(host: string): Step {
     async undo(ctx) {
       const held = (await getDomain(ctx.db, host))?.turnstileWidgetId ?? null;
       if (held === null) return [];
+      const others = (await listDomains(ctx.db, { includeRemoved: true })).filter(
+        (domain) => domain.host !== host && domain.turnstileWidgetId === held,
+      );
+      if (others.length === 0) return deleteBotCheck(ctx, host, held);
       const widget = (await ctx.cf.turnstile.list()).find((candidate) => candidate.sitekey === held);
       if (widget?.domains.includes(host) === true) {
         await unlessGone(
@@ -258,6 +266,21 @@ function stopBotCheckStep(host: string): Step {
       return [];
     },
   });
+}
+
+/** The last domain of a widget leaves: the widget, its secret and their records go. Each part is safe to repeat. */
+async function deleteBotCheck(ctx: ProvisionContext, host: string, sitekey: string): Promise<Effect[]> {
+  const row = (await listTurnstileWidgets(ctx.db)).find((widget) => widget.sitekey === sitekey);
+  await unlessGone(ctx.cf.turnstile.delete(sitekey));
+  if (row !== undefined) await unlessGone(ctx.cf.workers.deleteSecret(workerNames(ctx).admin, row.secretName));
+  await updateDomain(ctx.db, { host, patch: { turnstileWidgetId: null }, now: ctx.now() });
+  await deleteTurnstileWidget(ctx.db, sitekey);
+  for (const entry of await activeLedger(ctx, null)) {
+    if (entry.resource === "secret" && row !== undefined && entry.cfId === row.secretName) {
+      await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
+    }
+  }
+  return [{ kind: "remove", what: `the bot check ${row?.name ?? sitekey} and its secret key: no other domain used it` }];
 }
 
 function stopDnsStep(host: string): Step {
@@ -419,13 +442,19 @@ export async function describeRemoval(ctx: ProvisionContext, hostInput: string):
   const entries = (await activeLedger(ctx, host))
     .filter(exists)
     .toSorted((a, b) => order.indexOf(a.resource) - order.indexOf(b.resource));
+  const held = (await getDomain(ctx.db, host))?.turnstileWidgetId ?? null;
+  const shared =
+    held !== null &&
+    (await listDomains(ctx.db, { includeRemoved: true })).some(
+      (domain) => domain.host !== host && domain.turnstileWidgetId === held,
+    );
   return {
     host,
     effects: entries.map((entry) => undoEffect(host, entry)),
     keeps: [
       `the design and wording of ${host}`,
       `the offers ${host} received`,
-      "the bot check itself and its secret key, which other domains share",
+      ...(shared ? ["the bot check itself and its secret key, which other domains share"] : []),
     ],
   };
 }

@@ -970,6 +970,10 @@ export function createMockCloudflare(seed: MockSeed = {}) {
         handle: (context) => {
           const found = widget(context);
           const domains = checkHostnames(context.json.domains);
+          // Seen on the real API (DOM-377): an existing widget must keep at least one hostname.
+          if (domains.length === 0) {
+            throw new MockError(400, 0, "invalid value for `domains`: not entitled to use empty list");
+          }
           found.name = text(context.json.name, "name");
           found.mode = text(context.json.mode, "mode");
           found.domains = domains;
