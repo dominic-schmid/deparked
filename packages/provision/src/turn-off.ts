@@ -118,6 +118,12 @@ interface UndoStepInput {
   undo: (ctx: ProvisionContext, entries: LedgerEntry[]) => Promise<Effect[]>;
   /** Clears the step's fields on the `domains` row. */
   clearRow?: (ctx: ProvisionContext) => Promise<void>;
+  /**
+   * Set on steps that leave what visitors get unchanged: after a failure the owner may skip them. Skipping closes
+   * the ledger entries and clears the row (`clearRow`, else `skipRow`) without calling Cloudflare.
+   */
+  skipHow?: string;
+  skipRow?: (ctx: ProvisionContext) => Promise<void>;
 }
 
 function undoStep(input: UndoStepInput): Step {
@@ -143,6 +149,18 @@ function undoStep(input: UndoStepInput): Step {
       await input.clearRow?.(ctx);
       return { effects: [...reportEffects(host, list), ...notes] };
     },
+    ...(input.skipHow === undefined
+      ? {}
+      : {
+          skip: {
+            how: input.skipHow,
+            async run(ctx: ProvisionContext) {
+              for (const entry of await entries(ctx)) await markLedgerUndone(ctx.db, { id: entry.id, now: ctx.now() });
+              await (input.clearRow ?? input.skipRow)?.(ctx);
+              return { effects: [] };
+            },
+          },
+        }),
   };
 }
 
@@ -159,13 +177,7 @@ function stopEmailStep(host: string): Step {
     async undo(ctx, entries) {
       const notes: Effect[] = [];
       if (entries.length === 0) return notes;
-      // Domains that kept their own mail and send through this one move to another sender first.
-      const domains = await listDomains(ctx.db);
-      const replacement = pickSenderHost(domains, host, null);
-      for (const domain of domains) {
-        if (domain.host === host || domain.senderHost !== host) continue;
-        await updateDomain(ctx.db, { host: domain.host, patch: { senderHost: replacement }, now: ctx.now() });
-      }
+      await moveDependentSenders(ctx, host);
       for (const entry of entries) {
         const zoneId = entry.zoneId ?? "";
         // An attach that failed right after writing the entry down never turned the service on.
@@ -201,9 +213,21 @@ function stopEmailStep(host: string): Step {
       return notes;
     },
     async clearRow(ctx) {
+      await moveDependentSenders(ctx, host);
       await updateDomain(ctx.db, { host, patch: { emailRoutingState: "none", senderHost: null }, now: ctx.now() });
     },
+    skipHow: `In Cloudflare, open ${host} → Email → Email Routing and turn it off (Settings → Disable). If ${host} had other mail before Deparked, put its MX records back under DNS.`,
   });
+}
+
+/** Domains that kept their own mail and send through this one move to another sender. Safe to repeat. */
+async function moveDependentSenders(ctx: ProvisionContext, host: string): Promise<void> {
+  const domains = await listDomains(ctx.db);
+  const replacement = pickSenderHost(domains, host, null);
+  for (const domain of domains) {
+    if (domain.host === host || domain.senderHost !== host) continue;
+    await updateDomain(ctx.db, { host: domain.host, patch: { senderHost: replacement }, now: ctx.now() });
+  }
 }
 
 function stopAnalyticsStep(host: string): Step {
@@ -226,6 +250,7 @@ function stopAnalyticsStep(host: string): Step {
         now: ctx.now(),
       });
     },
+    skipHow: `In Cloudflare, open Analytics & Logs → Web Analytics and delete the site ${host}.`,
   });
 }
 
@@ -244,6 +269,18 @@ function stopBotCheckStep(host: string): Step {
     resource: "turnstile_hostname",
     async rowPending(ctx) {
       return (await getDomain(ctx.db, host))?.turnstileWidgetId != null;
+    },
+    skipHow: `In Cloudflare, open Turnstile and remove ${host} from the hostnames of its "deparked-…" widget, or delete that widget when ${host} is its only hostname.`,
+    async skipRow(ctx) {
+      const held = (await getDomain(ctx.db, host))?.turnstileWidgetId ?? null;
+      if (held === null) return;
+      await updateDomain(ctx.db, { host, patch: { turnstileWidgetId: null }, now: ctx.now() });
+      await syncTurnstileHostnameCount(ctx.db, held);
+      const holders = (await listDomains(ctx.db, { includeRemoved: true })).filter(
+        (domain) => domain.turnstileWidgetId === held,
+      );
+      // The owner deletes the widget by hand: forget it, so the next domain gets a new one.
+      if (holders.length === 0) await deleteTurnstileWidget(ctx.db, held);
     },
     async undo(ctx) {
       const held = (await getDomain(ctx.db, host))?.turnstileWidgetId ?? null;

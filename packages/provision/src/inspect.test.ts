@@ -101,7 +101,7 @@ describe("looking at a domain before attaching it", () => {
 });
 
 describe("redirects set up outside Deparked", () => {
-  const blockersFor = async (seed: (context: Awaited<ReturnType<typeof setup>>) => Promise<void> | void) => {
+  const blockersFor = async (seed: (context: Awaited<ReturnType<typeof setup>>) => unknown) => {
     const context = await setup();
     await seed(context);
     return (await inspectDomain(context.ctx, HOST)).blockers;

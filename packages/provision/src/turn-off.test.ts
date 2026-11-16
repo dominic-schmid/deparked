@@ -2,7 +2,7 @@ import { getDomain, listLedger, listTurnstileWidgets } from "@deparked/db";
 import { describe, expect, it } from "vitest";
 import { planAttachDomain } from "./attach";
 import { MX_EXTERNAL } from "./fixtures/mx";
-import { dryRun } from "./steps";
+import { dryRun, runNextStep } from "./steps";
 import { mutatingCalls, runPlan, setup, ZONE, zoneSnapshot } from "./test-helpers";
 import { describeRemoval, planRemoveDomain, planTurnOff } from "./turn-off";
 
@@ -204,5 +204,43 @@ describe("removing a domain", () => {
       true,
     );
     expect(mutatingCalls(mock)).toEqual([]);
+  });
+});
+
+describe("skipping a step the owner does by hand", () => {
+  it("offers a skip only where visitors see no difference, and finishes turning off after it", async () => {
+    const { ctx, mock, db } = await setup();
+    await runPlan(planAttachDomain(ctx, HOST));
+    mock.failNext({ route: "analytics.deleteSite", status: 500, times: 5 });
+
+    const plan = planTurnOff(ctx, HOST);
+    const failed = (await runPlan(plan)).at(-1);
+    expect(failed).toMatchObject({ outcome: "failed", step: { id: "stop-analytics" } });
+    expect(failed?.skipHow).toContain("Web Analytics");
+
+    const skipped = await runNextStep(plan, { ...(failed?.state ?? { next: 0 }), skip: true });
+    expect(skipped).toMatchObject({ outcome: "ran", state: { next: (failed?.state.next ?? 0) + 1 } });
+    expect(skipped.effects.at(-1)?.what).toContain("Left for you to do by hand");
+    expect((await getDomain(db, HOST))?.analyticsSiteTag).toBeNull();
+    expect((await listLedger(db, { host: HOST, activeOnly: true })).map((entry) => entry.resource)).not.toContain(
+      "analytics_site",
+    );
+
+    const rest = await runPlan({ ...plan, steps: plan.steps.slice(skipped.state.next) });
+    expect(rest.at(-1)).toMatchObject({ finished: true });
+  });
+
+  it("never offers a skip on a step that changes what visitors get", async () => {
+    const { ctx, mock } = await setup();
+    await runPlan(planAttachDomain(ctx, HOST));
+    mock.failNext({ route: "rulesets.deleteRule", status: 500, times: 5 });
+
+    const failed = (await runPlan(planTurnOff(ctx, HOST))).at(-1);
+    expect(failed).toMatchObject({ outcome: "failed" });
+    expect(failed?.skipHow).toBeUndefined();
+    // `skip` is ignored there: the step itself runs again (and now works).
+    const again = await runNextStep(planTurnOff(ctx, HOST), { ...(failed?.state ?? { next: 0 }), skip: true });
+    expect(again.effects.map((effect) => effect.what).join(" ")).not.toContain("Left for you");
+    expect(mock.callsTo("rulesets.deleteRule").length).toBeGreaterThan(0);
   });
 });

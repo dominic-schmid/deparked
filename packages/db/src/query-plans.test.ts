@@ -69,6 +69,7 @@ const SAMPLES: { [K in keyof Queries]: Args<K>[] } = {
   releaseTurnstileSlot: [[SITEKEY]],
   syncTurnstileHostnameCount: [[SITEKEY]],
   assignTurnstileWidget: [[{ host: HOST, sitekey: SITEKEY, now: NOW }]],
+  deleteTurnstileWidget: [["2x00000000000000000000ZZ"]],
 
   listSiteFiles: [[]],
   listSiteFilesByHost: [[HOST], [null]],

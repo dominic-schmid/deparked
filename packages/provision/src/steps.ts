@@ -32,6 +32,12 @@ export interface Step {
   title: string;
   check(ctx: ProvisionContext): Promise<StepCheck>;
   run(ctx: ProvisionContext): Promise<StepResult>;
+  /**
+   * Only for steps whose failure leaves what visitors get unchanged (turn off: offer email, statistics, bot
+   * check). After a failure the owner may skip it: `run` then only closes Deparked's own records, and `how` tells
+   * the owner what to remove in Cloudflare by hand.
+   */
+  skip?: { how: string; run(ctx: ProvisionContext): Promise<StepResult> };
 }
 
 export interface Plan {
@@ -46,6 +52,8 @@ export interface Plan {
 export interface PlanState {
   /** Index of the step the next call looks at. */
   next: number;
+  /** Skip that step (only a step with `skip`, after it failed): the owner does it by hand. */
+  skip?: boolean | undefined;
 }
 
 export const PLAN_START: PlanState = { next: 0 };
@@ -71,6 +79,8 @@ export interface StepReport {
   next?: "publish-placeholder";
   /** `failed` only: the HTTP status of the Cloudflare error that failed the step (0 when no answer came). */
   errorStatus?: number;
+  /** `failed` only, on a step the owner may skip: what doing it by hand means. Send `skip: true` to skip. */
+  skipHow?: string;
 }
 
 /**
@@ -146,10 +156,16 @@ export async function runNextStep(
   const before = plan.ctx.cf.requestCount;
   const report = (
     outcome: StepReport["outcome"],
-    fields: { message?: string; effects?: Effect[]; next?: "publish-placeholder"; errorStatus?: number } = {},
+    fields: {
+      message?: string;
+      effects?: Effect[];
+      next?: "publish-placeholder";
+      errorStatus?: number;
+      skipHow?: string | undefined;
+    } = {},
   ): StepReport => {
     const moved = outcome === "ran" || outcome === "already-done";
-    const nextState = moved ? { next: state.next + 1 } : state;
+    const nextState = moved ? { next: state.next + 1 } : { next: state.next };
     return {
       step: { id: step.id, title: step.title, index: state.next, total },
       outcome,
@@ -160,6 +176,7 @@ export async function runNextStep(
       finished: nextState.next === total,
       ...(fields.next === undefined ? {} : { next: fields.next }),
       ...(fields.errorStatus === undefined ? {} : { errorStatus: fields.errorStatus }),
+      ...(fields.skipHow === undefined ? {} : { skipHow: fields.skipHow }),
     };
   };
 
@@ -167,6 +184,13 @@ export async function runNextStep(
     try {
       const refusal = (await hooks.guard?.()) ?? null;
       if (refusal !== null) return report("blocked", { message: refusal });
+      if (state.skip === true && step.skip !== undefined) {
+        const skipped = await step.skip.run(plan.ctx);
+        await hooks.moved?.(state.next + 1);
+        return report("ran", {
+          effects: [...skipped.effects, { kind: "reuse", what: `Left for you to do by hand: ${step.skip.how}` }],
+        });
+      }
       const check = await step.check(plan.ctx);
       if (check.status === "blocked") return report("blocked", { message: check.reason });
       if (check.status === "done") {
@@ -178,10 +202,11 @@ export async function runNextStep(
       return report("ran", result);
     } catch (error) {
       if (error instanceof StepBlockedError) return report("blocked", { message: error.message });
+      const skipHow = step.skip?.how;
       if (error instanceof CloudflareApiError) {
-        return report("failed", { message: error.message, errorStatus: error.status });
+        return report("failed", { message: error.message, errorStatus: error.status, skipHow });
       }
-      if (error instanceof StepFailedError) return report("failed", { message: error.message });
+      if (error instanceof StepFailedError) return report("failed", { message: error.message, skipHow });
       throw error;
     }
   });

@@ -30,7 +30,7 @@ export const confirmationsSchema = z.object({
 });
 
 /** Untrusted: the steps check their own gates, so only the shape is checked here. */
-export const stateSchema = z.object({ next: z.number().int().min(0).max(100) });
+export const stateSchema = z.object({ next: z.number().int().min(0).max(100), skip: z.boolean().optional() });
 
 export type SetupDeps = { db: Db; setup: DomainSetup; publish: PublishContext };
 

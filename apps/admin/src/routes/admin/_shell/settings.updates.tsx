@@ -71,6 +71,7 @@ const STATUS_WORDS: Record<RowStatus, string> = {
   waiting: "Waiting for another change to finish",
   done: "Done",
   skipped: "Already done",
+  manual: "Left for you to do by hand",
   failed: "Failed",
   blocked: "Needs you",
 };
