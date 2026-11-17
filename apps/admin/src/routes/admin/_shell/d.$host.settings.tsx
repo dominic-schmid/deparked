@@ -1,5 +1,5 @@
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import { DomainActions } from "../../../components/domain-actions";
+import { DomainActions, MoveMail } from "../../../components/domain-actions";
 import { NotifyPicker } from "../../../components/notify-picker";
 import { PageError, PagePending } from "../../../components/page";
 import { getNotifyAddresses } from "../../../server/notify.functions";
@@ -19,6 +19,9 @@ function DomainSettings() {
   return (
     <div className="flex max-w-3xl flex-col gap-5">
       <NotifyPicker host={domain.host} current={domain.notifyEmail} addresses={addresses} />
+      {domain.sendsOwnMail || domain.status === "off" || domain.pending !== null ? null : (
+        <MoveMail host={domain.host} />
+      )}
       <DomainActions host={domain.host} status={domain.status} pending={domain.pending} />
     </div>
   );

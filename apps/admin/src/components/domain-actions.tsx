@@ -4,7 +4,7 @@ import { Skeleton } from "@deparked/ui/arc/skeleton";
 import { Button } from "@deparked/ui/button";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, CloudOff, Inbox, Palette, Power, Trash2 } from "lucide-react";
+import { Check, CloudOff, Inbox, Mail, Palette, Power, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { describeChange, type SetupFailure, takeOffStep } from "../server/domain-setup/functions";
 import type { DisplayStatus } from "../server/domains";
@@ -208,6 +208,25 @@ const ON_COPY = {
     action: "Continue turning on…",
   },
 };
+
+/** A domain added without Cloudflare's email service can take it on later: the add flow runs again and asks. */
+export function MoveMail({ host }: { host: string }) {
+  return (
+    <SettingsSection
+      title="Send offer emails from this domain"
+      lead={`Mail for ${host} is handled outside Cloudflare, so offer emails cannot be sent from ${host}. Moving its email to Cloudflare fixes that; mail to addresses at ${host} then stops reaching your current provider until you turn Deparked off.`}
+    >
+      <div>
+        <Button asChild variant="outline">
+          <Link to="/admin/add" search={{ host }}>
+            <Mail aria-hidden="true" />
+            Move email to Cloudflare…
+          </Link>
+        </Button>
+      </div>
+    </SettingsSection>
+  );
+}
 
 /** Turn off, Turn on and Remove for one domain, and the way to finish a change that stopped half-way. */
 export function DomainActions(props: { host: string; status: DisplayStatus; pending: PendingChange | null }) {

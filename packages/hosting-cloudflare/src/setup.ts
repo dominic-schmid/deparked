@@ -128,7 +128,8 @@ export function createCloudflareDomainSetup(options: CloudflareSetupOptions): Do
               ? { id: step.id, title: step.title, status: step.status, effects: [], reason: step.reason }
               : { id: step.id, title: step.title, status: step.status, effects: step.effects, reason: "" },
           ),
-          nothingToDo: report.nothingToDo,
+          // Moving the mail stays on offer for a domain that kept its own, so it can be done after the add.
+          nothingToDo: report.nothingToDo && !asks.includes("replaceExistingMx"),
         };
       }),
 

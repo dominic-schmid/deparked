@@ -103,6 +103,20 @@ describe("previewing an attach", () => {
     expect(confirmed.steps.find((step) => step.id === "register")).toMatchObject({ status: "needed" });
   });
 
+  it("still offers to move the mail of a domain added with its own mail kept", async () => {
+    const { setup } = await world({
+      zones: [ZONE],
+      dnsRecords: { [ZONE.id]: [{ id: "mx", type: "MX", name: HOST, content: "aspmx.l.google.com", priority: 1 }] },
+    });
+    expect((await run(setup, "attach")).at(-1)).toMatchObject({ finished: true });
+
+    const again = await setup.preview(HOST, {});
+    expect(again).toMatchObject({ asks: ["replaceExistingMx"], nothingToDo: false });
+    expect(again.steps.find((step) => step.id === "email")).toMatchObject({ status: "done" });
+    const moving = await setup.preview(HOST, { replaceExistingMx: true });
+    expect(moving.steps.find((step) => step.id === "email")).toMatchObject({ status: "needed" });
+  });
+
   it("stays under the 50 subrequests of one request on a large zone", async () => {
     const records = [
       ...Array.from({ length: 450 }, (_, index) => ({

@@ -79,6 +79,7 @@ test("a domain page exists only for a managed host", async () => {
     notifyEmail: "owner@example.com",
     notifyVerified: true,
     mail: { state: "ok", email: "owner@example.com" },
+    sendsOwnMail: false,
     pending: null,
     newOffers: 0,
   });
