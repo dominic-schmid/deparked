@@ -106,6 +106,8 @@ export type DomainDetail = DomainSummary & {
   notifyEmail: string | null;
   notifyVerified: boolean;
   mail: OfferMail;
+  /** False while the domain's own mail stays elsewhere, so offer emails cannot be sent from it. */
+  sendsOwnMail: boolean;
   /** A change to the domain that stopped half-way, or null. */
   pending: PendingChange | null;
   /** Its offers still marked new, for the Offers tab's count. */
@@ -132,6 +134,7 @@ export async function loadDomain(db: Db, host: string): Promise<DomainDetail | n
     notifyEmail: domain.notifyEmail,
     notifyVerified: domain.notifyEmail !== null && verified.has(domain.notifyEmail),
     mail: offerMail(domain.notifyEmail, addresses),
+    sendsOwnMail: domain.emailRoutingState === "enabled",
     pending: pendingChange({ ...domain, ledger, hasPages: pages.length > 0 }),
     newOffers,
   };

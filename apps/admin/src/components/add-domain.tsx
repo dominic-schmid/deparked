@@ -1,11 +1,9 @@
 import type {
   AccountDomain,
   DomainPreview,
-  DomainToday,
   SetupConfirmation,
   SetupConfirmations,
   SetupEffect,
-  SetupStepPreview,
 } from "@deparked/hosting";
 import { Alert } from "@deparked/ui/arc/alert";
 import { EmptyState } from "@deparked/ui/arc/empty-state";
@@ -33,6 +31,7 @@ import {
 } from "../server/domain-setup/functions";
 import { getDomainDetail } from "../server/domains.functions";
 import type { OfferMail } from "../server/notify-default";
+import { assembleLook, LOOK_START, type Look } from "./domain-look";
 import { OfferMailNotice } from "./offer-mail";
 import { Split } from "./onboarding";
 import {
@@ -317,27 +316,6 @@ function BackToList() {
   );
 }
 
-/** The look at a domain while it runs: the steps once they are known, and what has answered so far. */
-type Look = {
-  steps: readonly { id: string; title: string }[] | null;
-  today: DomainToday | null;
-  checked: ReadonlyMap<string, SetupStepPreview>;
-};
-
-const LOOK_START: Look = { steps: null, today: null, checked: new Map() };
-
-/** The finished look as one preview, or null while an answer is missing. */
-function assemble(look: Look): DomainPreview | null {
-  if (look.steps === null || look.today === null) return null;
-  const steps: SetupStepPreview[] = [];
-  for (const { id } of look.steps) {
-    const step = look.checked.get(id);
-    if (step === undefined) return null;
-    steps.push(step);
-  }
-  return { ...look.today, steps, nothingToDo: steps.every((step) => step.status === "done") };
-}
-
 /**
  * Looks at a domain: what it does today and what each step of adding it would do. Every question is its own
  * request and all go out at once, so the answers arrive as Cloudflare gives them. Only reads. The first refusal
@@ -435,7 +413,7 @@ function DomainReview(props: {
   const { look, failure, reload: load } = useDomainLook(props.host);
   const [given, setGiven] = useState<SetupConfirmations>({});
   const hintId = useId();
-  const result = failure ?? assemble(look);
+  const result = failure ?? assembleLook(look);
 
   if (result === null) {
     return (

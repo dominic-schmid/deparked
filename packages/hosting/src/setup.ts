@@ -75,7 +75,7 @@ export interface SetupStepPreview {
 export interface DomainPreview extends DomainToday {
   /** Step by step, with the confirmations given. */
   steps: SetupStepPreview[];
-  /** True when every step is done already. */
+  /** True when every step is done already and no confirmation is still on offer (moving the mail). */
   nothingToDo: boolean;
 }
 

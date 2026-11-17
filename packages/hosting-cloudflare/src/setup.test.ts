@@ -113,6 +113,18 @@ describe("looking at a domain before attaching", () => {
     expect(after.map((step) => step.status)).toEqual(ids.map(() => "done"));
   });
 
+  it("still offers to move the mail of a domain added with its own mail kept", async () => {
+    const { setup } = await world({
+      zones: [ZONE],
+      dnsRecords: { [ZONE.id]: [{ id: "mx", type: "MX", name: HOST, content: "aspmx.l.google.com", priority: 1 }] },
+    });
+    expect((await run(setup, "attach")).at(-1)).toMatchObject({ finished: true });
+
+    expect(await setup.inspect(HOST)).toMatchObject({ asks: ["replaceExistingMx"] });
+    expect(await setup.previewStep(HOST, "email", {})).toMatchObject({ status: "done" });
+    expect(await setup.previewStep(HOST, "email", { replaceExistingMx: true })).toMatchObject({ status: "needed" });
+  });
+
   it("keeps each question far under the 50 subrequests of one request on a large zone", async () => {
     const records = [
       ...Array.from({ length: 450 }, (_, index) => ({
