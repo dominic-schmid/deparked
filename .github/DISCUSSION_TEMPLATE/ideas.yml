@@ -1,4 +1,3 @@
-# The file name matches the Ideas category's slug: GitHub shows this form when someone starts a discussion there.
 title: "[Idea] "
 body:
   - type: textarea
