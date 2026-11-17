@@ -4,7 +4,7 @@ import { DISCUSSIONS_URL, diagnostics, diagnosticsText, REPOSITORY, type ReportI
 import { ReportDialog } from "@deparked/ui/report-problem";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRelease } from "../../../components/report";
 import { SectionPart, SettingsSection } from "../../../components/settings-ui";
 
@@ -22,7 +22,13 @@ function Help() {
   const { report } = Route.useSearch();
   const navigate = useNavigate();
   const input: ReportInput = { surface: "admin", place: "help", release };
-  const [text] = useState(() => diagnosticsText(diagnostics(input, navigator.userAgent, new Date())));
+  // Read in the browser: on the server `navigator` is Node's.
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    setText(
+      diagnosticsText(diagnostics({ surface: "admin", place: "help", release }, navigator.userAgent, new Date())),
+    );
+  }, [release]);
   const open = report === 1;
   const setOpen = (next: boolean) =>
     void navigate({ to: "/admin/settings/help", search: next ? { report: 1 } : {}, replace: true });
@@ -37,7 +43,7 @@ function Help() {
           Opens a GitHub issue with what you write and the details below. You see all of it before posting.
         </p>
         <div>
-          <Button variant="outline" onClick={() => setOpen(true)}>
+          <Button onClick={() => setOpen(true)}>
             Report a problem
           </Button>
         </div>
@@ -62,12 +68,16 @@ function Help() {
         <p className="text-sm text-muted-foreground">
           What a report includes. No domain names, account details or buyer data.
         </p>
-        <pre className="overflow-x-auto rounded-xl bg-secondary px-3 py-2.5 font-mono text-xs leading-relaxed">
-          {text}
-        </pre>
-        <div>
-          <CopyButton value={text} label="Copy diagnostics" />
-        </div>
+        {text === null ? null : (
+          <>
+            <pre className="overflow-x-auto rounded-xl bg-secondary px-3 py-2.5 font-mono text-xs leading-relaxed">
+              {text}
+            </pre>
+            <div>
+              <CopyButton value={text} label="Copy diagnostics" />
+            </div>
+          </>
+        )}
       </SectionPart>
 
       <SectionPart title="Documentation" divided>
