@@ -60,7 +60,7 @@ test("the owner sees the token's state, gets a banner when Cloudflare rejects it
   await page.reload();
   await expect(page.getByText("Works", { exact: true })).toBeVisible();
   await page.goto(`${urls.admin}/admin`);
-  await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Put your first domain in the window." })).toBeVisible();
   await expect(banner).toHaveCount(0);
 });
 

@@ -58,7 +58,9 @@ test("going on unverified, then skipping the domain, lands on the overview with 
 
   await page.getByRole("link", { name: "Skip for now" }).click();
   await page.waitForURL(`${urls.admin}/admin`);
-  await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Put your first domain in the window." })).toBeVisible();
+  // The checklist leads to the first domain; the empty card only takes over once it is hidden.
+  await expect(page.getByRole("heading", { name: "No domains yet" })).toHaveCount(0);
 
   // The steps left wait on the home screen, with their real state and nothing to tick by hand.
   const steps = page.getByRole("listitem").filter({ hasText: /to do|done/ });

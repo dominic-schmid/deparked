@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { createWriteStream, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
@@ -22,9 +22,13 @@ export async function freePort(): Promise<number> {
   return port;
 }
 
+// Windows has no process groups: a detached child gets its own console window there (Windows Terminal ignores
+// `windowsHide`), so the child stays attached and its tree is ended with taskkill instead.
+const WINDOWS = process.platform === "win32";
+
 function alive(pid: number): boolean {
   try {
-    process.kill(-pid, 0);
+    process.kill(WINDOWS ? pid : -pid, 0);
     return true;
   } catch {
     return false;
@@ -34,6 +38,10 @@ function alive(pid: number): boolean {
 /** Ends a process group (wrangler, its workerd and its esbuild): SIGTERM, then SIGKILL if it lingers. */
 export async function killGroup(pid: number): Promise<void> {
   if (!alive(pid)) return;
+  if (WINDOWS) {
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    return;
+  }
   process.kill(-pid, "SIGTERM");
   const deadline = Date.now() + 5000;
   while (alive(pid) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 50));
@@ -114,8 +122,7 @@ export async function startWorker(options: {
       ],
       {
         cwd: ROOT,
-        detached: true,
-        // A detached process gets its own console window on Windows; the output goes to the log anyway.
+        detached: !WINDOWS,
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1", NO_COLOR: "1" },

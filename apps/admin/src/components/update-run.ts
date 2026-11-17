@@ -48,6 +48,8 @@ const NO_ANSWER = "The admin did not answer. Nothing is lost: Retry continues wh
 const BUSY_TRIES = 30;
 export const HANDOVER_MS = 90_000;
 const POLL_MS = 1_500;
+/** Answers in a row from the new admin before the page reloads onto it. */
+export const HANDOVER_ANSWERS = 5;
 
 function unhealthy(target: string): RunOutcome {
   return {
@@ -108,10 +110,14 @@ export async function runChange(deps: RunDeps): Promise<RunOutcome> {
   if (deps.running !== deps.target) {
     deps.onEvent({ type: "stage", stage: "handover", status: "running" });
     const deadline = Date.now() + (deps.handoverMs ?? HANDOVER_MS);
+    // Cloudflare moves its servers to the new version one by one: one answer from the new admin does not mean the
+    // reload reaches it too, and a page from the old admin cannot load its scripts once they are replaced.
+    let answered = 0;
     for (;;) {
       if (stopped()) return { status: "stopped" };
       const health = await deps.health().catch(() => null);
-      if (health?.release === deps.target) return { status: "reloading" };
+      answered = health?.release === deps.target ? answered + 1 : 0;
+      if (answered >= HANDOVER_ANSWERS) return { status: "reloading" };
       // A build without a release (local development) cannot say which version it is: go on with it.
       if (health !== null && health.release === null) break;
       if (Date.now() >= deadline) return unhealthy(deps.target);

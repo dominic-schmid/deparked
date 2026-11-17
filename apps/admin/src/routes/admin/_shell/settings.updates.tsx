@@ -137,14 +137,13 @@ function ChangeProgress(props: {
       } else if (event.type === "step") {
         const { report } = event;
         if (report.step === null) return;
+        // A step done by an earlier run (before a reload or Retry) is just as done: no separate mark.
         const status: RowStatus =
-          report.outcome === "ran"
+          report.outcome === "ran" || report.outcome === "already-done"
             ? "done"
-            : report.outcome === "already-done"
-              ? "skipped"
-              : report.outcome === "blocked"
-                ? "blocked"
-                : "failed";
+            : report.outcome === "blocked"
+              ? "blocked"
+              : "failed";
         mark(
           report.step.id,
           status,
@@ -331,6 +330,14 @@ function UpdateAvailable(props: {
     }
   }
 
+  // The release is checked as soon as the update shows, so Install is one click (plus its confirmation).
+  const reviewed = useRef(false);
+  useEffect(() => {
+    if (reviewed.current) return;
+    reviewed.current = true;
+    void onReview();
+  });
+
   const blocked = review?.ok === true && review.steps.some((step) => step.status === "blocked");
   return (
     <SectionPart title={`Update available: Deparked ${latest.version}`} divided>
@@ -347,61 +354,63 @@ function UpdateAvailable(props: {
         <ExternalLink aria-hidden="true" className="size-3.5" />
         <span className="sr-only">(opens GitHub in a new tab)</span>
       </a>
-      <Checksum label="Checksum of its release.json (SHA-256)" value={latest.sha256} />
-      {review === null ? (
+      {review === null || review.ok ? (
         <div>
-          <Button onClick={() => void onReview()} aria-disabled={busy}>
-            {busy ? "Checking the release…" : "Review the update"}
+          <Button
+            variant="accent"
+            size="lg"
+            className={VERSION_BUTTON}
+            onClick={() => (review === null ? void onReview() : setConfirming(true))}
+            aria-disabled={busy || review === null || blocked}
+          >
+            {busy && review !== null ? "Starting…" : `Install Deparked ${latest.version}`}
           </Button>
         </div>
+      ) : null}
+      {review === null ? (
+        <p className="text-sm text-muted-foreground" aria-live="polite">
+          {busy ? "Checking the release…" : null}
+        </p>
       ) : review.ok ? (
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 text-sm">
-            <h4 className="font-semibold">What will change</h4>
-            <IconRows
-              label="What will change"
-              rows={[
-                ...review.steps.flatMap((step) =>
-                  step.effects.map((effect) => ({
-                    key: `${step.id}:${effect.what}`,
-                    icon: FileUp,
-                    tone: "neutral" as const,
-                    text: effect.what,
-                  })),
-                ),
-                {
-                  key: "republish",
-                  icon: ArrowUpCircle,
-                  tone: "neutral" as const,
-                  text: "every page is published again with the new designs",
-                },
-              ]}
-            />
-            <p className="text-muted-foreground">
-              The admin is replaced while you use it. You stay logged in; the page reloads once the new version answers.
-            </p>
-          </div>
-          {review.rollback.possible ? (
-            <p className="text-sm text-muted-foreground">
-              You can roll back to {props.installed} afterwards. {DATABASE_NOTE}
-            </p>
-          ) : (
+          {review.rollback.possible ? null : (
             <Alert tone="warning" title="No way back">
               <span className="[overflow-wrap:anywhere]">{review.rollback.reason}</span>
             </Alert>
           )}
-          {blocked ? null : (
-            <div>
-              <Button
-                variant="accent"
-                className={VERSION_BUTTON}
-                onClick={() => setConfirming(true)}
-                aria-disabled={busy}
-              >
-                {busy ? "Starting…" : `Install Deparked ${latest.version}`}
-              </Button>
+          <Disclosure summary="What will change">
+            <div className="flex flex-col gap-3 text-sm">
+              <IconRows
+                label="What will change"
+                rows={[
+                  ...review.steps.flatMap((step) =>
+                    step.effects.map((effect) => ({
+                      key: `${step.id}:${effect.what}`,
+                      icon: FileUp,
+                      tone: "neutral" as const,
+                      text: effect.what,
+                    })),
+                  ),
+                  {
+                    key: "republish",
+                    icon: ArrowUpCircle,
+                    tone: "neutral" as const,
+                    text: "every page is published again with the new designs",
+                  },
+                ]}
+              />
+              <p className="text-muted-foreground">
+                The admin is replaced while you use it. You stay logged in; the page reloads once the new version
+                answers.
+              </p>
+              {review.rollback.possible ? (
+                <p className="text-muted-foreground">
+                  You can roll back to {props.installed} afterwards. {DATABASE_NOTE}
+                </p>
+              ) : null}
+              <Checksum label="Checksum of its release.json (SHA-256)" value={latest.sha256} />
             </div>
-          )}
+          </Disclosure>
           <ConfirmDialog
             open={confirming}
             onOpenChange={setConfirming}
@@ -411,8 +420,8 @@ function UpdateAvailable(props: {
             onConfirm={() => void onInstall()}
           >
             <p>
-              Deparked downloads it from the Deparked repository on GitHub and checks every file against the checksum
-              above. That catches a download that was corrupted or altered on its way. It cannot tell whether the
+              Deparked downloads it from the Deparked repository on GitHub and checks every file against its published
+              checksum. That catches a download that was corrupted or altered on its way. It cannot tell whether the
               repository itself was compromised: install updates you trust.
             </p>
             <p>

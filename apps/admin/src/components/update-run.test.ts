@@ -1,6 +1,6 @@
 import type { SetupStepReport } from "@deparked/hosting";
 import { describe, expect, it } from "vitest";
-import { type RunDeps, runChange } from "./update-run";
+import { HANDOVER_ANSWERS, type RunDeps, runChange } from "./update-run";
 
 const TOTAL = 4;
 
@@ -57,7 +57,7 @@ describe("running an update from the page", () => {
   it("runs the steps in order, then hands over to the new admin with a reload", async () => {
     const { deps: d, calls } = deps();
     expect(await runChange(d)).toEqual({ status: "reloading" });
-    expect(calls).toEqual(["step 0", "step 1", "step 2", "step 3", "health"]);
+    expect(calls).toEqual(["step 0", "step 1", "step 2", "step 3", ...Array(HANDOVER_ANSWERS).fill("health")]);
   });
 
   it("served by the new admin, publishes every page again and finishes", async () => {
@@ -66,16 +66,15 @@ describe("running an update from the page", () => {
     expect(calls).toEqual(["step 0", "step 1", "step 2", "step 3", "republish", "finish"]);
   });
 
-  it("waits while the old admin still answers", async () => {
+  it("reloads only once the new admin answers several times in a row, not on one answer among old ones", async () => {
+    // Servers switch one by one: new, old, then only new.
+    const answers = ["1.1.0", "1.0.0", ...Array(HANDOVER_ANSWERS).fill("1.1.0")];
     let polls = 0;
     const { deps: d } = deps({
-      health: async () => {
-        polls += 1;
-        return { release: polls < 3 ? "1.0.0" : "1.1.0" };
-      },
+      health: async () => ({ release: answers[polls++] ?? "1.1.0" }),
     });
     expect(await runChange(d)).toEqual({ status: "reloading" });
-    expect(polls).toBe(3);
+    expect(polls).toBe(2 + HANDOVER_ANSWERS);
   });
 
   it("offers Roll back when the new admin never answers", async () => {
