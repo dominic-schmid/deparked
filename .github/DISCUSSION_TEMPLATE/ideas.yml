@@ -1,0 +1,17 @@
+# The file name matches the Ideas category's slug: GitHub shows this form when someone starts a discussion there.
+title: ""
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would it let you do?
+      description: The situation you are in and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you picture it working. Sketches and links welcome.
+    validations:
+      required: false
