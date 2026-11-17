@@ -1,36 +1,65 @@
 name: Release
 
-# A v* tag builds the release (admin Worker, its client files, the catalog, the migrations, release.json) and
-# publishes it as a GitHub Release. It never deploys: the owner's installer downloads and verifies it.
+# Run by hand (Actions → Release → Run workflow) on main. It picks the next version, checks and builds the release
+# (admin Worker, its client files, the catalog, the migrations, release.json), tags it, publishes it as a GitHub
+# Release with notes from the merged pull requests, then pins it in the installer with one commit to main. It never
+# deploys: the owner's installer downloads and verifies the release.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which part of the version goes up"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: write
+      pull-requests: write
+      actions: write
     steps:
+      - name: Release only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run the release on main."
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
           fetch-depth: 0
-      - name: Release only what is on main
+      - name: Next version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
-          git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::The tag points at a commit that is not on main. Tag a commit of main."
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+          IFS=. read -r major minor patch <<< "${last#v}"
+          case "$BUMP" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            *) patch=$((patch + 1)) ;;
+          esac
+          version="$major.$minor.$patch"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "::error::v$version exists already."
             exit 1
           fi
+          if [ "$(git rev-list "$last..HEAD" --count)" = "0" ]; then
+            echo "::error::Nothing was merged since $last."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "previous=$last" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -40,15 +69,43 @@ jobs:
       - name: Committed installer and lander builds are up to date
         run: pnpm check:install-fresh && pnpm check:templates-fresh
       - name: Build the release
-        # The version comes from the tag (v1.2.3 is 1.2.3); the script refuses anything else.
-        run: pnpm build:release
-      - name: Publish the GitHub Release
+        run: pnpm build:release --version "${{ steps.version.outputs.version }}"
+      - name: Tag and publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PREVIOUS: ${{ steps.version.outputs.previous }}
         run: |
-          gh release create "$TAG" release/* \
+          git tag "v$VERSION" "$GITHUB_SHA"
+          git push origin "v$VERSION"
+          sha=$(cut -d' ' -f1 release/release.json.sha256)
+          # The generated notes list every pull request merged since the previous release, with the full diff link.
+          gh release create "v$VERSION" release/* \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --title "Deparked ${TAG#v}" \
-            --notes "Install or update with the Deploy to Cloudflare button in the README. release.json SHA-256: $(cut -d' ' -f1 release/release.json.sha256)"
+            --title "Deparked $VERSION" \
+            --generate-notes \
+            --notes-start-tag "$PREVIOUS" \
+            --notes "Update from your admin under Settings → Updates; new installs use the Deploy to Cloudflare button in the README. release.json SHA-256: \`$sha\`"
+          echo "SHA256=$sha" >> "$GITHUB_ENV"
+      - name: Open the pin pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          branch="chore/pin-$VERSION"
+          git switch -c "$branch"
+          sed -i -E "s/^(  version: )\"[^\"]+\",$/\1\"$VERSION\",/; s/^(  sha256: )\"[0-9a-f]{64}\",$/\1\"$SHA256\",/" apps/install/src/server/config.ts
+          grep -q "\"$SHA256\"" apps/install/src/server/config.ts || { echo "::error::The pin was not written."; exit 1; }
+          pnpm build:install
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/install
+          git commit -m "chore(install): pin release $VERSION"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore(install): pin release $VERSION" \
+            --body "Pins the installer to v$VERSION (release.json SHA-256 \`$SHA256\`) and rebuilds its bundle. Opened by the Release workflow."
+          # A push by this workflow starts no other workflow, but a dispatch does: the required checks run on the
+          # branch. Only the pin changed, so CI runs \`check\` and skips the browser tests.
+          gh workflow run ci.yml --ref "$branch"
