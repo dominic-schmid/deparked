@@ -7,7 +7,7 @@ No skill files live in this repo. Generic skills come from the owner's `dominic-
 | Plugin | Use it for |
 | -- | -- |
 | `core` | `ship` → `self-review` → `steward` (configured by AGENTS.md "Agent workflow"), `tdd`, `grilling`, `codebase-design` (the hosting adapter boundary), `domain-modeling` (config schema), reviewer and researcher agents |
-| `landing-page` | `design-taste-frontend` (every variant and admin screen), `impeccable` (polish gate), Emil Kowalski's skills (`emil-design-eng`, `break-ui`, `review-animations`), `make-interfaces-feel-better`, `web-design-guidelines`, `modern-web-guidance` (any HTML/CSS/client JS) |
+| `landing-page` | `product-ux` (maxims for every admin, flow and installer screen; [DESIGN.md](../DESIGN.md) is this repo's layer on top), `design-taste-frontend` (lander variants), `impeccable` (polish gate), Emil Kowalski's skills (`emil-design-eng`, `break-ui`, `review-animations`), `make-interfaces-feel-better`, `web-design-guidelines`, `modern-web-guidance` (any HTML/CSS/client JS) |
 | `cloudflare-stack` | Cloudflare's official skills (`workers-best-practices`, `wrangler`, `workers-development`, `frameworks-on-cloudflare` for TanStack Start on Workers, `turnstile-spin`, `cloudflare-email-service`, `web-perf`), plus `cloudflare-d1` and `drizzle-orm-d1` for `packages/db` |
 | `security` | `security-threat-model` and `security-audit`: auth, publish, provisioning; full audits only when the owner asks |
 

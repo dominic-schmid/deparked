@@ -23,6 +23,7 @@ Before editing files for a substantial task:
 - `apps/admin`: TanStack Start app on Workers: `/admin` UI, `POST /api/offer`, publish.
 - `packages/config`: zod schema for a domain's config. `packages/templates`: `render(config, host)` → static files, plus prebuilt island bundles. `packages/ui`: Arc UI components (and a few shadcn primitives) shared by admin, install and landers. `packages/db`: D1 schema, migrations, typed queries. `packages/cf`: minimal Cloudflare API client. `packages/provision`: idempotent setup steps run by the installer and the admin, recorded in the ledger.
 - `packages/hosting`: the `HostingAdapter` interface (publish, routing, bot check, email, analytics). `packages/hosting-cloudflare`: its Cloudflare implementation on `packages/cf`. Only `packages/cf`, `packages/provision`, `packages/hosting-cloudflare` and `apps/install` (it bundles provision and cf) know Cloudflare; everything else talks to the interface, and `packages/hosting-cloudflare/src/boundary.test.ts` fails otherwise. `@deparked/hosting/testing` has an in-memory fake for tests.
+- [DESIGN.md](DESIGN.md): the "Shop Window" design of the admin, flows and installer: rules, look, wording, screens and what must never be traded away. Read it before any UI change.
 - [docs/skills.md](docs/skills.md): which skills apply and where they come from. None are in this repo: generic skills come from the `dominic-skills` marketplace (dominic-schmid/ai) as plugins, TanStack's from its npm packages via Intent. Lifecycle: `ship` → `self-review` → `steward` (core plugin, configured by "Agent workflow" below); [scripts/hooks/guard.ts](scripts/hooks/guard.ts) is this repo's PreToolUse guard.
 
 ## Hard rules
@@ -76,5 +77,5 @@ The owner wants brief, objective answers, clarifying questions on complex tasks,
 - Merge method: squash
 - Sensitive paths: `scripts/hooks/guard.ts` SENSITIVE_PATHS
 - Review bots: CodeRabbit (summary only, never wait for it)
-- UI done means: `break-ui`, `impeccable`, `web-design-guidelines`; lander variants also pass the 25-viewport layout and Lighthouse gates
+- UI done means: [DESIGN.md](DESIGN.md) followed, `product-ux`, `break-ui`, `impeccable`, `web-design-guidelines`; lander variants also pass the 25-viewport layout and Lighthouse gates
 - Attribution: none (a hook blocks it)
