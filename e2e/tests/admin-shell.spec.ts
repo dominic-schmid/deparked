@@ -12,8 +12,8 @@ test("the owner goes from an empty workspace to a handled offer, an export and a
   urls,
 }) => {
   const page = await login();
-  await expect(page.getByRole("heading", { name: "No domains yet" })).toBeVisible();
-  await expect(page.getByRole("main").getByRole("link", { name: "Add a domain" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Put your first domain in the window." })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Choose a domain" })).toBeVisible();
 
   const data = createDb(db.d1);
   const now = Date.now();

@@ -22,6 +22,8 @@ type ShellData = {
   domains: DomainSummary[];
   newOffers: number;
   tokenRejected: boolean;
+  /** A newer release than the installed one, or null. */
+  update: string | null;
   /** Where offers are emailed, for the account menu's header; null before an address exists. */
   offersEmail: string | null;
 };
@@ -162,6 +164,29 @@ function AccountMenu({ email, onLogOut }: { email: string | null; onLogOut: () =
 }
 
 /** Shown on every screen while Cloudflare refuses the token: the pages stay up, changes stop. */
+/** A newer release, until installed or dismissed. Dismissal is per version: the next release shows again. */
+function UpdateBar({ version }: { version: string }) {
+  return (
+    <AnnouncementBar
+      id={`update-${version}`}
+      label="Update"
+      messages={[
+        {
+          id: `update-${version}`,
+          message: (
+            <>
+              <strong className="font-semibold">Deparked {version} is ready.</strong>{" "}
+              <Link to="/admin/settings/updates" className="font-semibold underline underline-offset-4">
+                Install it
+              </Link>
+            </>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
 function TokenRejectedBar() {
   return (
     <div role="alert">
@@ -195,6 +220,10 @@ export function AppShell({ data, children }: { data: ShellData; children: ReactN
   const current = data.domains.find((domain) => domain.host === host);
   const logoutForm = useRef<HTMLFormElement>(null);
   const logOut = () => logoutForm.current?.submit();
+  // The Updates page itself says it, with the button.
+  const onUpdates = useRouterState({
+    select: (state) => state.location.pathname.startsWith("/admin/settings/updates"),
+  });
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -204,7 +233,11 @@ export function AppShell({ data, children }: { data: ShellData; children: ReactN
       >
         Skip to content
       </a>
-      {data.tokenRejected ? <TokenRejectedBar /> : null}
+      {data.tokenRejected ? (
+        <TokenRejectedBar />
+      ) : data.update !== null && !onUpdates ? (
+        <UpdateBar version={data.update} />
+      ) : null}
       <header
         className={cn(
           CONTENT,

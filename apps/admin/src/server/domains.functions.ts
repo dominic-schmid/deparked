@@ -10,17 +10,19 @@ import { getHosting } from "./hosting";
 import { shellTokenRejected } from "./hub/connect";
 import { requireSession } from "./require-session";
 import { loadSetupChecklist } from "./setup-checklist";
+import { readyUpdate } from "./updates/ready";
 
 /** What every screen of the workspace needs: the domains for the switcher and the inbox badge. */
 export const getShell = createServerFn().handler(async () => {
   await requireSession();
   const db = createDb(env.DB);
-  const [summaries, newOffers, tokenRejected] = await Promise.all([
+  const [summaries, newOffers, tokenRejected, update] = await Promise.all([
     loadDomainSummaries(db),
     countNewOffers(db),
     shellTokenRejected(),
+    readyUpdate(),
   ]);
-  return { ...summaries, newOffers, tokenRejected };
+  return { ...summaries, newOffers, tokenRejected, update };
 });
 
 /** The home screen: every domain, the setup steps left, the best offer waiting for an answer, the remembered view. */

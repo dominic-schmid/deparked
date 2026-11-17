@@ -64,9 +64,10 @@ test("updates from one release to the next from Settings, republishes every page
       timeout: 1000,
     });
   }).toPass();
+  // The release is checked by itself: Install is the next click, with the details folded away.
+  await expect(page.getByRole("button", { name: `Install Deparked ${TEST_RELEASE_NEXT}` })).toBeVisible();
+  await page.getByText("What will change").click();
   await expect(page.getByText(releases[TEST_RELEASE_NEXT] ?? "missing", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Review the update" }).click();
-  await expect(page.getByRole("heading", { name: "What will change" })).toBeVisible();
   // Same schema as A: the preview says the update can be rolled back.
   await expect(page.getByText(`You can roll back to ${TEST_RELEASE} afterwards.`)).toBeVisible();
 

@@ -38,7 +38,8 @@ function HomePage() {
 
   const side = bestOffer ? (
     <BestOfferCard offer={bestOffer} now={now} waiting={waiting} />
-  ) : empty ? (
+  ) : empty && checklist !== null ? null : empty ? (
+    // The checklist already leads to the first domain; once it is hidden, this card takes over.
     <EmptyState
       title="No domains yet"
       description="Each domain you add gets its own for-sale page and an offer form."
@@ -59,7 +60,7 @@ function HomePage() {
 
   return (
     <div className="flex flex-col gap-9">
-      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className={cn("grid items-stretch gap-6", side !== null && "lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]")}>
         <div className="flex min-w-0 flex-col justify-center gap-2.5">
           <Greeting />
           <h1 className="font-heading text-[clamp(2.25rem,1.5rem+2.8vw,3.25rem)] leading-[1.04] font-bold tracking-[-0.02em] text-balance [overflow-wrap:anywhere]">
