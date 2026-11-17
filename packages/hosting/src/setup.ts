@@ -43,8 +43,8 @@ export type SetupConfirmation = keyof SetupConfirmations;
 /** Where a domain's email goes today. `hosting`: through the host's own email service already. */
 export type MailState = "none" | "hosting" | "external";
 
-/** What attaching a domain would do, before anything changes. Only reads. */
-export interface DomainPreview {
+/** What a domain does today, before anything changes. */
+export interface DomainToday {
   host: string;
   /** False when the account has no such domain. */
   inAccount: boolean;
@@ -60,9 +60,22 @@ export interface DomainPreview {
   mail: MailState;
   /** The domain's current mail servers. */
   mailServers: string[];
+}
+
+/** What one step of attaching would do. `reason`: why it is `blocked`, empty otherwise. */
+export interface SetupStepPreview {
+  id: string;
+  title: string;
+  status: "done" | "needed" | "blocked";
+  effects: SetupEffect[];
+  reason: string;
+}
+
+/** What attaching a domain would do, before anything changes: `inspect` and every step's `previewStep`. */
+export interface DomainPreview extends DomainToday {
   /** Step by step, with the confirmations given. */
-  steps: { id: string; title: string; status: "done" | "needed" | "blocked"; effects: SetupEffect[]; reason: string }[];
-  /** True when every step is done already. */
+  steps: SetupStepPreview[];
+  /** True when every step is done already and no confirmation is still on offer (moving the mail). */
   nothingToDo: boolean;
 }
 
@@ -106,7 +119,13 @@ export interface DomainSetup {
     page?: number;
     exclude?: ReadonlySet<string>;
   }): Promise<AccountDomainPage>;
-  preview(host: string, confirmations: SetupConfirmations): Promise<DomainPreview>;
+  /** What the domain does today and which confirmations attaching it needs. Only reads; one call per request. */
+  inspect(host: string): Promise<DomainToday>;
+  /**
+   * What the attach step `stepId` (an id of `stepTitles`) would do, with the confirmations given. Only reads. One
+   * call per request: the steps do not depend on each other, so the browser asks for all of them at once.
+   */
+  previewStep(host: string, stepId: string, confirmations: SetupConfirmations): Promise<SetupStepPreview>;
   /** The titles of a change's steps, in order. No request. */
   stepTitles(change: SetupChange, host: string): { id: string; title: string }[];
   /** Looks at exactly one step of the change: runs it when needed. One call per request. */

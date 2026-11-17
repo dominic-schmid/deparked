@@ -1,7 +1,6 @@
 import { type Db, getDeployment, getDomain, listDomains, listSiteFilesByHost } from "@deparked/db";
 import type {
   AccountDomainPage,
-  DomainPreview,
   DomainSetup,
   SetupChange,
   SetupConfirmations,
@@ -257,11 +256,4 @@ export async function listAccountDomains(
     page: input.page,
     exclude: await managedHosts(deps.db),
   });
-}
-
-export function previewAttach(
-  deps: Pick<SetupDeps, "setup">,
-  input: { host: string; confirmations: SetupConfirmations },
-): Promise<DomainPreview> {
-  return deps.setup.preview(input.host, input.confirmations);
 }

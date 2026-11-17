@@ -21,12 +21,29 @@ import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Globe, SearchX, Undo2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { attachStep, listAccountDomains, previewDomain, type SetupFailure } from "../server/domain-setup/functions";
+import {
+  attachStep,
+  describeChange,
+  inspectDomain,
+  listAccountDomains,
+  previewDomainStep,
+  type SetupFailure,
+} from "../server/domain-setup/functions";
 import { getDomainDetail } from "../server/domains.functions";
 import type { OfferMail } from "../server/notify-default";
+import { assembleLook, LOOK_START, type Look } from "./domain-look";
 import { OfferMailNotice } from "./offer-mail";
 import { Split } from "./onboarding";
-import { BeforeAfter, itemsSummary, SetupItemList, setupItems, type TodayState } from "./pictures";
+import {
+  BeforeAfter,
+  itemsSummary,
+  type LookRow,
+  lookRows,
+  SetupItemList,
+  setupItems,
+  TODAY_ROW,
+  type TodayState,
+} from "./pictures";
 import {
   CredentialsRejected,
   type RunnerRow,
@@ -91,7 +108,6 @@ function WindowGlyph() {
 
 /** Step 1: the domains of the Cloudflare account that Deparked does not manage yet. */
 export function DomainPicker() {
-  const navigate = useNavigate();
   const list = useServerFn(listAccountDomains);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -182,10 +198,10 @@ export function DomainPicker() {
         <ul aria-label="Domains you can add" aria-busy={loading} className="flex flex-col gap-2">
           {domains.map((domain) => (
             <li key={domain.id}>
-              <button
-                type="button"
-                onClick={() => void navigate({ to: "/admin/add", search: { host: domain.name } })}
-                className="group flex min-h-14 w-full items-center gap-3.5 rounded-2xl bg-card p-2.5 pr-4 text-left shadow-rest outline-none transition-[box-shadow,background-color] duration-150 hover:shadow-lift focus-visible:ring-[3px] focus-visible:ring-ring/50 active:bg-hover motion-reduce:transition-none"
+              <Link
+                to="/admin/add"
+                search={{ host: domain.name }}
+                className="group flex min-h-14 w-full items-center gap-3.5 rounded-2xl bg-card p-2.5 pr-4 text-left shadow-rest outline-none transition-[box-shadow,background-color,scale] duration-150 hover:bg-hover hover:shadow-lift focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <WindowGlyph />
                 <span
@@ -195,15 +211,19 @@ export function DomainPicker() {
                   {domain.name}
                 </span>
                 {domain.active ? (
-                  <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-muted-foreground group-hover:text-foreground">
-                    Choose <ArrowRight aria-hidden className="size-4" />
+                  <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-muted-foreground transition-colors duration-150 group-hover:text-foreground group-focus-visible:text-foreground motion-reduce:transition-none">
+                    Choose{" "}
+                    <ArrowRight
+                      aria-hidden
+                      className="size-4 transition-transform duration-150 group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5 motion-reduce:transition-none"
+                    />
                   </span>
                 ) : (
                   <Badge variant="outline" className="shrink-0">
                     Not active on Cloudflare yet
                   </Badge>
                 )}
-              </button>
+              </Link>
             </li>
           ))}
         </ul>
@@ -296,37 +316,112 @@ function BackToList() {
   );
 }
 
+/**
+ * Looks at a domain: what it does today and what each step of adding it would do. Every question is its own
+ * request and all go out at once, so the answers arrive as Cloudflare gives them. Only reads. The first refusal
+ * ends the look; `reload` starts it again.
+ */
+function useDomainLook(host: string) {
+  const describe = useServerFn(describeChange);
+  const inspect = useServerFn(inspectDomain);
+  const previewStep = useServerFn(previewDomainStep);
+  const [look, setLook] = useState<Look>(LOOK_START);
+  const [failure, setFailure] = useState<SetupFailure | null>(null);
+  // Answers of a look that was restarted or left are dropped.
+  const current = useRef(0);
+
+  const reload = useCallback(() => {
+    current.current += 1;
+    const run = current.current;
+    const live = () => current.current === run;
+    setLook(LOOK_START);
+    setFailure(null);
+    const ask = async <T,>(question: Promise<{ ok: true; value: T } | SetupFailure>, keep: (value: T) => void) => {
+      try {
+        const answer = await question;
+        if (!live()) return;
+        if (answer.ok) keep(answer.value);
+        else setFailure((known) => known ?? answer);
+      } catch {
+        if (live()) setFailure((known) => known ?? unexpected);
+      }
+    };
+    void ask(inspect({ data: { host } }), (today) => setLook((now) => ({ ...now, today })));
+    void ask(describe({ data: { host, change: "attach" } }), ({ steps }) => {
+      setLook((now) => ({ ...now, steps }));
+      for (const { id } of steps) {
+        void ask(previewStep({ data: { host, step: id, confirmations: {} } }), (step) =>
+          setLook((now) => ({ ...now, checked: new Map(now.checked).set(id, step) })),
+        );
+      }
+    });
+  }, [describe, inspect, previewStep, host]);
+
+  useEffect(() => {
+    reload();
+    return () => {
+      current.current += 1;
+    };
+  }, [reload]);
+
+  return { look, failure, reload };
+}
+
+/** What Deparked is looking at, each row ticked when its answers are in. The rows appear once the steps are known. */
+function LookList({ look }: { look: Look }) {
+  const rows: LookRow[] = look.steps === null ? [] : lookRows(look.steps);
+  const checked = (row: LookRow) =>
+    (row.key !== TODAY_ROW || look.today !== null) && row.steps.every((id) => look.checked.has(id));
+  const done = rows.filter(checked).length;
+  return (
+    <div className="flex flex-col gap-4">
+      <Progress
+        value={done}
+        max={Math.max(rows.length, 1)}
+        label={rows.length === 0 ? "Looking…" : `${done} of ${rows.length} looked at`}
+      />
+      <ul aria-label="What Deparked looks at" className="grid gap-2 sm:grid-cols-2">
+        {rows.map((row) => {
+          const Icon = row.icon;
+          const status = checked(row) ? "done" : "running";
+          return (
+            <li key={row.key} className="flex min-w-0 items-center gap-3 rounded-2xl bg-card p-2.5 pr-4 shadow-rest">
+              <span
+                aria-hidden="true"
+                className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-secondary text-muted-foreground"
+              >
+                <Icon className="size-[18px]" strokeWidth={2} />
+              </span>
+              <span className="min-w-0 flex-1 text-sm font-medium [overflow-wrap:anywhere]">
+                {row.label}
+                <span className="sr-only">: {status === "done" ? "looked at" : "looking"}</span>
+              </span>
+              <StatusIcon status={status} />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /** Step 2: what the domain serves today and what Deparked would change, then the owner's explicit yes. */
 function DomainReview(props: {
   host: string;
   onStart: (preview: DomainPreview, confirmations: SetupConfirmations) => void;
 }) {
-  const preview = useServerFn(previewDomain);
-  const [result, setResult] = useState<DomainPreview | SetupFailure | null>(null);
+  const { look, failure, reload: load } = useDomainLook(props.host);
   const [given, setGiven] = useState<SetupConfirmations>({});
   const hintId = useId();
-
-  const load = useCallback(async () => {
-    setResult(null);
-    try {
-      const answer = await preview({ data: { host: props.host, confirmations: {} } });
-      setResult(answer.ok ? answer.value : answer);
-    } catch {
-      setResult(unexpected);
-    }
-  }, [preview, props.host]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const result = failure ?? assembleLook(look);
 
   if (result === null) {
     return (
       <div className="flex max-w-2xl flex-col gap-6">
         <FlowTitle eyebrow="Add a domain" title={props.host} size="md" focus={false}>
-          <p>Looking at what it does today…</p>
+          <p>Looking at what it does today. Nothing changes until you say yes.</p>
         </FlowTitle>
-        <Skeleton label={`Looking at ${props.host}`} lines={4} />
+        <LookList look={look} />
       </div>
     );
   }
@@ -334,7 +429,7 @@ function DomainReview(props: {
     return (
       <div className="flex max-w-2xl flex-col gap-6">
         <FlowTitle eyebrow="Add a domain" title={props.host} size="md" />
-        <Failure failure={result} retry={() => void load()} />
+        <Failure failure={result} retry={load} />
         <div>
           <BackToList />
         </div>
@@ -373,7 +468,7 @@ function DomainReview(props: {
               <NotOnCloudflare />
             </span>
           )}
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => void load()}>
+          <Button variant="outline" size="sm" className="mt-3" onClick={load}>
             Check again
           </Button>
         </Alert>

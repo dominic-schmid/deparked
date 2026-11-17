@@ -46,11 +46,11 @@ test("the owner adds a domain from the Cloudflare account, sees its placeholder 
   const page = await login();
   await page.getByRole("main").getByRole("link", { name: "Add a domain" }).click();
   const picker = page.getByRole("list", { name: "Domains you can add" });
-  await expect(picker.getByRole("button")).toHaveText([/example\.com/, /example\.org/]);
+  await expect(picker.getByRole("link")).toHaveText([/example\.com/, /example\.org/]);
   await page.getByLabel("Search your domains").fill("org");
-  await expect(picker.getByRole("button")).toHaveText([/example\.org/]);
+  await expect(picker.getByRole("link")).toHaveText([/example\.org/]);
   await page.getByLabel("Search your domains").fill("");
-  await picker.getByRole("button", { name: /example\.com/ }).click();
+  await picker.getByRole("link", { name: /example\.com/ }).click();
 
   await expect(page.getByText(`${HOST} shows nothing today.`)).toBeVisible();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
@@ -101,6 +101,39 @@ test("the owner adds a domain from the Cloudflare account, sees its placeholder 
   await returning.goto(hostUrl(HOST));
   await expect(returning.getByRole("heading", { level: 1 })).toContainText(HOST);
   await returning.close();
+});
+
+test("the look at a domain ticks off what has answered, and a refusal offers to try again", async ({ login, mock }) => {
+  const page = await login();
+  // Hold back the answer about visit counts; everything else answers at once.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/_serverFn/, async (route) => {
+    if (decodeURIComponent(route.request().url()).includes('"analytics"')) await held;
+    await route.continue();
+  });
+  await page.goto(`${new URL(page.url()).origin}/admin/add?host=${HOST}`);
+
+  const looking = page.getByRole("list", { name: "What Deparked looks at" }).getByRole("listitem");
+  await expect(looking).toHaveCount(6);
+  await expect(looking.filter({ hasText: "Its visit counts" })).toContainText("looking");
+  await expect(looking.filter({ hasText: "looked at" })).toHaveCount(5);
+  await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "5");
+  await expect(page.getByRole("button", { name: `Add ${HOST}` })).toHaveCount(0);
+
+  release();
+  await expect(page.getByRole("button", { name: `Add ${HOST}` })).toBeVisible();
+  await page.unroute(/_serverFn/);
+  // The look only reads.
+  expect(mock.calls.every((call) => call.method === "GET")).toBe(true);
+
+  mock.failNext({ route: "analytics.listSites", status: 400 });
+  await page.reload();
+  await expect(page.getByText("Cloudflare did not answer as expected")).toBeVisible();
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("button", { name: `Add ${HOST}` })).toBeVisible();
 });
 
 test("a change that stopped half-way says which one it was and offers the action that finishes it", async ({

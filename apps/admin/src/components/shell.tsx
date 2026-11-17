@@ -9,6 +9,7 @@ import {
 } from "@deparked/ui/dropdown-menu";
 import { BrandMark } from "@deparked/ui/flow";
 import { cn } from "@deparked/ui/lib/utils";
+import { PillHighlight } from "@deparked/ui/pill-highlight";
 import { Link, useNavigate, useParams, useRouterState } from "@tanstack/react-router";
 import { Check, ChevronDown, Globe, Plus, Settings } from "lucide-react";
 import { type ReactNode, useRef } from "react";
@@ -28,9 +29,25 @@ type ShellData = {
 /** The page's content width; the header lines up with it. */
 export const CONTENT = "mx-auto w-full max-w-[1160px] px-4 sm:px-6 lg:px-10";
 
-/** A pill in a row of section links. The router marks the current one with `aria-current`, which fills it. */
+/**
+ * A pill in a row of section links. The current one (`aria-current`) holds a `PillHighlight`, the fill that
+ * glides between the links of a row.
+ */
 export const PILL =
-  "inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium whitespace-nowrap text-foreground outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current=page]:bg-primary aria-[current=page]:font-semibold aria-[current=page]:text-primary-foreground active:scale-[0.97] max-sm:min-h-11 max-sm:flex-1 max-sm:px-3 motion-reduce:transition-none";
+  "relative inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium whitespace-nowrap text-foreground outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current=page]:font-semibold aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-transparent active:scale-[0.97] max-sm:min-h-11 max-sm:flex-1 max-sm:px-3 motion-reduce:transition-none";
+
+/** The row those pills sit in. `isolate`: the fill passes under every label. */
+export const PILL_ROW = "isolate flex gap-1 rounded-full bg-card p-1 shadow-rest";
+
+/** The children of a `PILL` link whose current state the router decides: the label, over the fill when current. */
+export function pillContent(group: string, label: ReactNode) {
+  return ({ isActive }: { isActive: boolean }) => (
+    <>
+      {isActive ? <PillHighlight group={group} /> : null}
+      {label}
+    </>
+  );
+}
 
 /** The tangerine count of offers still marked new; nothing at zero. */
 export function NewOffersCount({ count }: { count: number }) {
@@ -52,19 +69,20 @@ function MainNav({ newOffers }: { newOffers: number }) {
       ? "settings"
       : "domains";
   const current = (name: string) => (section === name ? "page" : undefined);
+  const fill = (name: string) => (section === name ? <PillHighlight group="main" /> : null);
   return (
-    <nav
-      aria-label="Main"
-      className="order-last flex w-full gap-1 rounded-full bg-card p-1 shadow-rest sm:order-none sm:w-auto"
-    >
+    <nav aria-label="Main" className={cn(PILL_ROW, "order-last w-full sm:order-none sm:w-auto")}>
       <Link to="/admin" activeOptions={{ exact: true }} className={PILL} aria-current={current("domains")}>
+        {fill("domains")}
         Domains
       </Link>
       <Link to="/admin/offers" className={PILL} aria-current={current("offers")}>
+        {fill("offers")}
         Offers
         <NewOffersCount count={newOffers} />
       </Link>
       <Link to="/admin/settings" className={PILL} aria-current={current("settings")}>
+        {fill("settings")}
         Settings
       </Link>
     </nav>
@@ -77,7 +95,7 @@ function DomainSwitcher({ domains, current }: { domains: DomainSummary[]; curren
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Switch domain, current: ${current.host}`}
-        className="inline-flex min-h-10 max-w-[min(18rem,calc(100vw-13rem))] min-w-0 cursor-pointer items-center gap-2 rounded-full bg-card pr-3 pl-3.5 text-sm font-medium shadow-rest outline-none hover:bg-hover focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-hover max-sm:min-h-11"
+        className="inline-flex min-h-10 max-w-[min(18rem,calc(100vw-13rem))] min-w-0 items-center gap-2 rounded-full bg-card pr-3 pl-3.5 text-sm font-medium shadow-rest outline-none hover:bg-hover focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-hover max-sm:min-h-11"
       >
         <StatusDot status={current.status} />
         <span className="truncate" translate="no">

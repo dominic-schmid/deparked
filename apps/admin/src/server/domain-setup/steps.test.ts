@@ -23,7 +23,6 @@ import {
   listAccountDomains,
   listSteps,
   placeholderPublisher,
-  previewAttach,
   type SetupDeps,
   type StepView,
   takeOffStep,
@@ -192,9 +191,9 @@ describe("adding a domain", () => {
       domains: [{ id: "zone-2", name: "example.org", active: true }],
       nextPage: null,
     });
-    const preview = await previewAttach(deps, { host: "example.org", confirmations: {} });
-    expect(preview).toMatchObject({ inAccount: true, asks: [], blockers: [] });
-    expect(preview.summary).toContain("example.org shows nothing today");
+    const today = await deps.setup.inspect("example.org");
+    expect(today).toMatchObject({ inAccount: true, asks: [], blockers: [] });
+    expect(today.summary).toContain("example.org shows nothing today");
   });
 });
 

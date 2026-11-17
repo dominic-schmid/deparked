@@ -162,7 +162,7 @@ function NoScriptFilters(props: { query: OfferQuery; hosts: readonly string[] | 
         ))}
         {props.hosts === undefined ? null : (
           <details className="w-full">
-            <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 text-sm font-medium">
+            <summary className="inline-flex min-h-11 items-center px-3 text-sm font-medium">
               Domain: {query.host ?? "All domains"}
             </summary>
             <span className="flex flex-wrap gap-1">
