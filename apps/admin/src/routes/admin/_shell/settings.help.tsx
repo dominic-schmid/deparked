@@ -43,9 +43,7 @@ function Help() {
           Opens a GitHub issue with what you write and the details below. You see all of it before posting.
         </p>
         <div>
-          <Button onClick={() => setOpen(true)}>
-            Report a problem
-          </Button>
+          <Button onClick={() => setOpen(true)}>Report a problem</Button>
         </div>
         <ReportDialog open={open} onOpenChange={setOpen} input={input} />
       </SectionPart>
