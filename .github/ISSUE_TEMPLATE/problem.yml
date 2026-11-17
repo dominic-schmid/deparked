@@ -1,0 +1,32 @@
+# The admin's and the installer's "Report a problem" open this form with `summary` and `diagnostics` filled in
+# (packages/ui/src/lib/report.ts). Keep the field IDs in step with it.
+name: Report a problem
+description: Something in Deparked did not work.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is public. Leave out domain names, email addresses, Cloudflare account details and anything about buyers.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Filled in by Deparked's "Report a problem". Find them under Settings → Help, or leave empty.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Optional. Drag or paste an image here. Hide domain names and buyer details first.
+    validations:
+      required: false

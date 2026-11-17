@@ -1,7 +1,8 @@
 import { type CommandItem, CommandPalette } from "@deparked/ui/arc/command-palette";
 import { Dialog, DialogContent } from "@deparked/ui/arc/dialog";
+import { DISCUSSIONS_URL } from "@deparked/ui/lib/report";
 import { useNavigate } from "@tanstack/react-router";
-import { Globe, HandCoins, LogOut, Plus, Search, Settings } from "lucide-react";
+import { Globe, HandCoins, LifeBuoy, LogOut, MessageCircleQuestion, Plus, Search, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { DomainSummary } from "../server/domains";
 import { StatusDot, statusLabel } from "./status";
@@ -46,12 +47,28 @@ export function CommandMenu({ domains, onLogOut }: { domains: DomainSummary[]; o
       group: "Domains",
       icon: <StatusDot status={domain.status} />,
     })),
+    {
+      id: "report",
+      label: "Report a problem",
+      group: "Help",
+      icon: <LifeBuoy className="size-4" />,
+      keywords: ["bug", "issue", "error", "broken", "support"],
+    },
+    {
+      id: "discuss",
+      label: "Ask a question or suggest an idea",
+      group: "Help",
+      icon: <MessageCircleQuestion className="size-4" />,
+      keywords: ["feedback", "feature", "help", "discussions"],
+    },
     { id: "logout", label: "Log out", group: "Account", icon: <LogOut className="size-4" />, keywords: ["sign out"] },
   ];
 
   const select = (item: CommandItem) => {
     setOpen(false);
     if (item.id === "logout") onLogOut();
+    else if (item.id === "report") navigate({ to: "/admin/settings/help", search: { report: 1 } });
+    else if (item.id === "discuss") window.open(DISCUSSIONS_URL, "_blank", "noreferrer");
     else if (item.id.startsWith("domain:")) navigate({ to: "/admin/d/$host", params: { host: item.id.slice(7) } });
     else {
       const page = PAGES.find((candidate) => `page:${candidate.to}` === item.id);

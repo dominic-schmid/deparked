@@ -207,10 +207,7 @@ function answer(error: unknown): ApiError {
     return fail("cloudflare", `Cloudflare did not answer as expected (${error.message}). Try again in a moment.`);
   }
   console.error("installer: unexpected error", error instanceof Error ? error.name : typeof error);
-  return fail(
-    "cloudflare",
-    "Something went wrong on the installer's side. Try again; if it keeps happening, open an issue.",
-  );
+  return fail("internal", "Something went wrong on the installer's side. Try again; if it keeps happening, report it.");
 }
 
 export async function check(env: Env, input: CheckRequest, clientIp: string): Promise<CheckResponse> {

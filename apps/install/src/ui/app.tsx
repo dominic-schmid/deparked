@@ -6,7 +6,9 @@ import { RadioGroup } from "@deparked/ui/arc/radio-group";
 import { Button } from "@deparked/ui/button";
 import { BrowserWindow, Disclosure, LiveTag, FlowTitle as ScreenTitle, Showcase } from "@deparked/ui/flow";
 import { Input } from "@deparked/ui/input";
+import type { ReportInput } from "@deparked/ui/lib/report";
 import { cn } from "@deparked/ui/lib/utils";
+import { ReportLink } from "@deparked/ui/report-problem";
 import {
   ArrowRight,
   Check,
@@ -89,6 +91,7 @@ export function App() {
         ) : null}
         {view.name === "pick" ? (
           <PickAccount
+            release={view.status.pinnedRelease}
             accounts={view.accounts}
             token={view.token}
             onBack={() => setView({ name: "connect", status: view.status })}
@@ -111,7 +114,10 @@ export function App() {
         ) : null}
         {view.name === "done" ? <Done setupUrl={view.setupUrl} recovered={view.recovered} /> : null}
         {view.name === "installed" ? (
-          <Installed onLink={(setupUrl, adminUrl) => setView({ name: "done", setupUrl, adminUrl, recovered: true })} />
+          <Installed
+            release={view.status.pinnedRelease}
+            onLink={(setupUrl, adminUrl) => setView({ name: "done", setupUrl, adminUrl, recovered: true })}
+          />
         ) : null}
       </Screen>
     </Shell>
@@ -131,13 +137,21 @@ function Unreachable(props: { onRetry: () => void }) {
   );
 }
 
-function ErrorNote(props: { error: ApiError | null; id?: string }) {
+function ErrorNote(props: { error: ApiError | null; id?: string; release: string | null }) {
   if (props.error === null) return null;
   return (
-    <p id={props.id} role="alert" className="mt-2.5 flex gap-2 text-sm text-destructive">
-      <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
-      <span>{props.error.message}</span>
-    </p>
+    <>
+      <p id={props.id} role="alert" className="mt-2.5 flex gap-2 text-sm text-destructive">
+        <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <span>{props.error.message}</span>
+      </p>
+      {props.error.error === "internal" ? (
+        <ReportLink
+          className="ml-6"
+          input={{ surface: "installer", place: "install", release: props.release, code: "internal" }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -147,6 +161,7 @@ function TokenField(props: {
   onChange: (value: string) => void;
   error: ApiError | null;
   label?: string;
+  release: string | null;
 }) {
   const id = useId();
   const hint = useId();
@@ -196,7 +211,7 @@ function TokenField(props: {
       <p id={hint} className="mt-2 text-[13px] text-muted-foreground">
         It stays in this tab's memory and goes only to your installer. Close the tab and it is gone.
       </p>
-      <ErrorNote error={props.error} id={errorId} />
+      <ErrorNote error={props.error} id={errorId} release={props.release} />
     </div>
   );
 }
@@ -313,7 +328,7 @@ function Connect(props: {
 
       <Section title="Paste it here" number={2}>
         <form onSubmit={submit} noValidate className="flex max-w-xl flex-col gap-4">
-          <TokenField value={token} onChange={setToken} error={error} />
+          <TokenField value={token} onChange={setToken} error={error} release={props.status.pinnedRelease} />
           <div>
             <Button type="submit" variant="accent" size="lg" className="h-12 px-6" disabled={busy}>
               {busy ? <Spinner /> : null}
@@ -327,6 +342,7 @@ function Connect(props: {
 }
 
 function PickAccount(props: {
+  release: string | null;
   accounts: Account[];
   token: string;
   onBack: () => void;
@@ -380,7 +396,7 @@ function PickAccount(props: {
             }))}
           />
         </div>
-        <ErrorNote error={error} />
+        <ErrorNote error={error} release={props.release} />
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap [&>*]:w-full sm:[&>*]:w-auto">
           <Button type="submit" variant="accent" size="lg" className="h-12 px-6" disabled={busy}>
             {busy ? <Spinner /> : null}
@@ -570,7 +586,9 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
       detail: step.status === "done" ? ["already done"] : [],
     })),
   );
-  const [problem, setProblem] = useState<{ title: string; detail: string } | null>(null);
+  const [problem, setProblem] = useState<{ title: string; detail: string; report?: ReportInput } | null>(null);
+  // Runs in a row that stopped at the same step: a report is offered once a retry failed too.
+  const stops = useRef({ step: "", count: 0 });
   const [handing, setHanding] = useState(false);
   const [announce, setAnnounce] = useState("Starting the install.");
   const next = useRef(0);
@@ -587,6 +605,19 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
     if (running.current) return;
     running.current = true;
     setProblem(null);
+    const reportOf = (step: string, code: string): ReportInput | undefined => {
+      stops.current = { step, count: stops.current.step === step ? stops.current.count + 1 : 1 };
+      return stops.current.count >= 2 || code === "internal"
+        ? {
+            surface: "installer",
+            place: step === "finish" ? "install-finish" : "install",
+            release: props.ready.release,
+            code,
+            step,
+            attempts: stops.current.count,
+          }
+        : undefined;
+    };
     for (let guard = 0; guard < 40; guard += 1) {
       const id = props.ready.steps[next.current]?.id;
       if (id === undefined) break;
@@ -594,7 +625,12 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
       const result = await runStep({ token, accountId, next: next.current });
       if (!result.ok) {
         update(id, { state: "failed" });
-        setProblem({ title: "The install stopped", detail: result.message });
+        const offer = result.error === "busy" ? undefined : reportOf(id, result.error);
+        setProblem({
+          title: "The install stopped",
+          detail: result.message,
+          ...(offer === undefined ? {} : { report: offer }),
+        });
         setAnnounce(`Stopped: ${result.message}`);
         running.current = false;
         return;
@@ -607,10 +643,15 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
       if (report.outcome === "failed" || report.outcome === "blocked") {
         update(id, { state: "failed" });
         const title = report.step?.title ?? "A step";
+        const offer = report.outcome === "failed" ? reportOf(id, "failed") : undefined;
         setProblem(
           report.outcome === "blocked"
             ? { title: `“${title}” needs you first`, detail: report.message }
-            : { title: `“${title}” did not finish`, detail: report.message },
+            : {
+                title: `“${title}” did not finish`,
+                detail: report.message,
+                ...(offer === undefined ? {} : { report: offer }),
+              },
         );
         setAnnounce(`${report.step?.title ?? "A step"} stopped: ${report.message}`);
         running.current = false;
@@ -631,10 +672,15 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
     if (finished.ok) onDone(finished.setupUrl, finished.adminUrl);
     else {
       setHanding(false);
-      setProblem({ title: "The setup link could not be made", detail: finished.message });
+      const offer = reportOf("finish", finished.error);
+      setProblem({
+        title: "The setup link could not be made",
+        detail: finished.message,
+        ...(offer === undefined ? {} : { report: offer }),
+      });
       setAnnounce(`Stopped: ${finished.message}`);
     }
-  }, [accountId, onDone, props.ready.steps, token, update]);
+  }, [accountId, onDone, props.ready.release, props.ready.steps, token, update]);
 
   useEffect(() => {
     void run();
@@ -673,6 +719,7 @@ function Installing(props: { token: string; ready: Ready; onDone: (setupUrl: str
           <Button ref={retryRef} variant="outline" className="mt-3" onClick={() => void run()}>
             <RotateCw aria-hidden /> Retry
           </Button>
+          {problem.report === undefined ? null : <ReportLink className="mt-1 block" input={problem.report} />}
         </Alert>
       )}
       <ol aria-label="Install steps" className="flex flex-col gap-2">
@@ -816,7 +863,7 @@ async function rollBack(input: { token: string; accountId: string }, onStep: (re
   return { ok: false as const, error: "cloudflare" as const, message: "The rollback did not finish. Try again." };
 }
 
-function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void }) {
+function Installed(props: { release: string | null; onLink: (setupUrl: string, adminUrl: string) => void }) {
   const adminUrl = adminUrlFromHere();
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState<Action | null>(null);
@@ -894,7 +941,7 @@ function Installed(props: { onLink: (setupUrl: string, adminUrl: string) => void
             else void recover("link");
           }}
         >
-          <TokenField value={token} onChange={setToken} error={error} />
+          <TokenField value={token} onChange={setToken} error={error} release={props.release} />
           {accounts === null ? null : (
             <div className="grid gap-2">
               <p className="text-sm font-medium">The token reaches several accounts. Which one is this?</p>

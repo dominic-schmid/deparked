@@ -7,6 +7,7 @@ import { Check, Circle, CircleAlert, Clock, LoaderCircle, Minus } from "lucide-r
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { SetupFailure } from "../server/domain-setup/functions";
 import type { StepView } from "../server/domain-setup/steps";
+import { AdminReportLink } from "./report";
 import { retryWait } from "./setup-retry";
 
 export type StepRun = (state: SetupState) => Promise<{ ok: true; value: StepView } | SetupFailure>;
@@ -15,7 +16,18 @@ export type RowStatus = "pending" | "running" | "waiting" | "done" | "skipped" |
 
 type Row = { id: string; title: string; status: RowStatus; effects: SetupEffect[] };
 
-type Problem = { kind: "failed" | "blocked"; message: string; credentialsRejected: boolean; skipHow?: string };
+type Problem = {
+  kind: "failed" | "blocked";
+  message: string;
+  credentialsRejected: boolean;
+  skipHow?: string;
+  /** The step that stopped, and how many runs in a row stopped there: a problem report waits for a failed retry. */
+  step: string;
+  attempts: number;
+};
+
+/** A failure is worth reporting once a retry failed too: most clear on their own. */
+export const REPORT_AFTER = 2;
 
 const STUCK =
   "This step kept going without finishing. Nothing is lost and every step is safe to repeat: try again in a minute.";
@@ -89,6 +101,7 @@ export function useStepRunner(props: {
   const state = useRef<SetupState>({ next: 0 });
   const alive = useRef(true);
   const started = useRef(false);
+  const stops = useRef({ index: -1, count: 0 });
 
   const mark = useCallback(
     (index: number, status: RowStatus, effects?: SetupEffect[]) => {
@@ -105,6 +118,10 @@ export function useStepRunner(props: {
 
   const go = useCallback(async () => {
     setProblem(null);
+    const stop = (index: number, problem: Omit<Problem, "step" | "attempts">) => {
+      stops.current = stops.current.index === index ? { index, count: stops.current.count + 1 } : { index, count: 1 };
+      setProblem({ ...problem, step: props.steps[index]?.id ?? "unknown", attempts: stops.current.count });
+    };
     setRunning(true);
     let busyTries = 0;
     let workingTries = 0;
@@ -127,7 +144,7 @@ export function useStepRunner(props: {
       state.current = { next: state.current.next };
       if (!result.ok) {
         mark(index, "failed");
-        setProblem({ kind: "failed", message: result.message, credentialsRejected: result.credentialsRejected });
+        stop(index, { kind: "failed", message: result.message, credentialsRejected: result.credentialsRejected });
         break;
       }
       const view = result.value;
@@ -138,7 +155,7 @@ export function useStepRunner(props: {
         const wait = retryWait(view.outcome, working ? workingTries : busyTries);
         if (wait === null) {
           mark(index, "failed");
-          setProblem({ kind: "failed", message: working ? STUCK : view.message, credentialsRejected: false });
+          stop(index, { kind: "failed", message: working ? STUCK : view.message, credentialsRejected: false });
           break;
         }
         if (!working) mark(index, "waiting");
@@ -147,9 +164,10 @@ export function useStepRunner(props: {
       }
       workingTries = 0;
       busyTries = 0;
+      if (view.outcome !== "failed" && view.outcome !== "blocked") stops.current = { index: -1, count: 0 };
       if (view.outcome === "failed" || view.outcome === "blocked") {
         mark(index, view.outcome);
-        setProblem({
+        stop(index, {
           kind: view.outcome,
           message: view.message,
           credentialsRejected: view.credentialsRejected,
@@ -174,7 +192,7 @@ export function useStepRunner(props: {
       }
     }
     if (alive.current) setRunning(false);
-  }, [mark, run, onFinished]);
+  }, [mark, run, onFinished, props.steps]);
 
   useEffect(() => {
     alive.current = true;
@@ -205,6 +223,8 @@ export function SetupRunner(props: {
   label: string;
   /** Shown next to "Check again" when a step needs the owner: where they can act on it. */
   blockedAction?: ReactNode;
+  /** Where a problem report says this change ran. */
+  place: "domain-setup" | "uninstall";
 }) {
   const { rows, problem, running, announcement, retry: go, skip } = useStepRunner(props);
 
@@ -276,6 +296,9 @@ export function SetupRunner(props: {
             )}
             {problem.kind === "blocked" ? props.blockedAction : null}
           </span>
+          {problem.kind === "failed" && problem.attempts >= REPORT_AFTER ? (
+            <AdminReportLink place={props.place} code="failed" step={problem.step} attempts={problem.attempts} />
+          ) : null}
         </Alert>
       )}
     </div>

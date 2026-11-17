@@ -8,6 +8,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Check, Database, Download, Globe, Inbox } from "lucide-react";
 import { type FormEvent, useCallback, useId, useState } from "react";
 import { PageError, PagePending } from "../../../components/page";
+import { AdminReportLink } from "../../../components/report";
 import {
   effectRows,
   IconRows,
@@ -76,6 +77,7 @@ function Progress(props: { steps: { id: string; title: string }[]; confirmation:
         run={run}
         onFinished={() => setFinished(true)}
         label="Steps to uninstall Deparked"
+        place="uninstall"
       />
     </div>
   );
@@ -176,7 +178,8 @@ function DangerZone() {
           <CredentialsRejected message={described.message} />
         ) : (
           <Alert tone="danger" title="Uninstall cannot start right now">
-            <span className="[overflow-wrap:anywhere]">{described.message}</span>
+            <span className="block [overflow-wrap:anywhere]">{described.message}</span>
+            <AdminReportLink place="uninstall" code="cannot-start" />
           </Alert>
         )
       ) : running !== null ? (

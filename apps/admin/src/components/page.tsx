@@ -2,6 +2,7 @@ import { Alert } from "@deparked/ui/arc/alert";
 import { Skeleton } from "@deparked/ui/arc/skeleton";
 import { Button } from "@deparked/ui/button";
 import { useRouter } from "@tanstack/react-router";
+import { AdminReportLink } from "./report";
 
 /** A route's `pendingComponent`. */
 export function PagePending() {
@@ -21,6 +22,7 @@ export function PageError() {
       <Button variant="outline" size="sm" className="mt-2" onClick={() => router.invalidate()}>
         Try again
       </Button>
+      <AdminReportLink className="mt-1 block" place="page-error" />
     </Alert>
   );
 }

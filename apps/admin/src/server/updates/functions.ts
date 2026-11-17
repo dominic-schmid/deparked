@@ -6,6 +6,7 @@ import { z } from "zod";
 import { stateSchema } from "../domain-setup/steps";
 import { hub } from "../hub/connect";
 import { requireSession } from "../require-session";
+import { runningRelease } from "../running-release";
 import { fetchLatestRelease, releaseLocation } from "./latest";
 import * as updates from "./updates";
 
@@ -23,12 +24,6 @@ async function guarded<T>(run: () => Promise<T>): Promise<Result<T>> {
 
 const vars = () => env as unknown as Record<string, unknown>;
 
-/** The release this isolate runs: the binding the install and every update set. */
-function running(): string | null {
-  const value = vars().DEPARKED_RELEASE;
-  return typeof value === "string" && value !== "" ? value : null;
-}
-
 async function view(force: boolean): Promise<updates.UpdatesView> {
   const db = createDb(env.DB);
   const setup = await hub();
@@ -42,7 +37,7 @@ async function view(force: boolean): Promise<updates.UpdatesView> {
   });
   return {
     status,
-    running: running(),
+    running: runningRelease(),
     latest,
     checkError,
     available: updates.isAvailable(status, latest),
@@ -108,7 +103,7 @@ export const finishRelease = createServerFn({ method: "POST" }).handler(async ()
   return guarded(async () => {
     const setup = await hub();
     const { change } = await setup.releaseStatus();
-    const blocker = updates.finishBlocker(change, running());
+    const blocker = updates.finishBlocker(change, runningRelease());
     if (blocker !== null) return { ok: false as const, message: blocker };
     return setup.finishRelease();
   });

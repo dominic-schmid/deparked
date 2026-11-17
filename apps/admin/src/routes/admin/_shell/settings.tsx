@@ -1,6 +1,6 @@
 import { cn } from "@deparked/ui/lib/utils";
 import { createFileRoute, getRouteApi, Link, Outlet, useMatch, useSearch } from "@tanstack/react-router";
-import { ChevronLeft, CloudCog, Download, KeyRound, type LucideIcon, Mail, Trash2 } from "lucide-react";
+import { ChevronLeft, CloudCog, Download, KeyRound, LifeBuoy, type LucideIcon, Mail, Trash2 } from "lucide-react";
 import { PageError, PagePending } from "../../../components/page";
 import { getNotifyAddresses } from "../../../server/notify.functions";
 import { getUpdates } from "../../../server/updates/functions";
@@ -37,7 +37,7 @@ const DOT: Record<Exclude<Tone, null>, string> = {
 };
 
 type Row = {
-  to: "/admin/settings" | `/admin/settings/${"password" | "cloudflare" | "updates" | "danger"}`;
+  to: "/admin/settings" | `/admin/settings/${"password" | "cloudflare" | "updates" | "help" | "danger"}`;
   name: string;
   icon: LucideIcon;
   status: string;
@@ -97,6 +97,13 @@ function useRows(): Row[] {
     },
     { to: "/admin/settings/cloudflare", name: "Cloudflare connection", icon: CloudCog, ...token },
     { to: "/admin/settings/updates", name: "Updates", icon: Download, ...release },
+    {
+      to: "/admin/settings/help",
+      name: "Help",
+      icon: LifeBuoy,
+      status: "Report a problem, ask a question",
+      tone: null,
+    },
     {
       to: "/admin/settings/danger",
       name: "Remove Deparked",

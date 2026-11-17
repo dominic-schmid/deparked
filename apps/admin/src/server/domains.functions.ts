@@ -9,9 +9,13 @@ import { hostSchema, loadDomain, loadDomainSummaries, loadOverview } from "./dom
 import { getHosting } from "./hosting";
 import { shellTokenRejected } from "./hub/connect";
 import { requireSession } from "./require-session";
+import { runningRelease } from "./running-release";
 import { loadSetupChecklist } from "./setup-checklist";
 
-/** What every screen of the workspace needs: the domains for the switcher and the inbox badge. */
+/**
+ * What every screen of the workspace needs: the domains for the switcher, the inbox badge, and the release (for
+ * problem reports).
+ */
 export const getShell = createServerFn().handler(async () => {
   await requireSession();
   const db = createDb(env.DB);
@@ -20,7 +24,7 @@ export const getShell = createServerFn().handler(async () => {
     countNewOffers(db),
     shellTokenRejected(),
   ]);
-  return { ...summaries, newOffers, tokenRejected };
+  return { ...summaries, newOffers, tokenRejected, release: runningRelease() };
 });
 
 /** The home screen: every domain, the setup steps left, the best offer waiting for an answer, the remembered view. */

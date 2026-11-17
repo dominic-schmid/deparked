@@ -27,8 +27,10 @@ import type { OfferMail } from "../server/notify-default";
 import { OfferMailNotice } from "./offer-mail";
 import { Split } from "./onboarding";
 import { BeforeAfter, itemsSummary, SetupItemList, setupItems, type TodayState } from "./pictures";
+import { AdminReportLink } from "./report";
 import {
   CredentialsRejected,
+  REPORT_AFTER,
   type RunnerRow,
   STATUS_WORDS,
   StatusIcon,
@@ -596,6 +598,15 @@ function DomainProgress(props: { preview: DomainPreview; confirmations: SetupCon
           >
             Retry
           </Button>
+          {problem.attempts >= REPORT_AFTER ? (
+            <AdminReportLink
+              className="mt-1 block"
+              place="domain-setup"
+              code="failed"
+              step={problem.step}
+              attempts={problem.attempts}
+            />
+          ) : null}
         </Alert>
       ) : (
         <Alert tone="warning" title={`“${stopped?.title ?? "A step"}” needs you`}>

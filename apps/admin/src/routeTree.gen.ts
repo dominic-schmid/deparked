@@ -30,6 +30,7 @@ import { Route as AdminShellDHostRouteImport } from './routes/admin/_shell/d.$ho
 import { Route as AdminShellSettingsIndexRouteImport } from './routes/admin/_shell/settings.index'
 import { Route as AdminShellSettingsCloudflareRouteImport } from './routes/admin/_shell/settings.cloudflare'
 import { Route as AdminShellSettingsDangerRouteImport } from './routes/admin/_shell/settings.danger'
+import { Route as AdminShellSettingsHelpRouteImport } from './routes/admin/_shell/settings.help'
 import { Route as AdminShellSettingsPasswordRouteImport } from './routes/admin/_shell/settings.password'
 import { Route as AdminShellSettingsUpdatesRouteImport } from './routes/admin/_shell/settings.updates'
 import { Route as AdminShellDHostIndexRouteImport } from './routes/admin/_shell/d.$host.index'
@@ -145,6 +146,11 @@ const AdminShellSettingsDangerRoute =
     path: '/danger',
     getParentRoute: () => AdminShellSettingsRoute,
   } as any)
+const AdminShellSettingsHelpRoute = AdminShellSettingsHelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => AdminShellSettingsRoute,
+} as any)
 const AdminShellSettingsPasswordRoute =
   AdminShellSettingsPasswordRouteImport.update({
     id: '/password',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/admin/d/$host': typeof AdminShellDHostRouteWithChildren
   '/admin/settings/cloudflare': typeof AdminShellSettingsCloudflareRoute
   '/admin/settings/danger': typeof AdminShellSettingsDangerRoute
+  '/admin/settings/help': typeof AdminShellSettingsHelpRoute
   '/admin/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/settings/': typeof AdminShellSettingsIndexRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/admin/setup': typeof AdminSetupIndexRoute
   '/admin/settings/cloudflare': typeof AdminShellSettingsCloudflareRoute
   '/admin/settings/danger': typeof AdminShellSettingsDangerRoute
+  '/admin/settings/help': typeof AdminShellSettingsHelpRoute
   '/admin/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/settings': typeof AdminShellSettingsIndexRoute
@@ -256,6 +264,7 @@ export interface FileRoutesById {
   '/admin/_shell/d/$host': typeof AdminShellDHostRouteWithChildren
   '/admin/_shell/settings/cloudflare': typeof AdminShellSettingsCloudflareRoute
   '/admin/_shell/settings/danger': typeof AdminShellSettingsDangerRoute
+  '/admin/_shell/settings/help': typeof AdminShellSettingsHelpRoute
   '/admin/_shell/settings/password': typeof AdminShellSettingsPasswordRoute
   '/admin/_shell/settings/updates': typeof AdminShellSettingsUpdatesRoute
   '/admin/_shell/settings/': typeof AdminShellSettingsIndexRoute
@@ -287,6 +296,7 @@ export interface FileRouteTypes {
     | '/admin/d/$host'
     | '/admin/settings/cloudflare'
     | '/admin/settings/danger'
+    | '/admin/settings/help'
     | '/admin/settings/password'
     | '/admin/settings/updates'
     | '/admin/settings/'
@@ -313,6 +323,7 @@ export interface FileRouteTypes {
     | '/admin/setup'
     | '/admin/settings/cloudflare'
     | '/admin/settings/danger'
+    | '/admin/settings/help'
     | '/admin/settings/password'
     | '/admin/settings/updates'
     | '/admin/settings'
@@ -342,6 +353,7 @@ export interface FileRouteTypes {
     | '/admin/_shell/d/$host'
     | '/admin/_shell/settings/cloudflare'
     | '/admin/_shell/settings/danger'
+    | '/admin/_shell/settings/help'
     | '/admin/_shell/settings/password'
     | '/admin/_shell/settings/updates'
     | '/admin/_shell/settings/'
@@ -515,6 +527,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminShellSettingsDangerRouteImport
       parentRoute: typeof AdminShellSettingsRoute
     }
+    '/admin/_shell/settings/help': {
+      id: '/admin/_shell/settings/help'
+      path: '/help'
+      fullPath: '/admin/settings/help'
+      preLoaderRoute: typeof AdminShellSettingsHelpRouteImport
+      parentRoute: typeof AdminShellSettingsRoute
+    }
     '/admin/_shell/settings/password': {
       id: '/admin/_shell/settings/password'
       path: '/password'
@@ -563,6 +582,7 @@ declare module '@tanstack/react-router' {
 interface AdminShellSettingsRouteChildren {
   AdminShellSettingsCloudflareRoute: typeof AdminShellSettingsCloudflareRoute
   AdminShellSettingsDangerRoute: typeof AdminShellSettingsDangerRoute
+  AdminShellSettingsHelpRoute: typeof AdminShellSettingsHelpRoute
   AdminShellSettingsPasswordRoute: typeof AdminShellSettingsPasswordRoute
   AdminShellSettingsUpdatesRoute: typeof AdminShellSettingsUpdatesRoute
   AdminShellSettingsIndexRoute: typeof AdminShellSettingsIndexRoute
@@ -571,6 +591,7 @@ interface AdminShellSettingsRouteChildren {
 const AdminShellSettingsRouteChildren: AdminShellSettingsRouteChildren = {
   AdminShellSettingsCloudflareRoute: AdminShellSettingsCloudflareRoute,
   AdminShellSettingsDangerRoute: AdminShellSettingsDangerRoute,
+  AdminShellSettingsHelpRoute: AdminShellSettingsHelpRoute,
   AdminShellSettingsPasswordRoute: AdminShellSettingsPasswordRoute,
   AdminShellSettingsUpdatesRoute: AdminShellSettingsUpdatesRoute,
   AdminShellSettingsIndexRoute: AdminShellSettingsIndexRoute,

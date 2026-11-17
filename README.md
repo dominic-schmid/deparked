@@ -88,6 +88,16 @@ what it did not create, so two things stay for you to delete in Cloudflare's das
 `deparked-install` and the database `deparked`, which the Deploy button made. Delete your copy of the installer
 repository on GitHub too, or Cloudflare redeploys the installer on its next push.
 
+## Reporting a problem
+
+Deparked sends nothing home: its logs stay in your Cloudflare account. When something breaks on Deparked's side, the
+admin and the installer show **Report this problem**; it is always under Settings → Help and in the search menu (⌘K).
+You write what happened, and it opens a GitHub issue with that and a few diagnostics: the release, where it failed (an
+error code and step name), how many times you tried, your browser and OS family, and the time to the minute. Never
+domain names, account details, tokens or buyer data. You see all of it before posting, the issue is public, and a
+screenshot can be added on GitHub. Questions and ideas go to
+[GitHub Discussions](https://github.com/dominic-schmid/deparked/discussions).
+
 ## Free plan limits
 
 Deparked is built for Cloudflare's free plan. The binding limit is Turnstile (20 bot-check widgets of 10 hostnames each:

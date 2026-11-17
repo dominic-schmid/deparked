@@ -2,6 +2,7 @@ import type { ReleaseChange, ReleasePin, ReleaseStatus, SetupEffect } from "@dep
 import { Alert } from "@deparked/ui/arc/alert";
 import { Button } from "@deparked/ui/button";
 import { Disclosure } from "@deparked/ui/flow";
+import type { ReportInput } from "@deparked/ui/lib/report";
 import { cn } from "@deparked/ui/lib/utils";
 import { createFileRoute, getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -9,6 +10,7 @@ import { ArrowUpCircle, Check, ExternalLink, FileUp, Info, RotateCcw } from "luc
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "../../../components/confirm-dialog";
 import { runPublish } from "../../../components/editor/publish-loop";
+import { AdminReportLink } from "../../../components/report";
 import { IconRows, SectionPart, SettingsSection } from "../../../components/settings-ui";
 import { CredentialsRejected, type RowStatus, StatusIcon } from "../../../components/setup-runner";
 import { RelativeTime } from "../../../components/time";
@@ -48,11 +50,17 @@ function Checksum({ value, label }: { value: string; label: string }) {
   );
 }
 
-function Problem(props: { message: string; credentialsRejected: boolean; title: string }) {
+function Problem(props: {
+  message: string;
+  credentialsRejected: boolean;
+  title: string;
+  report?: Omit<ReportInput, "surface" | "release">;
+}) {
   if (props.credentialsRejected) return <CredentialsRejected message={props.message} />;
   return (
     <Alert tone="danger" title={props.title}>
-      <span className="[overflow-wrap:anywhere]">{props.message}</span>
+      <span className="block [overflow-wrap:anywhere]">{props.message}</span>
+      {props.report === undefined ? null : <AdminReportLink {...props.report} />}
     </Alert>
   );
 }
@@ -261,6 +269,11 @@ function ChangeProgress(props: {
           title={failed.unhealthy === true ? `Deparked ${version} does not answer` : "This step did not work"}
           message={failed.message}
           credentialsRejected={failed.credentialsRejected}
+          report={{
+            place: "update",
+            code: failed.unhealthy === true ? "unhealthy" : "failed",
+            step: typeof failed.at === "string" ? failed.at : `step-${failed.at}`,
+          }}
         />
       )}
       {outcome?.status === "done" ? (

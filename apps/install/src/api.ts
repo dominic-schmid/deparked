@@ -16,7 +16,9 @@ export type ErrorCode =
   | "release"
   | "busy"
   | "not-installed"
-  | "cloudflare";
+  | "cloudflare"
+  /** The installer's own bug: the page offers a problem report. */
+  | "internal";
 
 export interface ApiError {
   ok: false;

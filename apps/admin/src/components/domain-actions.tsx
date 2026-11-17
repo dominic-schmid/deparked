@@ -145,6 +145,7 @@ function ChangeProgress(props: { host: string; change: Change; steps: Descriptio
         run={run}
         onFinished={onFinished}
         label={`Steps to ${copy.action.toLowerCase()} ${host}`}
+        place="domain-setup"
       />
     </div>
   );

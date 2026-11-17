@@ -11,6 +11,7 @@ import { type ReactNode, type Ref, useState } from "react";
 import type { EditorPublishState, HistoryItem } from "../../server/editor/editor";
 import { ConfirmDialog } from "../confirm-dialog";
 import { relativeTime } from "../format";
+import { AdminReportLink } from "../report";
 import { type ChangeValue, type FieldChange, variantLabel } from "./form";
 import type { PublishOutcome } from "./publish-loop";
 
@@ -296,6 +297,9 @@ function Outcome(props: { view: PublishView; host: string; onFollow: () => void 
             </Button>
           ) : null}
         </span>
+        {outcome.reason === "busy" || outcome.reason === "credentials-rejected" ? null : (
+          <AdminReportLink place="publish" code={outcome.reason} />
+        )}
       </span>
     </Alert>
   );
