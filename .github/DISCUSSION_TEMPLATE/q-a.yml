@@ -1,5 +1,4 @@
 # The file name matches the Q&A category's slug: GitHub shows this form when someone starts a discussion there.
-title: ""
 body:
   - type: markdown
     attributes:
