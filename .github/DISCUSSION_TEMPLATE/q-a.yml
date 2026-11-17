@@ -1,5 +1,3 @@
-# The file name matches the Q&A category's slug: GitHub shows this form when someone starts a discussion there.
-title: ""
 body:
   - type: markdown
     attributes:
@@ -7,20 +5,17 @@ body:
         Discussions are public. Leave out Cloudflare tokens, setup links, account IDs and anything about buyers.
         Something broken? [Report a problem](https://github.com/dominic-schmid/deparked/issues/new/choose) instead.
   - type: textarea
-    id: question
     attributes:
       label: What are you trying to do?
       description: What you did, what you expected, and what happened instead.
     validations:
       required: true
   - type: input
-    id: version
     attributes:
       label: Deparked version
       description: Settings → Updates in your admin. Leave empty if you have not installed yet.
       placeholder: "0.1.5"
   - type: dropdown
-    id: area
     attributes:
       label: Where
       options:
