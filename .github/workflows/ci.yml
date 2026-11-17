@@ -14,6 +14,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Docs and GitHub-only files (templates, the release workflow) cannot change what the browser tests see: those
+  # pushes skip e2e and lander. A skipped job still counts as passed for the required checks.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          code=$(git diff --name-only "$BASE" HEAD \
+            | grep -vE '\.md$|^docs/|^LICENSE|^\.github/' \
+            | head -n1)
+          # The CI workflow itself is code: a change to it runs everything.
+          if git diff --name-only "$BASE" HEAD | grep -qx '.github/workflows/ci.yml'; then code=ci; fi
+          echo "code=$([ -n "$code" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -34,6 +61,8 @@ jobs:
         run: pnpm dry-run
 
   lander:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -55,6 +84,8 @@ jobs:
         run: pnpm test:lighthouse
 
   e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

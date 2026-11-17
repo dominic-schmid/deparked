@@ -8,7 +8,7 @@ export interface Pin {
 }
 
 /**
- * Set after each release is published (the release workflow prints the hash). Null until the first release: the
+ * Written by the release workflow right after it publishes a release (one commit to main). Null until the first release: the
  * installer then explains that there is nothing to install yet.
  */
 export const PINNED_RELEASE: Pin | null = {
