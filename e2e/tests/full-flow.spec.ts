@@ -72,7 +72,7 @@ test("install, set up, add a domain, publish it, take an offer and read it under
     await expect(page.getByText(`Offers for it go to ${OWNER}.`)).toBeVisible();
     await page
       .getByRole("list", { name: "Domains you can add" })
-      .getByRole("button", { name: /example\.com/ })
+      .getByRole("link", { name: /example\.com/ })
       .click();
     await page.getByRole("button", { name: `Add ${HOST}` }).click();
     await expect(page.getByRole("heading", { name: `${HOST} is in the window.` })).toBeVisible({ timeout: 30_000 });

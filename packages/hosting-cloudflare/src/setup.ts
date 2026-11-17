@@ -1,17 +1,18 @@
 import { createCloudflareClient, type FetchLike } from "@deparked/cf";
 import { type Db, getDomain } from "@deparked/db";
-import type {
-  AccountDomainPage,
-  DomainPreview,
-  DomainSetup,
-  MailState,
-  SetupChange,
-  SetupConfirmation,
-  SetupConfirmations,
+import {
+  type AccountDomainPage,
+  type DomainSetup,
+  type DomainToday,
+  HostingError,
+  type MailState,
+  type SetupChange,
+  type SetupConfirmation,
+  type SetupConfirmations,
+  type SetupStepPreview,
 } from "@deparked/hosting";
 import {
   describeRemoval,
-  dryRun,
   inspectDomain,
   type Plan,
   type ProvisionContext,
@@ -103,10 +104,9 @@ export function createCloudflareDomainSetup(options: CloudflareSetupOptions): Do
         return { domains, nextPage: current };
       }),
 
-    preview: (host, confirmations) =>
-      cloudflare(async (): Promise<DomainPreview> => {
+    inspect: (host) =>
+      cloudflare(async (): Promise<DomainToday> => {
         const inspection = await inspectDomain(ctx, host);
-        const report = await dryRun(plan("attach", inspection.host, confirmations));
         const row = await getDomain(options.db, inspection.host);
         const isOn = inspection.managed === "placeholder" || inspection.managed === "live";
         const asks: SetupConfirmation[] = [];
@@ -123,13 +123,18 @@ export function createCloudflareDomainSetup(options: CloudflareSetupOptions): Do
           takenRoutes: inspection.sameRoutePatterns.map((route) => route.pattern),
           mail: MAIL[inspection.mx.state],
           mailServers: inspection.mx.targets,
-          steps: report.steps.map((step) =>
-            step.status === "blocked"
-              ? { id: step.id, title: step.title, status: step.status, effects: [], reason: step.reason }
-              : { id: step.id, title: step.title, status: step.status, effects: step.effects, reason: "" },
-          ),
-          nothingToDo: report.nothingToDo,
         };
+      }),
+
+    previewStep: (host, stepId, confirmations) =>
+      cloudflare(async (): Promise<SetupStepPreview> => {
+        const attach = plan("attach", host, confirmations);
+        const step = attach.steps.find((candidate) => candidate.id === stepId);
+        if (step === undefined) throw new HostingError("invalid-input", "Adding a domain has no such step.");
+        const check = await step.check(ctx);
+        return check.status === "blocked"
+          ? { id: step.id, title: step.title, status: check.status, effects: [], reason: check.reason }
+          : { id: step.id, title: step.title, status: check.status, effects: check.effects, reason: "" };
       }),
 
     stepTitles: (change, host) => plan(change, host).steps.map((step) => ({ id: step.id, title: step.title })),

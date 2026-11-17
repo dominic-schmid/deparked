@@ -60,12 +60,23 @@ export const listAccountDomains = createServerFn({ method: "GET" })
     return guarded(async () => steps.listAccountDomains(await deps(), data));
   });
 
-/** What attaching the domain would do, in plain words. Only reads. */
-export const previewDomain = createServerFn({ method: "GET" })
-  .validator(z.object({ host, confirmations }))
+/** What the domain does today, in plain words, and what adding it asks the owner to confirm. Only reads. */
+export const inspectDomain = createServerFn({ method: "GET" })
+  .validator(z.object({ host }))
   .handler(async ({ data }) => {
     await requireSession();
-    return guarded(async () => steps.previewAttach(await deps(), data));
+    return guarded(async () => (await deps()).setup.inspect(data.host));
+  });
+
+/**
+ * What one step of adding the domain would do. Only reads. The review asks for every step at once, each in its
+ * own request, so it can show them as they answer and none comes near the 50 subrequests of one request.
+ */
+export const previewDomainStep = createServerFn({ method: "GET" })
+  .validator(z.object({ host, step: z.string().min(1).max(64), confirmations }))
+  .handler(async ({ data }) => {
+    await requireSession();
+    return guarded(async () => (await deps()).setup.previewStep(data.host, data.step, data.confirmations));
   });
 
 /** The step titles of a change, and for Turn off and Remove what they delete or restore. No Cloudflare request. */

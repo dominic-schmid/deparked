@@ -245,6 +245,8 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  /* `bg-hover`: the fill of a control under the pointer. shadcn's parts call the same colour `accent`. */
+  --color-hover: var(--hover);
   --color-accent: var(--hover);
   --color-accent-foreground: var(--hover-foreground);
   --color-destructive: var(--destructive);
@@ -273,5 +275,11 @@
   h1,
   h2 {
     font-family: var(--font-display);
+  }
+  /* Whatever can be clicked shows the hand, like a link does. Tailwind's reset leaves buttons with the arrow. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
   }
 }

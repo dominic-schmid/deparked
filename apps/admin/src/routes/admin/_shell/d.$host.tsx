@@ -1,10 +1,11 @@
 import { Button } from "@deparked/ui/button";
+import { cn } from "@deparked/ui/lib/utils";
 import { createFileRoute, Link, notFound, Outlet, useMatch } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { OfferMailBadge } from "../../../components/offer-mail";
 import { PageError, PagePending } from "../../../components/page";
 import { PendingChangeNotice } from "../../../components/pending-change";
-import { NewOffersCount, PILL } from "../../../components/shell";
+import { NewOffersCount, PILL, PILL_ROW, pillContent } from "../../../components/shell";
 import { StatusLabel } from "../../../components/status";
 import { getDomainDetail } from "../../../server/domains.functions";
 
@@ -77,20 +78,28 @@ function DomainLayout() {
       </div>
       <nav
         aria-label="Domain"
-        className="flex min-w-0 gap-1 justify-self-start rounded-full bg-card p-1 shadow-rest [grid-area:nav] max-sm:w-full max-sm:justify-self-stretch xl:justify-self-center"
+        className={cn(
+          PILL_ROW,
+          "min-w-0 justify-self-start [grid-area:nav] max-sm:w-full max-sm:justify-self-stretch xl:justify-self-center",
+        )}
       >
         <Link to="/admin/d/$host" params={params} activeOptions={{ exact: true }} className={PILL}>
-          Page
+          {pillContent("domain", "Page")}
         </Link>
         <Link to="/admin/d/$host/offers" params={params} className={PILL}>
-          Offers
-          <NewOffersCount count={domain.newOffers} />
+          {pillContent(
+            "domain",
+            <>
+              Offers
+              <NewOffersCount count={domain.newOffers} />
+            </>,
+          )}
         </Link>
         <Link to="/admin/d/$host/analytics" params={params} className={PILL}>
-          Visits
+          {pillContent("domain", "Visits")}
         </Link>
         <Link to="/admin/d/$host/settings" params={params} className={PILL}>
-          Settings
+          {pillContent("domain", "Settings")}
         </Link>
       </nav>
       {domain.pending === null ? null : (

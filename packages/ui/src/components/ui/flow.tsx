@@ -120,7 +120,7 @@ export function FlowTitle(props: {
 export function Disclosure(props: { summary: ReactNode; children: ReactNode; className?: string }) {
   return (
     <details className={cn("group", props.className)}>
-      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-full text-sm font-semibold underline-offset-4 outline-none select-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+      <summary className="inline-flex min-h-11 list-none items-center gap-1.5 rounded-full text-sm font-semibold underline-offset-4 outline-none select-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
         {props.summary}
         <ChevronDown
           aria-hidden="true"

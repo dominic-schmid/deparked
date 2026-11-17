@@ -158,13 +158,19 @@ const BOOKKEEPING = new Set(["register", "ready"]);
 /** The page first: it is what the owner came for. Unknown steps go last, in their own order. */
 const ORDER: readonly GroupKey[] = ["page", "bot", "visits", "email", "address"];
 
-const GROUPS: Record<GroupKey, { label: string; short: string; icon: LucideIcon }> = {
-  page: { label: "A for-sale page", short: "page", icon: PanelsTopLeft },
-  bot: { label: "A bot check on its offer form", short: "bot check", icon: ShieldCheck },
-  visits: { label: "Visit counts", short: "visits", icon: ChartLine },
-  email: { label: "Offer emails", short: "email", icon: Mail },
-  address: { label: "Its address, pointed at the page", short: "address", icon: MapPin },
+/** `look`: the same thing while Deparked only reads what is there, before the owner has said yes. */
+const GROUPS: Record<GroupKey, { label: string; look: string; short: string; icon: LucideIcon }> = {
+  page: { label: "A for-sale page", look: "Its page", short: "page", icon: PanelsTopLeft },
+  bot: { label: "A bot check on its offer form", look: "Its bot check", short: "bot check", icon: ShieldCheck },
+  visits: { label: "Visit counts", look: "Its visit counts", short: "visits", icon: ChartLine },
+  email: { label: "Offer emails", look: "Its email", short: "email", icon: Mail },
+  address: { label: "Its address, pointed at the page", look: "Its address and rules", short: "address", icon: MapPin },
 };
+
+function groupRank(key: string): number {
+  const at = ORDER.indexOf(key as GroupKey);
+  return at === -1 ? ORDER.length : at;
+}
 
 export type SetupItem = { key: string; label: string; short: string; icon: LucideIcon; done: boolean };
 
@@ -192,11 +198,34 @@ export function setupItems(steps: readonly { id: string; title: string; status?:
         : { key: id, ...group, done },
     );
   }
-  const rank = (key: string) => {
-    const at = ORDER.indexOf(key as GroupKey);
-    return at === -1 ? ORDER.length : at;
-  };
-  return [...items.values()].sort((a, b) => rank(a.key) - rank(b.key));
+  return [...items.values()].sort((a, b) => groupRank(a.key) - groupRank(b.key));
+}
+
+/** The row of `lookRows` that also stands for the look at what the domain does today. */
+export const TODAY_ROW = "today";
+
+export type LookRow = { key: string; label: string; icon: LucideIcon; steps: string[] };
+
+/**
+ * The steps of adding a domain as what Deparked looks at before it asks: what the domain shows today (with the
+ * bookkeeping steps), then the things of `setupItems`. A row is checked once every step in it has answered.
+ */
+export function lookRows(steps: readonly { id: string; title: string }[]): LookRow[] {
+  const today: LookRow = { key: TODAY_ROW, label: "What it shows today", icon: Globe, steps: [] };
+  const rows = new Map<string, LookRow>();
+  for (const step of steps) {
+    if (BOOKKEEPING.has(step.id)) {
+      today.steps.push(step.id);
+      continue;
+    }
+    const key = GROUP_OF[step.id];
+    const id = key ?? step.id;
+    const known = rows.get(id);
+    if (known !== undefined) known.steps.push(step.id);
+    else if (key === undefined) rows.set(id, { key: id, label: step.title, icon: Wrench, steps: [step.id] });
+    else rows.set(id, { key: id, label: GROUPS[key].look, icon: GROUPS[key].icon, steps: [step.id] });
+  }
+  return [today, ...[...rows.values()].sort((a, b) => groupRank(a.key) - groupRank(b.key))];
 }
 
 /** "Page, bot check, visits, email, address". */

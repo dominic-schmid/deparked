@@ -67,7 +67,7 @@ export function CommandMenu({ domains, onLogOut }: { domains: DomainSummary[]; o
         aria-keyshortcuts="Meta+K Control+K"
         title="Search (⌘K)"
         onClick={() => setOpen(true)}
-        className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-card text-foreground shadow-rest transition-[background-color,scale] duration-150 hover:bg-hover active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100"
+        className="grid size-11 shrink-0 place-items-center rounded-full bg-card text-foreground shadow-rest transition-[background-color,scale] duration-150 hover:bg-hover active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100"
       >
         <Search className="size-[18px]" aria-hidden="true" />
       </button>

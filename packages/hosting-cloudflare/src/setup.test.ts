@@ -74,8 +74,8 @@ describe("listing the account's domains", () => {
   });
 });
 
-describe("previewing an attach", () => {
-  it("asks only for what this domain needs, in one request budget", async () => {
+describe("looking at a domain before attaching", () => {
+  it("asks only for what this domain needs, and only reads", async () => {
     const { setup, mock } = await world({
       zones: [ZONE],
       dnsRecords: {
@@ -85,25 +85,35 @@ describe("previewing an attach", () => {
         ],
       },
     });
-    const preview = await setup.preview(HOST, {});
-    expect(preview).toMatchObject({
+    expect(await setup.inspect(HOST)).toMatchObject({
       inAccount: true,
       asks: ["takeOverLiveSite", "replaceExistingMx"],
       servesWebsite: true,
       mail: "external",
       mailServers: ["aspmx.l.google.com"],
       blockers: [],
-      nothingToDo: false,
     });
-    expect(preview.steps.find((step) => step.id === "register")).toMatchObject({ status: "blocked" });
-    expect(mock.calls.length).toBeLessThan(45);
+    expect(await setup.previewStep(HOST, "register", {})).toMatchObject({ status: "blocked", effects: [] });
+    expect(await setup.previewStep(HOST, "register", { takeOverLiveSite: true })).toMatchObject({
+      status: "needed",
+      reason: "",
+    });
     expect(mock.calls.every((call) => call.method === "GET")).toBe(true);
-
-    const confirmed = await setup.preview(HOST, { takeOverLiveSite: true });
-    expect(confirmed.steps.find((step) => step.id === "register")).toMatchObject({ status: "needed" });
   });
 
-  it("stays under the 50 subrequests of one request on a large zone", async () => {
+  it("previews every step of the attach, and nothing is left to do after it ran", async () => {
+    const { setup } = await world();
+    const ids = setup.stepTitles("attach", HOST).map((step) => step.id);
+    const before = await Promise.all(ids.map((id) => setup.previewStep(HOST, id, {})));
+    expect(before.map((step) => step.id)).toEqual(ids);
+    expect(before.some((step) => step.status === "needed")).toBe(true);
+
+    expect((await run(setup, "attach")).at(-1)).toMatchObject({ finished: true });
+    const after = await Promise.all(ids.map((id) => setup.previewStep(HOST, id, {})));
+    expect(after.map((step) => step.status)).toEqual(ids.map(() => "done"));
+  });
+
+  it("keeps each question far under the 50 subrequests of one request on a large zone", async () => {
     const records = [
       ...Array.from({ length: 450 }, (_, index) => ({
         id: `t${index}`,
@@ -127,17 +137,29 @@ describe("previewing an attach", () => {
     for (let index = 0; index < 150; index += 1) {
       await cf.zones.createRoute(ZONE.id, { pattern: `s${index}.${HOST}/*`, script: `site-${index}` });
     }
-    mock.calls.length = 0;
-    const preview = await setup.preview(HOST, { takeOverLiveSite: true });
-    expect(preview.servesWebsite).toBe(true);
-    expect(mock.calls.length).toBeLessThan(50);
+    const requests = async (question: () => Promise<unknown>) => {
+      mock.calls.length = 0;
+      await question();
+      return mock.calls.length;
+    };
+    expect((await setup.inspect(HOST)).servesWebsite).toBe(true);
+    const counts = [await requests(() => setup.inspect(HOST))];
+    for (const { id } of setup.stepTitles("attach", HOST)) {
+      counts.push(await requests(() => setup.previewStep(HOST, id, { takeOverLiveSite: true })));
+    }
+    expect(Math.max(...counts)).toBeLessThan(25);
   });
 
   it("explains a domain that is not in the account", async () => {
     const { setup } = await world();
-    const preview = await setup.preview("example.net", {});
-    expect(preview).toMatchObject({ inAccount: false, asks: [] });
-    expect(preview.blockers[0]).toContain("not in this Cloudflare account");
+    const today = await setup.inspect("example.net");
+    expect(today).toMatchObject({ inAccount: false, asks: [] });
+    expect(today.blockers[0]).toContain("not in this Cloudflare account");
+  });
+
+  it("refuses a step the attach does not have", async () => {
+    const { setup } = await world();
+    await expect(setup.previewStep(HOST, "no-such-step", {})).rejects.toMatchObject({ code: "invalid-input" });
   });
 });
 
