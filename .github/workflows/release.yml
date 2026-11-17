@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      pull-requests: write
+      actions: write
     steps:
       - name: Release only from main
         if: github.ref != 'refs/heads/main'
@@ -86,17 +88,24 @@ jobs:
             --notes-start-tag "$PREVIOUS" \
             --notes "Update from your admin under Settings → Updates; new installs use the Deploy to Cloudflare button in the README. release.json SHA-256: \`$sha\`"
           echo "SHA256=$sha" >> "$GITHUB_ENV"
-      - name: Pin it in the installer
+      - name: Open the pin pull request
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          branch="chore/pin-$VERSION"
+          git switch -c "$branch"
           sed -i -E "s/^(  version: )\"[^\"]+\",$/\1\"$VERSION\",/; s/^(  sha256: )\"[0-9a-f]{64}\",$/\1\"$SHA256\",/" apps/install/src/server/config.ts
           grep -q "\"$SHA256\"" apps/install/src/server/config.ts || { echo "::error::The pin was not written."; exit 1; }
           pnpm build:install
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add apps/install
-          git commit -m "chore(install): pin release $VERSION [skip ci]"
-          # main may have moved while this ran: the pin goes on top of it.
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git commit -m "chore(install): pin release $VERSION"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore(install): pin release $VERSION" \
+            --body "Pins the installer to v$VERSION (release.json SHA-256 \`$SHA256\`) and rebuilds its bundle. Opened by the Release workflow."
+          # A push by this workflow starts no other workflow, but a dispatch does: the required checks run on the
+          # branch. Only the pin changed, so CI runs \`check\` and skips the browser tests.
+          gh workflow run ci.yml --ref "$branch"

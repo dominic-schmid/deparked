@@ -33,7 +33,7 @@ Adding your first domain happens in the admin panel, afterwards. The hub works w
 The installer installs one pinned release: a GitHub Release of this repository built by the Release workflow, run by hand on main (the admin
 Worker, its client files, the shared designs, the database migrations and `release.json`). The installer pins the
 release's version and the SHA-256 of its `release.json`, and every file is checked against `release.json` before it is
-uploaded. The Release workflow writes that pin to main itself, right after publishing. CI only publishes releases; it
+uploaded. The Release workflow opens the pull request that writes that pin, right after publishing. CI only publishes releases; it
 never deploys to Cloudflare.
 
 Everything Deparked creates is written to a ledger in its database, with its Cloudflare id. Deparked never overwrites
