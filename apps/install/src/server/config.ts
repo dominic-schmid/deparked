@@ -12,8 +12,8 @@ export interface Pin {
  * installer then explains that there is nothing to install yet.
  */
 export const PINNED_RELEASE: Pin | null = {
-  version: "0.1.4",
-  sha256: "9bd48d5255f467428a8c8fda8523a45d50ade57074d61961fd3a58549308148b",
+  version: "0.1.5",
+  sha256: "1cb9877ad058e675e29cf347c709e54525ff6b462ef04c58d57975700646cef1",
 };
 
 export const INSTALLER_VERSION: string = packageJson.version;
