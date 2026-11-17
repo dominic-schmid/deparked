@@ -122,9 +122,12 @@ export function diagnosticsText(value: Diagnostics): string {
     .join("\n");
 }
 
-function title(value: Diagnostics): string {
-  const where = value.surface === "installer" ? "Installer" : "Admin";
-  return `${where}: ${value.place}${value.step === undefined ? "" : ` (${value.step})`} failed`;
+/** "Admin, publish: <the summary's first line, cut to fit>". The owner can still change it on GitHub. */
+export function issueTitle(value: Diagnostics, summary: string): string {
+  const where = `${value.surface === "installer" ? "Installer" : "Admin"}, ${value.place}`;
+  const line = summary.trim().split("\n")[0]?.trim() ?? "";
+  const words = [...line];
+  return words.length <= 72 ? `${where}: ${line}` : `${where}: ${words.slice(0, 71).join("").trimEnd()}…`;
 }
 
 /** GitHub refuses longer new-issue links; leave room for its own redirect parameters. */
@@ -140,7 +143,7 @@ export function issueUrl(value: Diagnostics, summary: string): string {
   for (;;) {
     const params = new URLSearchParams({
       template: ISSUE_TEMPLATE,
-      title: value.place === "help" ? "Problem: " : title(value),
+      title: issueTitle(value, text.join("")),
       summary: text.join(""),
       diagnostics: diagnosticsText(value),
     });

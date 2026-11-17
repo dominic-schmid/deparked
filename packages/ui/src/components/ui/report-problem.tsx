@@ -40,15 +40,21 @@ function ReportForm(props: { input: ReportInput }) {
   const ready = summary.trim().length >= SUMMARY_MIN;
   const short = tried && !ready;
 
+  const near = summary.length >= SUMMARY_MAX * 0.8;
+
   return (
     <DialogContent
       title="Report a problem"
-      description="This opens a new issue on GitHub. You can still change it there before posting."
+      description="Opens a new GitHub issue from your account. You can still edit it there before posting."
       className="w-[min(calc(100vw-2rem),34rem)]"
       // The one thing to do here is write the summary.
       onOpenAutoFocus={(event) => {
         event.preventDefault();
         field.current?.focus();
+      }}
+      // A stray tap beside the dialog must not throw away what the owner wrote. Escape and Close still close it.
+      onPointerDownOutside={(event) => {
+        if (summary.trim() !== "") event.preventDefault();
       }}
     >
       <div className="flex flex-col gap-5">
@@ -70,8 +76,13 @@ function ReportForm(props: { input: ReportInput }) {
             placeholder="What you did, what you expected, what you saw instead."
             className="max-h-[40dvh]"
           />
-          <p id={hintId} className="text-[13px] text-muted-foreground">
-            The issue is public. Leave out domain names, email addresses and anything about buyers.
+          <p id={hintId} className="flex justify-between gap-3 text-[13px] text-muted-foreground">
+            <span>The issue is public: leave out domain names, emails and buyer details.</span>
+            {near ? (
+              <span className="shrink-0 tabular-nums">
+                {summary.length.toLocaleString("en")}/{SUMMARY_MAX.toLocaleString("en")}
+              </span>
+            ) : null}
           </p>
           {short ? (
             <p id={errorId} role="alert" className="text-[13px] text-destructive">
@@ -86,17 +97,12 @@ function ReportForm(props: { input: ReportInput }) {
             {diagnosticsText(value)}
           </pre>
           <p className="text-[13px] text-muted-foreground">
-            No domain names, account details or buyer data. A screenshot helps: add it on GitHub, with domain names and
-            buyer details hidden.
+            A screenshot helps: add it on GitHub, with domain names and buyer details hidden.
           </p>
         </div>
 
-        <p className="text-[13px] text-muted-foreground">
-          You post it from your own GitHub account, so your username is shown with it.
-        </p>
-
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <CopyButton value={reportText(value, summary)} label="Copy" />
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">
+          <CopyButton value={reportText(value, summary)} label="Copy" className="justify-center" />
           {ready ? (
             <Button asChild variant="accent">
               <a href={issueUrl(value, summary)} target="_blank" rel="noreferrer">

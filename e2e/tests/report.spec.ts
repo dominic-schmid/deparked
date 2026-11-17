@@ -27,12 +27,16 @@ test("the owner reports a problem: a summary first, then a GitHub link with anon
   await dialog.getByRole("button", { name: /Open GitHub issue/ }).click({ force: true });
   await expect(dialog.getByRole("alert")).toContainText("at least 20 characters");
   await summary.fill("Publishing stopped halfway and the page never went live.");
+  // A stray tap beside the dialog keeps what was written.
+  await page.mouse.click(4, 4);
+  await expect(summary).toHaveValue("Publishing stopped halfway and the page never went live.");
 
   const href = await dialog.getByRole("link", { name: /Open GitHub issue/ }).getAttribute("href");
   expect(href).not.toBeNull();
   const url = new URL(href ?? "");
   expect(`${url.origin}${url.pathname}`).toBe("https://github.com/dominic-schmid/deparked/issues/new");
   expect(url.searchParams.get("template")).toBe("problem.yml");
+  expect(url.searchParams.get("title")).toBe("Admin, help: Publishing stopped halfway and the page never went live.");
   expect(url.searchParams.get("summary")).toBe("Publishing stopped halfway and the page never went live.");
   const diagnostics = url.searchParams.get("diagnostics") ?? "";
   expect(diagnostics).toContain("surface: admin");

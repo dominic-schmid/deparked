@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { diagnostics, diagnosticsText, issueUrl, platform, reportText, SUMMARY_MAX, URL_LIMIT } from "./report";
+import {
+  diagnostics,
+  diagnosticsText,
+  issueTitle,
+  issueUrl,
+  platform,
+  reportText,
+  SUMMARY_MAX,
+  URL_LIMIT,
+} from "./report";
 
 const CHROME_MAC =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
@@ -90,9 +99,16 @@ describe("issueUrl", () => {
     const url = new URL(issueUrl(value, "  The install stopped at the database step.  "));
     expect(url.origin + url.pathname).toBe("https://github.com/dominic-schmid/deparked/issues/new");
     expect(url.searchParams.get("template")).toBe("problem.yml");
-    expect(url.searchParams.get("title")).toBe("Installer: install (migrate) failed");
+    expect(url.searchParams.get("title")).toBe("Installer, install: The install stopped at the database step.");
     expect(url.searchParams.get("summary")).toBe("The install stopped at the database step.");
     expect(url.searchParams.get("diagnostics")).toBe(diagnosticsText(value));
+  });
+
+  it("titles the issue with the summary's first line, cut to fit", () => {
+    expect(issueTitle(value, "Short.\nMore detail.")).toBe("Installer, install: Short.");
+    const title = issueTitle(value, "word ".repeat(40));
+    expect([...title.slice("Installer, install: ".length)]).toHaveLength(72);
+    expect(title.endsWith("…")).toBe(true);
   });
 
   it("cuts the summary to SUMMARY_MAX characters", () => {
